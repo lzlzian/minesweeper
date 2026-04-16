@@ -213,8 +213,111 @@ function debugRevealAll() {
   renderGrid();
 }
 
-function handleClick(r, c) {}
-function handleRightClick(r, c) {}
+function handleClick(r, c) {
+  if (state.gameOver) return;
+  if (state.revealed[r][c]) return;
+  if (state.flagged[r][c]) return;
+  if (state.dynamite <= 0) return;
+
+  // First click safety — relocate gas if needed
+  if (state.firstClick) {
+    ensureSafeFirstClick(r, c);
+    state.firstClick = false;
+  }
+
+  // Spend dynamite
+  state.dynamite--;
+
+  const cell = state.grid[r][c];
+
+  if (cell.type === 'gas') {
+    explodeGas(r, c);
+  } else {
+    revealCell(r, c);
+  }
+
+  updateHud();
+  renderGrid();
+  checkWinLoss();
+}
+
+function ensureSafeFirstClick(r, c) {
+  if (state.grid[r][c].type !== 'gas') return;
+
+  // Move gas to a random empty cell
+  state.grid[r][c].type = 'empty';
+  state.grid[r][c].goldValue = 0;
+
+  let placed = false;
+  while (!placed) {
+    const nr = Math.floor(Math.random() * state.rows);
+    const nc = Math.floor(Math.random() * state.cols);
+    if (state.grid[nr][nc].type !== 'gas' && !(nr === r && nc === c)) {
+      state.grid[nr][nc].type = 'gas';
+      state.grid[nr][nc].goldValue = 0;
+      placed = true;
+    }
+  }
+
+  // Recalculate all adjacency numbers
+  for (let row = 0; row < state.rows; row++) {
+    for (let col = 0; col < state.cols; col++) {
+      if (state.grid[row][col].type !== 'gas') {
+        state.grid[row][col].adjacent = countAdjacentGas(row, col);
+      }
+    }
+  }
+}
+
+function revealCell(r, c) {
+  if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
+  if (state.revealed[r][c]) return;
+  if (state.grid[r][c].type === 'gas') return;
+  if (state.grid[r][c].type === 'rubble') return;
+
+  state.revealed[r][c] = true;
+  const cell = state.grid[r][c];
+
+  // Collect gold if present
+  if (cell.type === 'gold') {
+    state.gold += cell.goldValue;
+  }
+
+  // Cascade if no adjacent gas
+  if (cell.adjacent === 0) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        revealCell(r + dr, c + dc);
+      }
+    }
+  }
+}
+
+function explodeGas(r, c) {
+  // Destroy the gas cell and its 8 neighbors
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
+        state.grid[nr][nc].type = 'rubble';
+        state.grid[nr][nc].goldValue = 0;
+        state.grid[nr][nc].adjacent = 0;
+        state.revealed[nr][nc] = true;
+      }
+    }
+  }
+}
+
+function handleRightClick(r, c) {
+  if (state.gameOver) return;
+  if (state.revealed[r][c]) return;
+  state.flagged[r][c] = !state.flagged[r][c];
+  renderGrid();
+}
+
+function checkWinLoss() {}
 
 // ============================================================
 // INIT

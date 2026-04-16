@@ -14,7 +14,8 @@ const state = {
   revealed: [],    // 2D bool
   flagged: [],     // 2D bool
   gameOver: false,
-  firstClick: true,
+  playerRow: 0,
+  playerCol: 0,
 };
 
 // Cell object shape:
@@ -46,9 +47,16 @@ function renderGrid() {
       cell.dataset.row = r;
       cell.dataset.col = c;
 
+      const isPlayer = (r === state.playerRow && c === state.playerCol);
+      const isAdjacent = isAdjacentToPlayer(r, c);
+
       if (state.revealed[r][c]) {
         const g = state.grid[r][c];
         cell.classList.add('revealed');
+
+        if (isPlayer) {
+          cell.classList.add('player');
+        }
 
         if (g.type === 'gold') {
           cell.classList.add('gold');
@@ -65,6 +73,9 @@ function renderGrid() {
         }
       } else if (state.flagged[r][c]) {
         cell.classList.add('flagged');
+        if (isAdjacent) cell.classList.add('reachable');
+      } else {
+        if (isAdjacent) cell.classList.add('reachable');
       }
 
       cell.addEventListener('click', () => handleClick(r, c));
@@ -219,17 +230,30 @@ function debugRevealAll() {
   renderGrid();
 }
 
+function isAdjacentToPlayer(r, c) {
+  const dr = Math.abs(r - state.playerRow);
+  const dc = Math.abs(c - state.playerCol);
+  if (dr === 0 && dc === 0) return false;
+  return dr <= 1 && dc <= 1;
+}
+
 function handleClick(r, c) {
   if (state.gameOver) return;
-  if (state.revealed[r][c]) return;
+
+  // Click on revealed cell = move there (free, if adjacent)
+  if (state.revealed[r][c]) {
+    if (!isAdjacentToPlayer(r, c)) return;
+    if (state.grid[r][c].type === 'rubble') return;
+    state.playerRow = r;
+    state.playerCol = c;
+    renderGrid();
+    return;
+  }
+
+  // Click on unrevealed cell = dig (costs dynamite, must be adjacent)
+  if (!isAdjacentToPlayer(r, c)) return;
   if (state.flagged[r][c]) return;
   if (state.dynamite <= 0) return;
-
-  // First click safety — relocate gas if needed
-  if (state.firstClick) {
-    ensureSafeFirstClick(r, c);
-    state.firstClick = false;
-  }
 
   // Spend dynamite
   state.dynamite--;
@@ -238,8 +262,12 @@ function handleClick(r, c) {
 
   if (cell.type === 'gas') {
     explodeGas(r, c);
+    // Player stays where they are (explosion pushes them back)
   } else {
     revealCell(r, c);
+    // Move player to the newly dug cell
+    state.playerRow = r;
+    state.playerCol = c;
   }
 
   updateHud();
@@ -247,24 +275,31 @@ function handleClick(r, c) {
   checkWinLoss();
 }
 
-function ensureSafeFirstClick(r, c) {
-  if (state.grid[r][c].type !== 'gas') return;
-
-  // Move gas to a random empty cell
-  state.grid[r][c].type = 'empty';
-  state.grid[r][c].goldValue = 0;
-
-  let placed = false;
-  while (!placed) {
-    const nr = Math.floor(Math.random() * state.rows);
-    const nc = Math.floor(Math.random() * state.cols);
-    if (state.grid[nr][nc].type !== 'gas' && !(nr === r && nc === c)) {
-      state.grid[nr][nc].type = 'gas';
-      state.grid[nr][nc].goldValue = 0;
-      placed = true;
+function ensureSafeStart(r, c) {
+  // Clear gas from start cell and its immediate neighbors
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
+        if (state.grid[nr][nc].type === 'gas') {
+          state.grid[nr][nc].type = 'empty';
+          state.grid[nr][nc].goldValue = 0;
+          // Relocate gas elsewhere
+          let placed = false;
+          while (!placed) {
+            const rr = Math.floor(Math.random() * state.rows);
+            const rc = Math.floor(Math.random() * state.cols);
+            const dist = Math.abs(rr - r) + Math.abs(rc - c);
+            if (state.grid[rr][rc].type === 'empty' && dist > 3) {
+              state.grid[rr][rc].type = 'gas';
+              placed = true;
+            }
+          }
+        }
+      }
     }
   }
-
   // Recalculate all adjacency numbers
   for (let row = 0; row < state.rows; row++) {
     for (let col = 0; col < state.cols; col++) {
@@ -416,10 +451,16 @@ function restartGame() {
 function initLevel() {
   state.gold = 0;
   state.gameOver = false;
-  state.firstClick = true;
   state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
   state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
   generateGrid();
+
+  // Place player at top-left corner, ensure it's safe
+  state.playerRow = 0;
+  state.playerCol = 0;
+  ensureSafeStart(0, 0);
+  revealCell(0, 0);
+
   updateHud();
   renderGrid();
   hideOverlay();
@@ -428,7 +469,8 @@ function initLevel() {
 function showStartScreen() {
   showOverlay(`
     <h2>Mine Sweeper</h2>
-    <p>Use dynamite to extract gold from the mine.</p>
+    <p>Dig through the mine to extract gold.</p>
+    <p>You can only dig cells next to you.</p>
     <p>Numbers show nearby gas pockets — avoid them!</p>
     <p>Hit the gold quota to advance.</p>
     <button onclick="startGame()">Start Mining</button>

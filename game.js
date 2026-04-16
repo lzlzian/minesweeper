@@ -79,6 +79,9 @@ function updateHud() {
   levelDisplay.textContent = `Level: ${state.level}`;
   goldDisplay.textContent = `Gold: ${state.gold} / ${state.goldQuota}`;
   dynamiteDisplay.textContent = `Dynamite: ${state.dynamite}`;
+
+  dynamiteDisplay.classList.toggle('warning', state.dynamite <= 5);
+  goldDisplay.classList.toggle('success', state.gold >= state.goldQuota);
 }
 
 function showOverlay(html) {
@@ -419,11 +422,25 @@ function initLevel() {
   hideOverlay();
 }
 
-// Apply level 1 config and start
-const startConfig = getLevelConfig(1);
-state.rows = startConfig.rows;
-state.cols = startConfig.cols;
-state.gasCount = startConfig.gasCount;
-state.goldQuota = startConfig.goldQuota;
-state.dynamite = startConfig.dynamite;
-initLevel();
+function showStartScreen() {
+  showOverlay(`
+    <h2>Mine Sweeper</h2>
+    <p>Use dynamite to extract gold from the mine.</p>
+    <p>Numbers show nearby gas pockets — avoid them!</p>
+    <p>Hit the gold quota to advance.</p>
+    <button onclick="startGame()">Start Mining</button>
+  `);
+}
+
+function startGame() {
+  state.level = 1;
+  const config = getLevelConfig(1);
+  state.rows = config.rows;
+  state.cols = config.cols;
+  state.gasCount = config.gasCount;
+  state.goldQuota = config.goldQuota;
+  state.dynamite = config.dynamite;
+  initLevel();
+}
+
+showStartScreen();

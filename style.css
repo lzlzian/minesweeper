@@ -146,3 +146,32 @@ body {
 #overlay-content button.secondary:hover {
   background: #4a4a6c;
 }
+
+.cell.gold {
+  animation: goldPulse 0.3s ease-out;
+}
+
+@keyframes goldPulse {
+  0% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.cell.rubble {
+  animation: rubbleShake 0.3s ease-out;
+}
+
+@keyframes rubbleShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+#hud .warning {
+  background: #5c1a1a;
+  color: #ff6b6b;
+}
+
+#hud .success {
+  background: #1a3a1a;
+  color: #6bff6b;
+}

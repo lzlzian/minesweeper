@@ -296,15 +296,34 @@ function revealCell(r, c) {
 
 function explodeGas(r, c) {
   // Destroy the gas cell and its 8 neighbors
+  const destroyed = [];
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
       const nr = r + dr;
       const nc = c + dc;
       if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
+        destroyed.push({ r: nr, c: nc });
         state.grid[nr][nc].type = 'rubble';
         state.grid[nr][nc].goldValue = 0;
         state.grid[nr][nc].adjacent = 0;
         state.revealed[nr][nc] = true;
+      }
+    }
+  }
+
+  // Recalculate adjacency for all non-gas, non-rubble cells near the explosion
+  // (because destroyed gas pockets lower their neighbors' counts)
+  for (const d of destroyed) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = d.r + dr;
+        const nc = d.c + dc;
+        if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
+          const cell = state.grid[nr][nc];
+          if (cell.type !== 'gas' && cell.type !== 'rubble') {
+            cell.adjacent = countAdjacentGas(nr, nc);
+          }
+        }
       }
     }
   }

@@ -5,11 +5,11 @@
 const state = {
   level: 1,
   gold: 0,
-  goldQuota: 30,
-  dynamite: 25,
-  rows: 9,
-  cols: 9,
-  gasCount: 10,
+  goldQuota: 0,
+  dynamite: 0,
+  rows: 0,
+  cols: 0,
+  gasCount: 0,
   grid: [],        // 2D array of cell objects
   revealed: [],    // 2D bool
   flagged: [],     // 2D bool
@@ -317,7 +317,72 @@ function handleRightClick(r, c) {
   renderGrid();
 }
 
-function checkWinLoss() {}
+function checkWinLoss() {
+  // Win: hit gold quota
+  if (state.gold >= state.goldQuota) {
+    state.gameOver = true;
+    const surplus = state.gold - state.goldQuota;
+    showOverlay(`
+      <h2>Mine Complete!</h2>
+      <p>Gold collected: ${state.gold}</p>
+      <p>Surplus: +${surplus}</p>
+      <p>Dynamite remaining: ${state.dynamite}</p>
+      <button onclick="nextLevel()">Next Level</button>
+    `);
+    return;
+  }
+
+  // Lose: out of dynamite
+  if (state.dynamite <= 0) {
+    state.gameOver = true;
+    showOverlay(`
+      <h2>Out of Dynamite!</h2>
+      <p>Gold collected: ${state.gold} / ${state.goldQuota}</p>
+      <p>Levels cleared: ${state.level - 1}</p>
+      <button onclick="restartGame()">New Run</button>
+    `);
+    return;
+  }
+}
+
+function getLevelConfig(level) {
+  // Base values scale with level
+  const rows = Math.min(9 + Math.floor(level / 3), 14);
+  const cols = rows;
+  const totalCells = rows * cols;
+  const gasDensity = Math.min(0.12 + level * 0.01, 0.25);
+  const gasCount = Math.floor(totalCells * gasDensity);
+  const goldQuota = 30 + (level - 1) * 20;
+  const dynamite = Math.max(Math.floor(totalCells * 0.35) - level, 15);
+
+  return { rows, cols, gasCount, goldQuota, dynamite };
+}
+
+function nextLevel() {
+  const surplus = state.gold - state.goldQuota;
+  state.level++;
+  const config = getLevelConfig(state.level);
+  state.rows = config.rows;
+  state.cols = config.cols;
+  state.gasCount = config.gasCount;
+  state.goldQuota = config.goldQuota;
+  state.dynamite = config.dynamite;
+  initLevel();
+  // Carry over surplus gold from previous level
+  state.gold = Math.max(0, surplus);
+  updateHud();
+}
+
+function restartGame() {
+  state.level = 1;
+  const config = getLevelConfig(1);
+  state.rows = config.rows;
+  state.cols = config.cols;
+  state.gasCount = config.gasCount;
+  state.goldQuota = config.goldQuota;
+  state.dynamite = config.dynamite;
+  initLevel();
+}
 
 // ============================================================
 // INIT
@@ -335,4 +400,11 @@ function initLevel() {
   hideOverlay();
 }
 
+// Apply level 1 config and start
+const startConfig = getLevelConfig(1);
+state.rows = startConfig.rows;
+state.cols = startConfig.cols;
+state.gasCount = startConfig.gasCount;
+state.goldQuota = startConfig.goldQuota;
+state.dynamite = startConfig.dynamite;
 initLevel();

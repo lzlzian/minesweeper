@@ -52,7 +52,10 @@ function renderGrid() {
 
         if (g.type === 'gold') {
           cell.classList.add('gold');
-          cell.textContent = `+${g.goldValue}`;
+          if (g.adjacent > 0) {
+            cell.textContent = g.adjacent;
+            cell.dataset.adjacent = g.adjacent;
+          }
         } else if (g.type === 'rubble') {
           cell.classList.add('rubble');
           cell.textContent = '\u2716';

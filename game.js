@@ -16,6 +16,7 @@ const state = {
   gameOver: false,
   playerRow: 0,
   playerCol: 0,
+  exit: { r: 0, c: 0 },  // NEW
 };
 
 // Cell object shape:
@@ -52,32 +53,37 @@ function renderGrid() {
 
       if (state.grid[r][c].type === 'wall') {
         cell.classList.add('wall');
-      } else if (state.revealed[r][c]) {
-        const g = state.grid[r][c];
-        cell.classList.add('revealed');
+      } else {
+        const isExit = (r === state.exit.r && c === state.exit.c);
+        if (isExit) cell.classList.add('exit');
 
-        if (isPlayer) {
-          cell.classList.add('player');
-        }
+        if (state.revealed[r][c]) {
+          const g = state.grid[r][c];
+          cell.classList.add('revealed');
 
-        if (g.type === 'gold') {
-          cell.classList.add('gold');
-          if (g.adjacent > 0) {
+          if (isPlayer) {
+            cell.classList.add('player');
+          }
+
+          if (g.type === 'gold') {
+            cell.classList.add('gold');
+            if (g.adjacent > 0) {
+              cell.textContent = g.adjacent;
+              cell.dataset.adjacent = g.adjacent;
+            }
+          } else if (g.type === 'rubble') {
+            cell.classList.add('rubble');
+            cell.textContent = '\u2716';
+          } else if (g.adjacent > 0) {
             cell.textContent = g.adjacent;
             cell.dataset.adjacent = g.adjacent;
           }
-        } else if (g.type === 'rubble') {
-          cell.classList.add('rubble');
-          cell.textContent = '\u2716';
-        } else if (g.adjacent > 0) {
-          cell.textContent = g.adjacent;
-          cell.dataset.adjacent = g.adjacent;
+        } else if (state.flagged[r][c]) {
+          cell.classList.add('flagged');
+          if (isAdjacent) cell.classList.add('reachable');
+        } else {
+          if (isAdjacent) cell.classList.add('reachable');
         }
-      } else if (state.flagged[r][c]) {
-        cell.classList.add('flagged');
-        if (isAdjacent) cell.classList.add('reachable');
-      } else {
-        if (isAdjacent) cell.classList.add('reachable');
       }
 
       cell.addEventListener('click', () => handleClick(r, c));
@@ -146,6 +152,81 @@ function placeWallClumps() {
       placed++;
     }
   }
+}
+
+function pickPlayerStart() {
+  const candidates = [];
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      if (state.grid[r][c].type === 'wall') continue;
+      let ok = true;
+      for (let dr = -1; dr <= 1 && ok; dr++) {
+        for (let dc = -1; dc <= 1 && ok; dc++) {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) {
+            continue;
+          }
+          if (state.grid[nr][nc].type === 'wall') ok = false;
+        }
+      }
+      if (ok) candidates.push({ r, c });
+    }
+  }
+  if (candidates.length === 0) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return pick;
+}
+
+function pickExit(playerR, playerC) {
+  const diagonal = Math.max(state.rows, state.cols) - 1;
+  const minDist = Math.ceil((2 / 3) * diagonal);
+  const candidates = [];
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      if (state.grid[r][c].type === 'wall') continue;
+      if (r === playerR && c === playerC) continue;
+      const cheby = Math.max(Math.abs(r - playerR), Math.abs(c - playerC));
+      if (cheby >= minDist) candidates.push({ r, c });
+    }
+  }
+  if (candidates.length === 0) {
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        if (state.grid[r][c].type === 'wall') continue;
+        if (r === playerR && c === playerC) continue;
+        candidates.push({ r, c });
+      }
+    }
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function isReachable(fromR, fromC, toR, toC) {
+  const visited = Array.from({ length: state.rows }, () =>
+    Array(state.cols).fill(false)
+  );
+  const queue = [{ r: fromR, c: fromC }];
+  visited[fromR][fromC] = true;
+  while (queue.length > 0) {
+    const { r, c } = queue.shift();
+    if (r === toR && c === toC) return true;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        if (visited[nr][nc]) continue;
+        const t = state.grid[nr][nc].type;
+        if (t === 'wall' || t === 'gas') continue;
+        visited[nr][nc] = true;
+        queue.push({ r: nr, c: nc });
+      }
+    }
+  }
+  return false;
 }
 
 function generateGrid() {
@@ -288,6 +369,18 @@ function handleClick(r, c) {
     if (state.grid[r][c].type === 'rubble') return;
     state.playerRow = r;
     state.playerCol = c;
+
+    if (r === state.exit.r && c === state.exit.c) {
+      state.gameOver = true;
+      showOverlay(`
+        <h2>Escaped!</h2>
+        <p>Gold this run: ${state.gold}</p>
+        <button onclick="startGame()">New Run</button>
+      `);
+      renderGrid();
+      return;
+    }
+
     renderGrid();
     return;
   }
@@ -307,9 +400,20 @@ function handleClick(r, c) {
     // Player stays where they are (explosion pushes them back)
   } else {
     revealCell(r, c);
-    // Move player to the newly dug cell
     state.playerRow = r;
     state.playerCol = c;
+
+    if (r === state.exit.r && c === state.exit.c) {
+      state.gameOver = true;
+      showOverlay(`
+        <h2>Escaped!</h2>
+        <p>Gold this run: ${state.gold}</p>
+        <button onclick="startGame()">New Run</button>
+      `);
+      updateHud();
+      renderGrid();
+      return;
+    }
   }
 
   updateHud();
@@ -500,15 +604,50 @@ function restartGame() {
 function initLevel() {
   state.gold = 0;
   state.gameOver = false;
-  state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-  state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-  generateGrid();
 
-  // Place player at top-left corner, ensure it's safe
-  state.playerRow = 0;
-  state.playerCol = 0;
-  ensureSafeStart(0, 0);
-  revealCell(0, 0);
+  const maxAttempts = 50;
+  let solved = false;
+
+  for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
+    state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
+    state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
+    generateGrid();
+
+    const start = pickPlayerStart();
+    if (!start) continue;
+    state.playerRow = start.r;
+    state.playerCol = start.c;
+    ensureSafeStart(state.playerRow, state.playerCol);
+
+    const exit = pickExit(state.playerRow, state.playerCol);
+    if (!exit) continue;
+    state.exit = exit;
+
+    // Exit cell itself must not be gas
+    if (state.grid[exit.r][exit.c].type === 'gas') {
+      state.grid[exit.r][exit.c].type = 'empty';
+      // recompute adjacency for neighbors (a gas was removed)
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = exit.r + dr;
+          const nc = exit.c + dc;
+          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+          const c2 = state.grid[nr][nc];
+          if (c2.type !== 'gas' && c2.type !== 'wall') {
+            c2.adjacent = countAdjacentGas(nr, nc);
+          }
+        }
+      }
+    }
+
+    if (isReachable(state.playerRow, state.playerCol, exit.r, exit.c)) {
+      solved = true;
+    }
+  }
+
+  // Pre-reveal exit cell and the player's starting cell
+  state.revealed[state.exit.r][state.exit.c] = true;
+  revealCell(state.playerRow, state.playerCol);
 
   updateHud();
   renderGrid();

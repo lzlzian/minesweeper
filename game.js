@@ -36,6 +36,46 @@ const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
 
 // ============================================================
+// AUDIO
+// ============================================================
+
+const SFX_VOLUME = 0.5;
+const BGM_VOLUME = 0.15;
+
+const bgm = new Audio('assets/sounds/background-music.ogg');
+bgm.loop = true;
+bgm.volume = BGM_VOLUME;
+
+// Preload one Audio per effect. For rapid-fire plays (steps, digs) we
+// clone the node so overlapping triggers don't cut each other off.
+const sfxBuffers = {
+  dig: 'assets/sounds/dig.ogg',
+  boom: 'assets/sounds/boom.ogg',
+  gold: 'assets/sounds/gold.ogg',
+  step: 'assets/sounds/step.ogg',
+  mark: 'assets/sounds/mark.ogg',
+  unmark: 'assets/sounds/unmark.ogg',
+  win: 'assets/sounds/win.ogg',
+};
+for (const key of Object.keys(sfxBuffers)) {
+  const a = new Audio(sfxBuffers[key]);
+  a.preload = 'auto';
+  sfxBuffers[key] = a;
+}
+
+function playSfx(name) {
+  const src = sfxBuffers[name];
+  if (!src) return;
+  const node = src.cloneNode();
+  node.volume = SFX_VOLUME;
+  node.play().catch(() => {});
+}
+
+function startBgm() {
+  bgm.play().catch(() => {});
+}
+
+// ============================================================
 // RENDERING
 // ============================================================
 
@@ -482,6 +522,7 @@ function isAdjacentToPlayer(r, c) {
 function collectGoldAt(r, c) {
   const cell = state.grid[r][c];
   if (cell.type === 'gold' && cell.goldValue > 0) {
+    playSfx('gold');
     state.gold += cell.goldValue;
     cell.goldValue = 0;
   }
@@ -508,12 +549,14 @@ async function animateWalk(path) {
   for (let i = 1; i < path.length; i++) {
     state.playerRow = path[i].r;
     state.playerCol = path[i].c;
+    playSfx('step');
     updatePlayerSprite();
     await sleep(STEP_MS);
     collectGoldAt(path[i].r, path[i].c);
     updateHud();
 
     if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
+      playSfx('win');
       state.gameOver = true;
       renderGrid();
       addToLifetimeGold(state.gold);
@@ -581,11 +624,13 @@ async function handleClick(r, c) {
 
     const cell = state.grid[r][c];
     if (cell.type === 'gas') {
+      playSfx('boom');
       state.hp--;
       detonateGas(r, c);
       state.revealed[r][c] = true;
       state.playerRow = r;
       state.playerCol = c;
+      updatePlayerSprite();
       updateHud();
       renderGrid();
 
@@ -596,14 +641,17 @@ async function handleClick(r, c) {
         return;
       }
     } else {
+      playSfx('dig');
       revealCell(r, c);
       state.playerRow = r;
       state.playerCol = c;
+      updatePlayerSprite();
       collectGoldAt(r, c);
       updateHud();
       renderGrid();
 
       if (r === state.exit.r && c === state.exit.c) {
+        playSfx('win');
         state.gameOver = true;
         addToLifetimeGold(state.gold);
         showEscapedOverlay();
@@ -681,6 +729,7 @@ function handleRightClick(r, c) {
   if (state.grid[r][c].type === 'wall') return;  // NEW
   if (state.revealed[r][c]) return;
   state.flagged[r][c] = !state.flagged[r][c];
+  playSfx(state.flagged[r][c] ? 'mark' : 'unmark');
   renderGrid();
 }
 
@@ -784,6 +833,7 @@ function getLifetimeGold() {
 function startGame() {
   initLevel();
   updatePlayerSprite(true);
+  startBgm();
 }
 
 showStartScreen();

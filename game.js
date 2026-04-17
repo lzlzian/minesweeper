@@ -55,24 +55,28 @@ function renderGrid() {
           const g = state.grid[r][c];
           cell.classList.add('revealed');
 
-          if (isPlayer) {
-            cell.classList.add('player');
+          if (isPlayer) cell.classList.add('player');
+          if (g.type === 'gas') cell.classList.add('gas');
+          else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
+
+          if (g.adjacent > 0 && g.type !== 'gas') {
+            cell.dataset.adjacent = g.adjacent;
+            const numSpan = document.createElement('span');
+            numSpan.className = 'num';
+            numSpan.textContent = g.adjacent;
+            cell.appendChild(numSpan);
           }
 
-          if (g.type === 'gas') {
-            cell.classList.add('gas');
-            cell.textContent = '💀';
-          } else if (g.type === 'gold' && g.goldValue > 0) {
-            cell.classList.add('gold');
-            if (g.adjacent > 0) {
-              cell.textContent = g.adjacent;
-              cell.dataset.adjacent = g.adjacent;
-            } else {
-              cell.textContent = '💰';
-            }
-          } else if (g.adjacent > 0) {
-            cell.textContent = g.adjacent;
-            cell.dataset.adjacent = g.adjacent;
+          let icon = null;
+          if (isPlayer) icon = '🙂';
+          else if (g.type === 'gas') icon = '💀';
+          else if (g.type === 'gold' && g.goldValue > 0) icon = '💰';
+
+          if (icon) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'icon';
+            iconSpan.textContent = icon;
+            cell.appendChild(iconSpan);
           }
         } else if (state.flagged[r][c]) {
           cell.classList.add('flagged');

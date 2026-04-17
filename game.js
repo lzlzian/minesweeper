@@ -65,15 +65,15 @@ function renderGrid() {
             cell.classList.add('player');
           }
 
-          if (g.type === 'gold') {
+          if (g.type === 'gas') {
+            cell.classList.add('gas');
+            cell.textContent = '\u2620';  // skull ☠
+          } else if (g.type === 'gold') {
             cell.classList.add('gold');
             if (g.adjacent > 0) {
               cell.textContent = g.adjacent;
               cell.dataset.adjacent = g.adjacent;
             }
-          } else if (g.type === 'rubble') {
-            cell.classList.add('rubble');
-            cell.textContent = '\u2716';
           } else if (g.adjacent > 0) {
             cell.textContent = g.adjacent;
             cell.dataset.adjacent = g.adjacent;
@@ -374,7 +374,6 @@ function handleClick(r, c) {
   // Click on revealed cell = move there (free, if adjacent)
   if (state.revealed[r][c]) {
     if (!isAdjacentToPlayer(r, c)) return;
-    if (state.grid[r][c].type === 'rubble') return;
     state.playerRow = r;
     state.playerCol = c;
 
@@ -401,8 +400,15 @@ function handleClick(r, c) {
   const cell = state.grid[r][c];
 
   if (cell.type === 'gas') {
-    explodeGas(r, c);
-    // Player stays where they are (explosion pushes them back)
+    state.revealed[r][c] = true;
+    state.gameOver = true;
+    renderGrid();
+    showOverlay(`
+      <h2>You died.</h2>
+      <p>Gold this run: ${state.gold}</p>
+      <button onclick="startGame()">New Run</button>
+    `);
+    return;
   } else {
     revealCell(r, c);
     state.playerRow = r;
@@ -467,7 +473,6 @@ function revealCell(r, c) {
   if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
   if (state.revealed[r][c]) return;
   if (state.grid[r][c].type === 'gas') return;
-  if (state.grid[r][c].type === 'rubble') return;
 
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
@@ -488,40 +493,6 @@ function revealCell(r, c) {
   }
 }
 
-function explodeGas(r, c) {
-  // Destroy the gas cell and its 8 neighbors
-  const destroyed = [];
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-        destroyed.push({ r: nr, c: nc });
-        state.grid[nr][nc].type = 'rubble';
-        state.grid[nr][nc].goldValue = 0;
-        state.grid[nr][nc].adjacent = 0;
-        state.revealed[nr][nc] = true;
-      }
-    }
-  }
-
-  // Recalculate adjacency for all non-gas, non-rubble cells near the explosion
-  // (because destroyed gas pockets lower their neighbors' counts)
-  for (const d of destroyed) {
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const nr = d.r + dr;
-        const nc = d.c + dc;
-        if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-          const cell = state.grid[nr][nc];
-          if (cell.type !== 'gas' && cell.type !== 'rubble') {
-            cell.adjacent = countAdjacentGas(nr, nc);
-          }
-        }
-      }
-    }
-  }
-}
 
 function handleRightClick(r, c) {
   if (state.gameOver) return;

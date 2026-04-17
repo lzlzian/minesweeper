@@ -67,10 +67,9 @@ body {
   color: #ffd700;
 }
 
-.cell.rubble {
-  background: #2a0a0a;
-  cursor: default;
-  color: #555;
+.cell.gas {
+  background: #5c1a1a;
+  color: #ff6b6b;
 }
 
 .cell.flagged {
@@ -154,16 +153,6 @@ body {
 @keyframes goldPulse {
   0% { transform: scale(1.2); }
   100% { transform: scale(1); }
-}
-
-.cell.rubble {
-  animation: rubbleShake 0.3s ease-out;
-}
-
-@keyframes rubbleShake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-3px); }
-  75% { transform: translateX(3px); }
 }
 
 .cell.player {

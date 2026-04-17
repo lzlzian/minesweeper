@@ -557,16 +557,25 @@ function revealCell(r, c) {
   if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
   if (state.revealed[r][c]) return;
   if (state.grid[r][c].type === 'gas') return;
+  if (state.grid[r][c].type === 'wall') return;
 
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
 
-  // Cascade if no adjacent gas
+  // If the cell has no gas adjacency, reveal its 8 neighbors once (single-depth,
+  // no recursion). Gives the player immediate context around an open cell, but
+  // doesn't sweep across the whole floor.
   if (cell.adjacent === 0) {
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        revealCell(r + dr, c + dc);
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        const t = state.grid[nr][nc].type;
+        if (t === 'gas' || t === 'wall') continue;
+        if (state.revealed[nr][nc]) continue;
+        state.revealed[nr][nc] = true;
       }
     }
   }

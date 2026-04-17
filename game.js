@@ -123,6 +123,14 @@ function showEscapedOverlay() {
   `);
 }
 
+function showDeathOverlay() {
+  showOverlay(`
+    <h2>You died.</h2>
+    <p>Gold this run: ${state.gold}</p>
+    <button onclick="startGame()">New Run</button>
+  `);
+}
+
 // ============================================================
 // PLACEHOLDER — filled in next tasks
 // ============================================================
@@ -402,12 +410,9 @@ function handleClick(r, c) {
   if (cell.type === 'gas') {
     state.revealed[r][c] = true;
     state.gameOver = true;
+    updateHud();
     renderGrid();
-    showOverlay(`
-      <h2>You died.</h2>
-      <p>Gold this run: ${state.gold}</p>
-      <button onclick="startGame()">New Run</button>
-    `);
+    showDeathOverlay();
     return;
   } else {
     revealCell(r, c);

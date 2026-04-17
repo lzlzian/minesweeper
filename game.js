@@ -8,8 +8,9 @@ const STEP_MS = 80;
 const state = {
   gold: 0,
   hp: MAX_HP,
-  rows: 14,
-  cols: 14,
+  level: 1,
+  rows: 10,
+  cols: 10,
   grid: [],
   revealed: [],
   flagged: [],
@@ -19,6 +20,12 @@ const state = {
   playerCol: 0,
   exit: { r: 0, c: 0 },
 };
+
+// Size at level N: 10 at 1-2, 12 at 3-4, ..., capped at 20.
+function gridSizeForLevel(level) {
+  const size = 10 + 2 * Math.floor((level - 1) / 2);
+  return Math.min(20, size);
+}
 
 // Cell object shape:
 // { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number }
@@ -31,6 +38,7 @@ const state = {
 const gridContainer = document.getElementById('grid-container');
 const goldDisplay = document.getElementById('gold-display');
 const hpDisplay = document.getElementById('hp-display');
+const levelDisplay = document.getElementById('level-display');
 const playerSprite = document.getElementById('player-sprite');
 const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
@@ -153,6 +161,17 @@ const CELL_SIZE = 40;
 const CELL_GAP = 2;
 const BOARD_PAD = 16; // #board padding in px (1rem)
 
+let hurtFlashToken = 0;
+function flashHurtFace() {
+  playerSprite.textContent = '🤕';
+  const token = ++hurtFlashToken;
+  setTimeout(() => {
+    if (token === hurtFlashToken) {
+      playerSprite.textContent = '🙂';
+    }
+  }, 1000);
+}
+
 function updatePlayerSprite(instant = false) {
   const x = BOARD_PAD + state.playerCol * (CELL_SIZE + CELL_GAP);
   const y = BOARD_PAD + state.playerRow * (CELL_SIZE + CELL_GAP);
@@ -171,6 +190,7 @@ function updatePlayerSprite(instant = false) {
 function updateHud() {
   goldDisplay.textContent = `Gold: ${state.gold}`;
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
+  levelDisplay.textContent = `Level ${state.level}`;
 }
 
 function showOverlay(html) {
@@ -183,17 +203,19 @@ function hideOverlay() {
 }
 
 function showEscapedOverlay() {
+  const nextSize = gridSizeForLevel(state.level + 1);
   showOverlay(`
     <h2>Escaped!</h2>
-    <p>Gold this run: ${state.gold}</p>
-    <button onclick="startGame()">New Run</button>
+    <p>Level ${state.level} cleared · Gold: ${state.gold}</p>
+    <p>Next: Level ${state.level + 1} (${nextSize}×${nextSize})</p>
+    <button onclick="nextLevel()">Descend</button>
   `);
 }
 
 function showDeathOverlay() {
   showOverlay(`
     <h2>You died.</h2>
-    <p>Gold this run: ${state.gold}</p>
+    <p>Reached Level ${state.level} · Gold this run: ${state.gold}</p>
     <button onclick="startGame()">New Run</button>
   `);
 }
@@ -631,6 +653,7 @@ async function handleClick(r, c) {
       state.playerRow = r;
       state.playerCol = c;
       updatePlayerSprite();
+      flashHurtFace();
       updateHud();
       renderGrid();
 
@@ -742,10 +765,11 @@ function handleRightClick(r, c) {
 // ============================================================
 
 function initLevel() {
-  state.gold = 0;
   state.hp = MAX_HP;
   state.gameOver = false;
   state.busy = false;
+  state.rows = gridSizeForLevel(state.level);
+  state.cols = state.rows;
 
   const maxAttempts = 50;
   let solved = false;
@@ -831,9 +855,21 @@ function getLifetimeGold() {
 }
 
 function startGame() {
+  state.level = 1;
+  state.gold = 0;
   initLevel();
   updatePlayerSprite(true);
+  hurtFlashToken++;
+  playerSprite.textContent = '🙂';
   startBgm();
+}
+
+function nextLevel() {
+  state.level++;
+  initLevel();
+  updatePlayerSprite(true);
+  hurtFlashToken++;
+  playerSprite.textContent = '🙂';
 }
 
 showStartScreen();

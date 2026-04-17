@@ -61,12 +61,14 @@ function renderGrid() {
 
           if (g.type === 'gas') {
             cell.classList.add('gas');
-            cell.textContent = '\u2620';  // skull ☠
+            cell.textContent = '💀';
           } else if (g.type === 'gold' && g.goldValue > 0) {
             cell.classList.add('gold');
             if (g.adjacent > 0) {
               cell.textContent = g.adjacent;
               cell.dataset.adjacent = g.adjacent;
+            } else {
+              cell.textContent = '💰';
             }
           } else if (g.adjacent > 0) {
             cell.textContent = g.adjacent;

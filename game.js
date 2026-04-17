@@ -115,6 +115,14 @@ function hideOverlay() {
   overlay.classList.add('hidden');
 }
 
+function showEscapedOverlay() {
+  showOverlay(`
+    <h2>Escaped!</h2>
+    <p>Gold this run: ${state.gold}</p>
+    <button onclick="startGame()">New Run</button>
+  `);
+}
+
 // ============================================================
 // PLACEHOLDER — filled in next tasks
 // ============================================================
@@ -372,12 +380,9 @@ function handleClick(r, c) {
 
     if (r === state.exit.r && c === state.exit.c) {
       state.gameOver = true;
-      showOverlay(`
-        <h2>Escaped!</h2>
-        <p>Gold this run: ${state.gold}</p>
-        <button onclick="startGame()">New Run</button>
-      `);
+      updateHud();
       renderGrid();
+      showEscapedOverlay();
       return;
     }
 
@@ -405,13 +410,9 @@ function handleClick(r, c) {
 
     if (r === state.exit.r && c === state.exit.c) {
       state.gameOver = true;
-      showOverlay(`
-        <h2>Escaped!</h2>
-        <p>Gold this run: ${state.gold}</p>
-        <button onclick="startGame()">New Run</button>
-      `);
       updateHud();
       renderGrid();
+      showEscapedOverlay();
       return;
     }
   }
@@ -643,6 +644,10 @@ function initLevel() {
     if (isReachable(state.playerRow, state.playerCol, exit.r, exit.c)) {
       solved = true;
     }
+  }
+
+  if (!solved) {
+    console.warn('initLevel: failed to produce a solvable map in 50 attempts');
   }
 
   // Pre-reveal exit cell and the player's starting cell

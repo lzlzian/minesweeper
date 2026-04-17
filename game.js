@@ -3,20 +3,16 @@
 // ============================================================
 
 const state = {
-  level: 1,
   gold: 0,
-  goldQuota: 0,
-  dynamite: 0,
-  rows: 0,
-  cols: 0,
-  gasCount: 0,
-  grid: [],        // 2D array of cell objects
-  revealed: [],    // 2D bool
-  flagged: [],     // 2D bool
+  rows: 12,
+  cols: 12,
+  grid: [],
+  revealed: [],
+  flagged: [],
   gameOver: false,
   playerRow: 0,
   playerCol: 0,
-  exit: { r: 0, c: 0 },  // NEW
+  exit: { r: 0, c: 0 },
 };
 
 // Cell object shape:
@@ -27,9 +23,7 @@ const state = {
 // ============================================================
 
 const gridContainer = document.getElementById('grid-container');
-const levelDisplay = document.getElementById('level-display');
 const goldDisplay = document.getElementById('gold-display');
-const dynamiteDisplay = document.getElementById('dynamite-display');
 const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
 
@@ -98,12 +92,7 @@ function renderGrid() {
 }
 
 function updateHud() {
-  levelDisplay.textContent = `Level: ${state.level}`;
-  goldDisplay.textContent = `Gold: ${state.gold} / ${state.goldQuota}`;
-  dynamiteDisplay.textContent = `Dynamite: ${state.dynamite}`;
-
-  dynamiteDisplay.classList.toggle('warning', state.dynamite <= 5);
-  goldDisplay.classList.toggle('success', state.gold >= state.goldQuota);
+  goldDisplay.textContent = `Gold: ${state.gold}`;
 }
 
 function showOverlay(html) {
@@ -283,7 +272,7 @@ function findPath(fromR, fromC, toR, toC) {
   return null;
 }
 
-function generateGrid() {
+function generateGrid(gasCount) {
   // Initialize empty grid
   state.grid = Array.from({ length: state.rows }, () =>
     Array.from({ length: state.cols }, () => ({
@@ -298,7 +287,7 @@ function generateGrid() {
 
   // Place gas pockets randomly (skip walls — 'empty' check below handles this)
   let placed = 0;
-  while (placed < state.gasCount) {
+  while (placed < gasCount) {
     const r = Math.floor(Math.random() * state.rows);
     const c = Math.floor(Math.random() * state.cols);
     if (state.grid[r][c].type === 'empty') {
@@ -449,13 +438,9 @@ function handleClick(r, c) {
     return;
   }
 
-  // Click on unrevealed cell = dig (costs dynamite, must be adjacent)
+  // Click on unrevealed cell = dig (must be adjacent)
   if (!isAdjacentToPlayer(r, c)) return;
   if (state.flagged[r][c]) return;
-  if (state.dynamite <= 0) return;
-
-  // Spend dynamite
-  state.dynamite--;
 
   const cell = state.grid[r][c];
 
@@ -483,7 +468,6 @@ function handleClick(r, c) {
 
   updateHud();
   renderGrid();
-  checkWinLoss();
 }
 
 function ensureSafeStart(r, c) {
@@ -555,72 +539,9 @@ function handleRightClick(r, c) {
   renderGrid();
 }
 
-function checkWinLoss() {
-  // Win: hit gold quota
-  if (state.gold >= state.goldQuota) {
-    state.gameOver = true;
-    const surplus = state.gold - state.goldQuota;
-    showOverlay(`
-      <h2>Mine Complete!</h2>
-      <p>Gold collected: ${state.gold}</p>
-      <p>Surplus: +${surplus}</p>
-      <p>Dynamite remaining: ${state.dynamite}</p>
-      <button onclick="nextLevel()">Next Level</button>
-    `);
-    return;
-  }
 
-  // Lose: out of dynamite
-  if (state.dynamite <= 0) {
-    state.gameOver = true;
-    showOverlay(`
-      <h2>Out of Dynamite!</h2>
-      <p>Gold collected: ${state.gold} / ${state.goldQuota}</p>
-      <p>Levels cleared: ${state.level - 1}</p>
-      <button onclick="restartGame()">New Run</button>
-    `);
-    return;
-  }
-}
 
-function getLevelConfig(level) {
-  // Base values scale with level
-  const rows = Math.min(9 + Math.floor(level / 3), 14);
-  const cols = rows;
-  const totalCells = rows * cols;
-  const gasDensity = Math.min(0.12 + level * 0.01, 0.25);
-  const gasCount = Math.floor(totalCells * gasDensity);
-  const goldQuota = 30 + (level - 1) * 20;
-  const dynamite = Math.max(Math.floor(totalCells * 0.35) - level, 15);
 
-  return { rows, cols, gasCount, goldQuota, dynamite };
-}
-
-function nextLevel() {
-  const surplus = state.gold - state.goldQuota;
-  state.level++;
-  const config = getLevelConfig(state.level);
-  state.rows = config.rows;
-  state.cols = config.cols;
-  state.gasCount = config.gasCount;
-  state.goldQuota = config.goldQuota;
-  state.dynamite = config.dynamite;
-  initLevel();
-  // Carry over surplus gold from previous level
-  state.gold = Math.max(0, surplus);
-  updateHud();
-}
-
-function restartGame() {
-  state.level = 1;
-  const config = getLevelConfig(1);
-  state.rows = config.rows;
-  state.cols = config.cols;
-  state.gasCount = config.gasCount;
-  state.goldQuota = config.goldQuota;
-  state.dynamite = config.dynamite;
-  initLevel();
-}
 
 // ============================================================
 // INIT
@@ -636,7 +557,8 @@ function initLevel() {
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
     state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
     state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-    generateGrid();
+    const gasCount = Math.floor(state.rows * state.cols * 0.11);
+    generateGrid(gasCount);
 
     const start = pickPlayerStart();
     if (!start) continue;
@@ -690,19 +612,14 @@ function showStartScreen() {
     <p>Dig through the mine to extract gold.</p>
     <p>You can only dig cells next to you.</p>
     <p>Numbers show nearby gas pockets — avoid them!</p>
-    <p>Hit the gold quota to advance.</p>
+    <p>Find the exit to escape!</p>
     <button onclick="startGame()">Start Mining</button>
   `);
 }
 
 function startGame() {
-  state.level = 1;
-  const config = getLevelConfig(1);
-  state.rows = config.rows;
-  state.cols = config.cols;
-  state.gasCount = config.gasCount;
-  state.goldQuota = config.goldQuota;
-  state.dynamite = config.dynamite;
+  state.rows = 12;
+  state.cols = 12;
   initLevel();
 }
 

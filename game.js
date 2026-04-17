@@ -2,10 +2,13 @@
 // STATE
 // ============================================================
 
+const MAX_HP = 3;
+
 const state = {
   gold: 0,
-  rows: 12,
-  cols: 12,
+  hp: MAX_HP,
+  rows: 14,
+  cols: 14,
   grid: [],
   revealed: [],
   flagged: [],
@@ -24,6 +27,7 @@ const state = {
 
 const gridContainer = document.getElementById('grid-container');
 const goldDisplay = document.getElementById('gold-display');
+const hpDisplay = document.getElementById('hp-display');
 const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
 
@@ -99,6 +103,7 @@ function renderGrid() {
 
 function updateHud() {
   goldDisplay.textContent = `Gold: ${state.gold}`;
+  hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
 }
 
 function showOverlay(html) {
@@ -162,55 +167,51 @@ function placeWallClumps() {
   }
 }
 
-function pickPlayerStart() {
-  const candidates = [];
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type === 'wall') continue;
-      let ok = true;
-      for (let dr = -1; dr <= 1 && ok; dr++) {
-        for (let dc = -1; dc <= 1 && ok; dc++) {
-          const nr = r + dr;
-          const nc = c + dc;
-          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) {
-            continue;
-          }
-          if (state.grid[nr][nc].type === 'wall') ok = false;
-        }
+// Search outward from (anchorR, anchorC) in increasing Chebyshev distance
+// for a non-wall cell. Used to anchor player/exit near a corner even when
+// the corner itself got walled.
+function findNearCorner(anchorR, anchorC) {
+  const maxDist = Math.max(state.rows, state.cols);
+  for (let d = 0; d < maxDist; d++) {
+    for (let r = Math.max(0, anchorR - d); r <= Math.min(state.rows - 1, anchorR + d); r++) {
+      for (let c = Math.max(0, anchorC - d); c <= Math.min(state.cols - 1, anchorC + d); c++) {
+        if (Math.max(Math.abs(r - anchorR), Math.abs(c - anchorC)) !== d) continue;
+        if (state.grid[r][c].type === 'wall') continue;
+        return { r, c };
       }
-      if (ok) candidates.push({ r, c });
     }
   }
-  if (candidates.length === 0) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  return pick;
+  return null;
+}
+
+function pickPlayerStart() {
+  const corners = [
+    { r: 0, c: 0 },
+    { r: 0, c: state.cols - 1 },
+    { r: state.rows - 1, c: 0 },
+    { r: state.rows - 1, c: state.cols - 1 },
+  ];
+  const cornerIdx = Math.floor(Math.random() * 4);
+  state._startCornerIdx = cornerIdx;
+  const anchor = corners[cornerIdx];
+  return findNearCorner(anchor.r, anchor.c);
 }
 
 function pickExit(playerR, playerC) {
-  const diagonal = Math.max(state.rows, state.cols) - 1;
-  const minDist = Math.ceil((2 / 3) * diagonal);
-  const candidates = [];
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type === 'wall') continue;
-      if (r === playerR && c === playerC) continue;
-      if (!hasNonWallNeighbor(r, c)) continue;
-      const cheby = Math.max(Math.abs(r - playerR), Math.abs(c - playerC));
-      if (cheby >= minDist) candidates.push({ r, c });
-    }
-  }
-  if (candidates.length === 0) {
-    for (let r = 0; r < state.rows; r++) {
-      for (let c = 0; c < state.cols; c++) {
-        if (state.grid[r][c].type === 'wall') continue;
-        if (r === playerR && c === playerC) continue;
-        if (!hasNonWallNeighbor(r, c)) continue;
-        candidates.push({ r, c });
-      }
-    }
-  }
-  if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  // Exit sits in the corner diagonally opposite to the player's start corner.
+  const corners = [
+    { r: 0, c: 0 },
+    { r: 0, c: state.cols - 1 },
+    { r: state.rows - 1, c: 0 },
+    { r: state.rows - 1, c: state.cols - 1 },
+  ];
+  const oppositeIdx = 3 - state._startCornerIdx;
+  const anchor = corners[oppositeIdx];
+  const found = findNearCorner(anchor.r, anchor.c);
+  if (!found) return null;
+  if (found.r === playerR && found.c === playerC) return null;
+  if (!hasNonWallNeighbor(found.r, found.c)) return null;
+  return found;
 }
 
 function hasNonWallNeighbor(r, c) {
@@ -455,6 +456,34 @@ function collectGoldAt(r, c) {
   }
 }
 
+// Dig into a gas cell: convert to empty floor and recompute neighbor
+// adjacency counts (since a gas was just removed).
+function detonateGas(r, c) {
+  state.grid[r][c].type = 'empty';
+  state.grid[r][c].goldValue = 0;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      const n = state.grid[nr][nc];
+      if (n.type === 'gas' || n.type === 'wall') continue;
+      let count = 0;
+      for (let dr2 = -1; dr2 <= 1; dr2++) {
+        for (let dc2 = -1; dc2 <= 1; dc2++) {
+          if (dr2 === 0 && dc2 === 0) continue;
+          const rr = nr + dr2;
+          const cc = nc + dc2;
+          if (rr < 0 || rr >= state.rows || cc < 0 || cc >= state.cols) continue;
+          if (state.grid[rr][cc].type === 'gas') count++;
+        }
+      }
+      n.adjacent = count;
+    }
+  }
+}
+
 function handleClick(r, c) {
   if (state.gameOver) return;
   if (state.grid[r][c].type === 'wall') return;  // NEW: walls are inert
@@ -491,13 +520,20 @@ function handleClick(r, c) {
   const cell = state.grid[r][c];
 
   if (cell.type === 'gas') {
+    state.hp--;
+    detonateGas(r, c);
     state.revealed[r][c] = true;
-    state.gameOver = true;
-    updateHud();
-    renderGrid();
-    addToLifetimeGold(state.gold);
-    showDeathOverlay();
-    return;
+    state.playerRow = r;
+    state.playerCol = c;
+
+    if (state.hp <= 0) {
+      state.gameOver = true;
+      updateHud();
+      renderGrid();
+      addToLifetimeGold(state.gold);
+      showDeathOverlay();
+      return;
+    }
   } else {
     revealCell(r, c);
     state.playerRow = r;
@@ -597,6 +633,7 @@ function handleRightClick(r, c) {
 
 function initLevel() {
   state.gold = 0;
+  state.hp = MAX_HP;
   state.gameOver = false;
 
   const maxAttempts = 50;
@@ -664,9 +701,9 @@ function initLevel() {
 function showStartScreen() {
   showOverlay(`
     <h2>Mining Crawler</h2>
-    <p>Reach the exit (<span style="color:#ffd700">▼</span>) to escape.</p>
+    <p>Reach the exit (🚪) to escape.</p>
     <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
-    <p>Digging gas = instant death. Gold is optional treasure.</p>
+    <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
     <button onclick="startGame()">Start Run</button>
   `);
 }

@@ -188,6 +188,7 @@ function pickExit(playerR, playerC) {
     for (let c = 0; c < state.cols; c++) {
       if (state.grid[r][c].type === 'wall') continue;
       if (r === playerR && c === playerC) continue;
+      if (!hasNonWallNeighbor(r, c)) continue;
       const cheby = Math.max(Math.abs(r - playerR), Math.abs(c - playerC));
       if (cheby >= minDist) candidates.push({ r, c });
     }
@@ -197,12 +198,26 @@ function pickExit(playerR, playerC) {
       for (let c = 0; c < state.cols; c++) {
         if (state.grid[r][c].type === 'wall') continue;
         if (r === playerR && c === playerC) continue;
+        if (!hasNonWallNeighbor(r, c)) continue;
         candidates.push({ r, c });
       }
     }
   }
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function hasNonWallNeighbor(r, c) {
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (state.grid[nr][nc].type !== 'wall') return true;
+    }
+  }
+  return false;
 }
 
 function isReachable(fromR, fromC, toR, toC) {
@@ -229,6 +244,33 @@ function isReachable(fromR, fromC, toR, toC) {
     }
   }
   return false;
+}
+
+function carvePath(fromR, fromC, toR, toC) {
+  // Walk Chebyshev-style from (fromR, fromC) to (toR, toC), clearing walls
+  // and gas on every cell of the path. Guarantees solvability.
+  let r = fromR;
+  let c = fromC;
+  while (r !== toR || c !== toC) {
+    if (r < toR) r++;
+    else if (r > toR) r--;
+    if (c < toC) c++;
+    else if (c > toC) c--;
+    const cell = state.grid[r][c];
+    if (cell.type === 'wall' || cell.type === 'gas') {
+      cell.type = 'empty';
+      cell.goldValue = 0;
+    }
+  }
+  // Recompute adjacency for the whole grid (cheap at 12x12)
+  for (let rr = 0; rr < state.rows; rr++) {
+    for (let cc = 0; cc < state.cols; cc++) {
+      const g = state.grid[rr][cc];
+      if (g.type !== 'gas' && g.type !== 'wall') {
+        g.adjacent = countAdjacentGas(rr, cc);
+      }
+    }
+  }
 }
 
 function findPath(fromR, fromC, toR, toC) {
@@ -599,12 +641,13 @@ function initLevel() {
   }
 
   if (!solved) {
-    console.warn('initLevel: failed to produce a solvable map in 50 attempts');
+    console.warn('initLevel: 50 attempts failed, carving a guaranteed path from player to exit');
+    carvePath(state.playerRow, state.playerCol, state.exit.r, state.exit.c);
   }
 
-  // Pre-reveal exit cell and the player's starting cell
+  // Pre-reveal exit cell and the player's starting cell only (no cascade — player digs from turn 1)
   state.revealed[state.exit.r][state.exit.c] = true;
-  revealCell(state.playerRow, state.playerCol);
+  state.revealed[state.playerRow][state.playerCol] = true;
   collectGoldAt(state.playerRow, state.playerCol);
 
   updateHud();

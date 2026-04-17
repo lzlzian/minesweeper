@@ -7,6 +7,7 @@ const STEP_MS = 80;
 
 const state = {
   gold: 0,
+  runGold: 0,
   hp: MAX_HP,
   level: 1,
   rows: 10,
@@ -188,7 +189,7 @@ function updatePlayerSprite(instant = false) {
 }
 
 function updateHud() {
-  goldDisplay.textContent = `Gold: ${state.gold}`;
+  goldDisplay.textContent = `💰 ${state.gold} (run: ${state.runGold + state.gold})`;
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
   levelDisplay.textContent = `Level ${state.level}`;
 }
@@ -206,7 +207,8 @@ function showEscapedOverlay() {
   const nextSize = gridSizeForLevel(state.level + 1);
   showOverlay(`
     <h2>Escaped!</h2>
-    <p>Level ${state.level} cleared · Gold: ${state.gold}</p>
+    <p>Level ${state.level} cleared · +💰 ${state.gold}</p>
+    <p>Run total: 💰 ${state.runGold + state.gold}</p>
     <p>Next: Level ${state.level + 1} (${nextSize}×${nextSize})</p>
     <button onclick="nextLevel()">Descend</button>
   `);
@@ -215,7 +217,9 @@ function showEscapedOverlay() {
 function showDeathOverlay() {
   showOverlay(`
     <h2>You died.</h2>
-    <p>Reached Level ${state.level} · Gold this run: ${state.gold}</p>
+    <p>Level ${state.level} · Forfeited 💰 ${state.gold}</p>
+    <p>Run total banked: 💰 ${state.runGold}</p>
+    <button onclick="retryLevel()">Retry Level</button>
     <button onclick="startGame()">New Run</button>
   `);
 }
@@ -659,7 +663,6 @@ async function handleClick(r, c) {
 
       if (state.hp <= 0) {
         state.gameOver = true;
-        addToLifetimeGold(state.gold);
         showDeathOverlay();
         return;
       }
@@ -857,6 +860,7 @@ function getLifetimeGold() {
 function startGame() {
   state.level = 1;
   state.gold = 0;
+  state.runGold = 0;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -865,7 +869,17 @@ function startGame() {
 }
 
 function nextLevel() {
+  state.runGold += state.gold;
+  state.gold = 0;
   state.level++;
+  initLevel();
+  updatePlayerSprite(true);
+  hurtFlashToken++;
+  playerSprite.textContent = '🙂';
+}
+
+function retryLevel() {
+  state.gold = 0;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

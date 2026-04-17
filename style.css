@@ -41,6 +41,8 @@ body {
 
 #player-sprite {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 40px;
   height: 40px;
   display: flex;

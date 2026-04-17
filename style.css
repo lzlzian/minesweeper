@@ -138,22 +138,6 @@ body {
   background: #c73e54;
 }
 
-#overlay-content button.secondary {
-  background: #3a3a5c;
-}
-
-#overlay-content button.secondary:hover {
-  background: #4a4a6c;
-}
-
-.cell.gold {
-  animation: goldPulse 0.3s ease-out;
-}
-
-@keyframes goldPulse {
-  0% { transform: scale(1.2); }
-  100% { transform: scale(1); }
-}
 
 .cell.player {
   outline: 3px solid #ffd700;

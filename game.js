@@ -16,7 +16,7 @@ const state = {
 };
 
 // Cell object shape:
-// { type: 'empty' | 'gas' | 'gold', adjacent: number, goldValue: 0 }
+// { type: 'empty' | 'gas' | 'gold' | 'wall', adjacent: number, goldValue: number }
 
 // ============================================================
 // UI REFERENCES

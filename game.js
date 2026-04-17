@@ -135,8 +135,6 @@ function placeWallClumps() {
     const clumpSize = 2 + Math.floor(Math.random() * 4); // 2..5
     const startR = Math.floor(Math.random() * state.rows);
     const startC = Math.floor(Math.random() * state.cols);
-    // Don't start a clump at player's reserved area (0,0) plus neighbors
-    if (startR <= 1 && startC <= 1) continue;
     if (state.grid[startR][startC].type !== 'empty') continue;
 
     state.grid[startR][startC].type = 'wall';
@@ -150,7 +148,6 @@ function placeWallClumps() {
       const nr = anchor.r + dr;
       const nc = anchor.c + dc;
       if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      if (nr <= 1 && nc <= 1) continue; // still respect player reserved area
       if (state.grid[nr][nc].type !== 'empty') continue;
       state.grid[nr][nc].type = 'wall';
       clump.push({ r: nr, c: nc });
@@ -588,6 +585,12 @@ function initLevel() {
           }
         }
       }
+    }
+
+    // Exit cell should not carry gold — keeps the exit cell mechanically clean
+    if (state.grid[exit.r][exit.c].type === 'gold') {
+      state.grid[exit.r][exit.c].type = 'empty';
+      state.grid[exit.r][exit.c].goldValue = 0;
     }
 
     if (isReachable(state.playerRow, state.playerCol, exit.r, exit.c)) {

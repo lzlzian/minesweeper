@@ -289,6 +289,13 @@ function carvePath(fromR, fromC, toR, toC) {
   }
 }
 
+// Orthogonal directions first so ties are broken in favor of cardinal
+// moves over diagonal ones.
+const STEP_DIRS = [
+  [-1, 0], [1, 0], [0, -1], [0, 1],
+  [-1, -1], [-1, 1], [1, -1], [1, 1],
+];
+
 function findPath(fromR, fromC, toR, toC) {
   if (fromR === toR && fromC === toC) return [{ r: fromR, c: fromC }];
   const visited = Array.from({ length: state.rows }, () =>
@@ -309,19 +316,16 @@ function findPath(fromR, fromC, toR, toC) {
       path.reverse();
       return path;
     }
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (dr === 0 && dc === 0) continue;
-        const nr = r + dr;
-        const nc = c + dc;
-        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-        if (visited[nr][nc] !== null) continue;
-        const t = state.grid[nr][nc].type;
-        if (t === 'wall' || t === 'gas') continue;
-        if (!state.revealed[nr][nc]) continue;
-        visited[nr][nc] = { r, c };
-        queue.push({ r: nr, c: nc });
-      }
+    for (const [dr, dc] of STEP_DIRS) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (visited[nr][nc] !== null) continue;
+      const t = state.grid[nr][nc].type;
+      if (t === 'wall' || t === 'gas') continue;
+      if (!state.revealed[nr][nc]) continue;
+      visited[nr][nc] = { r, c };
+      queue.push({ r: nr, c: nc });
     }
   }
   return null;

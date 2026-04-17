@@ -29,10 +29,28 @@ body {
   border-radius: 6px;
 }
 
+#board {
+  position: relative;
+  padding: 1rem;
+}
+
 #grid-container {
   display: grid;
   gap: 2px;
-  padding: 1rem;
+}
+
+#player-sprite {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  pointer-events: none;
+  transition: transform 0.08s linear;
+  z-index: 5;
+  will-change: transform;
 }
 
 .cell {

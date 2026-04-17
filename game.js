@@ -31,6 +31,7 @@ const state = {
 const gridContainer = document.getElementById('grid-container');
 const goldDisplay = document.getElementById('gold-display');
 const hpDisplay = document.getElementById('hp-display');
+const playerSprite = document.getElementById('player-sprite');
 const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
 
@@ -49,7 +50,6 @@ function renderGrid() {
       cell.dataset.row = r;
       cell.dataset.col = c;
 
-      const isPlayer = (r === state.playerRow && c === state.playerCol);
       const isAdjacent = isAdjacentToPlayer(r, c);
 
       if (state.grid[r][c].type === 'wall') {
@@ -62,7 +62,6 @@ function renderGrid() {
           const g = state.grid[r][c];
           cell.classList.add('revealed');
 
-          if (isPlayer) cell.classList.add('player');
           if (g.type === 'gas') cell.classList.add('gas');
           else if (g.type === 'detonated') cell.classList.add('detonated');
           else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
@@ -81,8 +80,7 @@ function renderGrid() {
           }
 
           let icon = null;
-          if (isPlayer) icon = '🙂';
-          else if (g.type === 'gas') icon = '💀';
+          if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = '💰';
 
           if (icon) {
@@ -107,6 +105,26 @@ function renderGrid() {
 
       gridContainer.appendChild(cell);
     }
+  }
+  updatePlayerSprite();
+}
+
+const CELL_SIZE = 40;
+const CELL_GAP = 2;
+const BOARD_PAD = 16; // #board padding in px (1rem)
+
+function updatePlayerSprite(instant = false) {
+  const x = BOARD_PAD + state.playerCol * (CELL_SIZE + CELL_GAP);
+  const y = BOARD_PAD + state.playerRow * (CELL_SIZE + CELL_GAP);
+  if (instant) {
+    const prev = playerSprite.style.transition;
+    playerSprite.style.transition = 'none';
+    playerSprite.style.transform = `translate(${x}px, ${y}px)`;
+    // Force reflow so the transition reset takes effect before re-enabling
+    playerSprite.offsetHeight;
+    playerSprite.style.transition = prev;
+  } else {
+    playerSprite.style.transform = `translate(${x}px, ${y}px)`;
   }
 }
 
@@ -488,20 +506,22 @@ function sleep(ms) {
 // something stopped it (e.g., win handled).
 async function animateWalk(path) {
   for (let i = 1; i < path.length; i++) {
-    await sleep(STEP_MS);
     state.playerRow = path[i].r;
     state.playerCol = path[i].c;
+    updatePlayerSprite();
+    await sleep(STEP_MS);
     collectGoldAt(path[i].r, path[i].c);
     updateHud();
-    renderGrid();
 
     if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
       state.gameOver = true;
+      renderGrid();
       addToLifetimeGold(state.gold);
       showEscapedOverlay();
       return false;
     }
   }
+  renderGrid();
   return true;
 }
 
@@ -762,9 +782,8 @@ function getLifetimeGold() {
 }
 
 function startGame() {
-  state.rows = 12;
-  state.cols = 12;
   initLevel();
+  updatePlayerSprite(true);
 }
 
 showStartScreen();

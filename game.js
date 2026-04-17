@@ -68,7 +68,7 @@ function renderGrid() {
           if (g.type === 'gas') {
             cell.classList.add('gas');
             cell.textContent = '\u2620';  // skull ☠
-          } else if (g.type === 'gold') {
+          } else if (g.type === 'gold' && g.goldValue > 0) {
             cell.classList.add('gold');
             if (g.adjacent > 0) {
               cell.textContent = g.adjacent;
@@ -245,6 +245,44 @@ function isReachable(fromR, fromC, toR, toC) {
   return false;
 }
 
+function findPath(fromR, fromC, toR, toC) {
+  if (fromR === toR && fromC === toC) return [{ r: fromR, c: fromC }];
+  const visited = Array.from({ length: state.rows }, () =>
+    Array(state.cols).fill(null)
+  );
+  const queue = [{ r: fromR, c: fromC }];
+  visited[fromR][fromC] = { r: -1, c: -1 };
+
+  while (queue.length > 0) {
+    const { r, c } = queue.shift();
+    if (r === toR && c === toC) {
+      const path = [];
+      let cur = { r, c };
+      while (cur.r !== -1) {
+        path.push(cur);
+        cur = visited[cur.r][cur.c];
+      }
+      path.reverse();
+      return path;
+    }
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        if (visited[nr][nc] !== null) continue;
+        const t = state.grid[nr][nc].type;
+        if (t === 'wall' || t === 'gas') continue;
+        if (!state.revealed[nr][nc]) continue;
+        visited[nr][nc] = { r, c };
+        queue.push({ r: nr, c: nc });
+      }
+    }
+  }
+  return null;
+}
+
 function generateGrid() {
   // Initialize empty grid
   state.grid = Array.from({ length: state.rows }, () =>
@@ -375,24 +413,38 @@ function isAdjacentToPlayer(r, c) {
   return dr <= 1 && dc <= 1;
 }
 
+function collectGoldAt(r, c) {
+  const cell = state.grid[r][c];
+  if (cell.type === 'gold' && cell.goldValue > 0) {
+    state.gold += cell.goldValue;
+    cell.goldValue = 0;
+  }
+}
+
 function handleClick(r, c) {
   if (state.gameOver) return;
   if (state.grid[r][c].type === 'wall') return;  // NEW: walls are inert
 
-  // Click on revealed cell = move there (free, if adjacent)
+  // Click on revealed cell = auto-walk via BFS
   if (state.revealed[r][c]) {
-    if (!isAdjacentToPlayer(r, c)) return;
-    state.playerRow = r;
-    state.playerCol = c;
+    const path = findPath(state.playerRow, state.playerCol, r, c);
+    if (!path || path.length < 2) return;
 
-    if (r === state.exit.r && c === state.exit.c) {
-      state.gameOver = true;
-      updateHud();
-      renderGrid();
-      showEscapedOverlay();
-      return;
+    for (let i = 1; i < path.length; i++) {
+      state.playerRow = path[i].r;
+      state.playerCol = path[i].c;
+      collectGoldAt(path[i].r, path[i].c);
+
+      if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
+        state.gameOver = true;
+        updateHud();
+        renderGrid();
+        showEscapedOverlay();
+        return;
+      }
     }
 
+    updateHud();
     renderGrid();
     return;
   }
@@ -418,6 +470,7 @@ function handleClick(r, c) {
     revealCell(r, c);
     state.playerRow = r;
     state.playerCol = c;
+    collectGoldAt(r, c);
 
     if (r === state.exit.r && c === state.exit.c) {
       state.gameOver = true;
@@ -481,11 +534,6 @@ function revealCell(r, c) {
 
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
-
-  // Collect gold if present
-  if (cell.type === 'gold') {
-    state.gold += cell.goldValue;
-  }
 
   // Cascade if no adjacent gas
   if (cell.adjacent === 0) {
@@ -629,6 +677,7 @@ function initLevel() {
   // Pre-reveal exit cell and the player's starting cell
   state.revealed[state.exit.r][state.exit.c] = true;
   revealCell(state.playerRow, state.playerCol);
+  collectGoldAt(state.playerRow, state.playerCol);
 
   updateHud();
   renderGrid();

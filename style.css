@@ -72,6 +72,14 @@ body {
   color: #ff6b6b;
 }
 
+.cell.detonated {
+  background: #3a1a1a;
+}
+
+.cell .num.cross {
+  color: #ff4444;
+}
+
 .cell.flagged {
   background: #3a2a5c;
 }

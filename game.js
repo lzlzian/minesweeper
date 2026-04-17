@@ -19,7 +19,8 @@ const state = {
 };
 
 // Cell object shape:
-// { type: 'empty' | 'gas' | 'gold' | 'wall', adjacent: number, goldValue: number }
+// { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number }
+// 'detonated' = a gas cell that was dug into; now passable floor that shows a red cross.
 
 // ============================================================
 // UI REFERENCES
@@ -61,9 +62,15 @@ function renderGrid() {
 
           if (isPlayer) cell.classList.add('player');
           if (g.type === 'gas') cell.classList.add('gas');
+          else if (g.type === 'detonated') cell.classList.add('detonated');
           else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
 
-          if (g.adjacent > 0 && g.type !== 'gas') {
+          if (g.type === 'detonated') {
+            const numSpan = document.createElement('span');
+            numSpan.className = 'num cross';
+            numSpan.textContent = '✖';
+            cell.appendChild(numSpan);
+          } else if (g.adjacent > 0 && g.type !== 'gas') {
             cell.dataset.adjacent = g.adjacent;
             const numSpan = document.createElement('span');
             numSpan.className = 'num';
@@ -456,32 +463,14 @@ function collectGoldAt(r, c) {
   }
 }
 
-// Dig into a gas cell: convert to empty floor and recompute neighbor
-// adjacency counts (since a gas was just removed).
+// Dig into a gas cell: mark it as detonated (passable, no icon, leaves a
+// red cross marker). Neighbor adjacency numbers are intentionally NOT
+// recomputed — a revealed "3" stays "3" even after you detonate one of
+// the three gases, preserving the deduction info the player already
+// earned.
 function detonateGas(r, c) {
-  state.grid[r][c].type = 'empty';
+  state.grid[r][c].type = 'detonated';
   state.grid[r][c].goldValue = 0;
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (dr === 0 && dc === 0) continue;
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      const n = state.grid[nr][nc];
-      if (n.type === 'gas' || n.type === 'wall') continue;
-      let count = 0;
-      for (let dr2 = -1; dr2 <= 1; dr2++) {
-        for (let dc2 = -1; dc2 <= 1; dc2++) {
-          if (dr2 === 0 && dc2 === 0) continue;
-          const rr = nr + dr2;
-          const cc = nc + dc2;
-          if (rr < 0 || rr >= state.rows || cc < 0 || cc >= state.cols) continue;
-          if (state.grid[rr][cc].type === 'gas') count++;
-        }
-      }
-      n.adjacent = count;
-    }
-  }
 }
 
 function handleClick(r, c) {

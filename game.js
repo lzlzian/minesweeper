@@ -125,7 +125,7 @@ function showDeathOverlay() {
 // ============================================================
 
 function placeWallClumps() {
-  const targetWallCount = Math.floor(state.rows * state.cols * 0.18);
+  const targetWallCount = Math.floor(state.rows * state.cols * 0.25);
   let placed = 0;
   let attempts = 0;
   const maxAttempts = 500;
@@ -562,20 +562,11 @@ function revealCell(r, c) {
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
 
-  // If the cell has no gas adjacency, reveal its 8 neighbors once (single-depth,
-  // no recursion). Gives the player immediate context around an open cell, but
-  // doesn't sweep across the whole floor.
   if (cell.adjacent === 0) {
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        const nr = r + dr;
-        const nc = c + dc;
-        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-        const t = state.grid[nr][nc].type;
-        if (t === 'gas' || t === 'wall') continue;
-        if (state.revealed[nr][nc]) continue;
-        state.revealed[nr][nc] = true;
+        revealCell(r + dr, c + dc);
       }
     }
   }
@@ -608,7 +599,7 @@ function initLevel() {
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
     state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
     state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-    const gasCount = Math.floor(state.rows * state.cols * 0.11);
+    const gasCount = Math.floor(state.rows * state.cols * 0.20);
     generateGrid(gasCount);
 
     const start = pickPlayerStart();

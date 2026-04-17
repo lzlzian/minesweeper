@@ -428,6 +428,7 @@ function handleClick(r, c) {
         state.gameOver = true;
         updateHud();
         renderGrid();
+        addToLifetimeGold(state.gold);
         showEscapedOverlay();
         return;
       }
@@ -449,6 +450,7 @@ function handleClick(r, c) {
     state.gameOver = true;
     updateHud();
     renderGrid();
+    addToLifetimeGold(state.gold);
     showDeathOverlay();
     return;
   } else {
@@ -461,6 +463,7 @@ function handleClick(r, c) {
       state.gameOver = true;
       updateHud();
       renderGrid();
+      addToLifetimeGold(state.gold);
       showEscapedOverlay();
       return;
     }
@@ -608,13 +611,23 @@ function initLevel() {
 
 function showStartScreen() {
   showOverlay(`
-    <h2>Mine Sweeper</h2>
-    <p>Dig through the mine to extract gold.</p>
-    <p>You can only dig cells next to you.</p>
-    <p>Numbers show nearby gas pockets — avoid them!</p>
-    <p>Find the exit to escape!</p>
-    <button onclick="startGame()">Start Mining</button>
+    <h2>Mining Crawler</h2>
+    <p>Reach the exit (<span style="color:#ffd700">▼</span>) to escape.</p>
+    <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
+    <p>Digging gas = instant death. Gold is optional treasure.</p>
+    <button onclick="startGame()">Start Run</button>
   `);
+}
+
+const LIFETIME_GOLD_KEY = 'miningCrawler.lifetimeGold';
+
+function addToLifetimeGold(amount) {
+  const cur = parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
+  localStorage.setItem(LIFETIME_GOLD_KEY, String(cur + amount));
+}
+
+function getLifetimeGold() {
+  return parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
 }
 
 function startGame() {

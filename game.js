@@ -3,6 +3,7 @@
 // ============================================================
 
 const MAX_HP = 3;
+const STEP_MS = 80;
 
 const state = {
   gold: 0,
@@ -13,6 +14,7 @@ const state = {
   revealed: [],
   flagged: [],
   gameOver: false,
+  busy: false,
   playerRow: 0,
   playerCol: 0,
   exit: { r: 0, c: 0 },
@@ -473,74 +475,120 @@ function detonateGas(r, c) {
   state.grid[r][c].goldValue = 0;
 }
 
-function handleClick(r, c) {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Animate the player along a path of revealed cells. Returns true if the
+// walk completed (including winning on the exit); returns false if
+// something stopped it (e.g., win handled).
+async function animateWalk(path) {
+  for (let i = 1; i < path.length; i++) {
+    await sleep(STEP_MS);
+    state.playerRow = path[i].r;
+    state.playerCol = path[i].c;
+    collectGoldAt(path[i].r, path[i].c);
+    updateHud();
+    renderGrid();
+
+    if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
+      state.gameOver = true;
+      addToLifetimeGold(state.gold);
+      showEscapedOverlay();
+      return false;
+    }
+  }
+  return true;
+}
+
+// Among the 8 neighbors of (tr, tc), find the revealed non-wall cell
+// reachable from the player with the shortest path. Returns { r, c, path }
+// or null.
+function findBestApproach(tr, tc) {
+  let best = null;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = tr + dr;
+      const nc = tc + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (!state.revealed[nr][nc]) continue;
+      const t = state.grid[nr][nc].type;
+      if (t === 'wall' || t === 'gas') continue;
+      const path = findPath(state.playerRow, state.playerCol, nr, nc);
+      if (!path) continue;
+      if (!best || path.length < best.path.length) {
+        best = { r: nr, c: nc, path };
+      }
+    }
+  }
+  return best;
+}
+
+async function handleClick(r, c) {
   if (state.gameOver) return;
-  if (state.grid[r][c].type === 'wall') return;  // NEW: walls are inert
+  if (state.busy) return;
+  if (state.grid[r][c].type === 'wall') return;
 
-  // Click on revealed cell = auto-walk via BFS
-  if (state.revealed[r][c]) {
-    const path = findPath(state.playerRow, state.playerCol, r, c);
-    if (!path || path.length < 2) return;
+  state.busy = true;
+  try {
+    // Clicked a revealed cell: just walk to it.
+    if (state.revealed[r][c]) {
+      const path = findPath(state.playerRow, state.playerCol, r, c);
+      if (!path || path.length < 2) return;
+      await animateWalk(path);
+      return;
+    }
 
-    for (let i = 1; i < path.length; i++) {
-      state.playerRow = path[i].r;
-      state.playerCol = path[i].c;
-      collectGoldAt(path[i].r, path[i].c);
+    // Clicked an unrevealed cell.
+    if (state.flagged[r][c]) return;
 
-      if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
+    // If adjacent, dig directly. Otherwise walk to the nearest revealed
+    // cell adjacent to the target, then dig.
+    if (!isAdjacentToPlayer(r, c)) {
+      const approach = findBestApproach(r, c);
+      if (!approach) return;
+      const walked = await animateWalk(approach.path);
+      if (!walked) return;
+      await sleep(STEP_MS);
+    }
+
+    if (!isAdjacentToPlayer(r, c)) return;
+
+    const cell = state.grid[r][c];
+    if (cell.type === 'gas') {
+      state.hp--;
+      detonateGas(r, c);
+      state.revealed[r][c] = true;
+      state.playerRow = r;
+      state.playerCol = c;
+      updateHud();
+      renderGrid();
+
+      if (state.hp <= 0) {
         state.gameOver = true;
-        updateHud();
-        renderGrid();
+        addToLifetimeGold(state.gold);
+        showDeathOverlay();
+        return;
+      }
+    } else {
+      revealCell(r, c);
+      state.playerRow = r;
+      state.playerCol = c;
+      collectGoldAt(r, c);
+      updateHud();
+      renderGrid();
+
+      if (r === state.exit.r && c === state.exit.c) {
+        state.gameOver = true;
         addToLifetimeGold(state.gold);
         showEscapedOverlay();
         return;
       }
     }
-
-    updateHud();
-    renderGrid();
-    return;
+  } finally {
+    state.busy = false;
   }
-
-  // Click on unrevealed cell = dig (must be adjacent)
-  if (!isAdjacentToPlayer(r, c)) return;
-  if (state.flagged[r][c]) return;
-
-  const cell = state.grid[r][c];
-
-  if (cell.type === 'gas') {
-    state.hp--;
-    detonateGas(r, c);
-    state.revealed[r][c] = true;
-    state.playerRow = r;
-    state.playerCol = c;
-
-    if (state.hp <= 0) {
-      state.gameOver = true;
-      updateHud();
-      renderGrid();
-      addToLifetimeGold(state.gold);
-      showDeathOverlay();
-      return;
-    }
-  } else {
-    revealCell(r, c);
-    state.playerRow = r;
-    state.playerCol = c;
-    collectGoldAt(r, c);
-
-    if (r === state.exit.r && c === state.exit.c) {
-      state.gameOver = true;
-      updateHud();
-      renderGrid();
-      addToLifetimeGold(state.gold);
-      showEscapedOverlay();
-      return;
-    }
-  }
-
-  updateHud();
-  renderGrid();
 }
 
 function ensureSafeStart(r, c) {
@@ -624,6 +672,7 @@ function initLevel() {
   state.gold = 0;
   state.hp = MAX_HP;
   state.gameOver = false;
+  state.busy = false;
 
   const maxAttempts = 50;
   let solved = false;

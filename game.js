@@ -50,7 +50,9 @@ function renderGrid() {
       const isPlayer = (r === state.playerRow && c === state.playerCol);
       const isAdjacent = isAdjacentToPlayer(r, c);
 
-      if (state.revealed[r][c]) {
+      if (state.grid[r][c].type === 'wall') {
+        cell.classList.add('wall');
+      } else if (state.revealed[r][c]) {
         const g = state.grid[r][c];
         cell.classList.add('revealed');
 
@@ -111,6 +113,41 @@ function hideOverlay() {
 // PLACEHOLDER — filled in next tasks
 // ============================================================
 
+function placeWallClumps() {
+  const targetWallCount = Math.floor(state.rows * state.cols * 0.18);
+  let placed = 0;
+  let attempts = 0;
+  const maxAttempts = 500;
+
+  while (placed < targetWallCount && attempts < maxAttempts) {
+    attempts++;
+    const clumpSize = 2 + Math.floor(Math.random() * 4); // 2..5
+    const startR = Math.floor(Math.random() * state.rows);
+    const startC = Math.floor(Math.random() * state.cols);
+    // Don't start a clump at player's reserved area (0,0) plus neighbors
+    if (startR <= 1 && startC <= 1) continue;
+    if (state.grid[startR][startC].type !== 'empty') continue;
+
+    state.grid[startR][startC].type = 'wall';
+    placed++;
+
+    const clump = [{ r: startR, c: startC }];
+    for (let i = 1; i < clumpSize && placed < targetWallCount; i++) {
+      const anchor = clump[Math.floor(Math.random() * clump.length)];
+      const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      const [dr, dc] = dirs[Math.floor(Math.random() * dirs.length)];
+      const nr = anchor.r + dr;
+      const nc = anchor.c + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (nr <= 1 && nc <= 1) continue; // still respect player reserved area
+      if (state.grid[nr][nc].type !== 'empty') continue;
+      state.grid[nr][nc].type = 'wall';
+      clump.push({ r: nr, c: nc });
+      placed++;
+    }
+  }
+}
+
 function generateGrid() {
   // Initialize empty grid
   state.grid = Array.from({ length: state.rows }, () =>
@@ -121,7 +158,10 @@ function generateGrid() {
     }))
   );
 
-  // Place gas pockets randomly
+  // NEW: place walls first
+  placeWallClumps();
+
+  // Place gas pockets randomly (skip walls — 'empty' check below handles this)
   let placed = 0;
   while (placed < state.gasCount) {
     const r = Math.floor(Math.random() * state.rows);
@@ -132,10 +172,11 @@ function generateGrid() {
     }
   }
 
-  // Calculate adjacency numbers
+  // Calculate adjacency numbers (walls are skipped — they neither count nor get counted)
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
       if (state.grid[r][c].type === 'gas') continue;
+      if (state.grid[r][c].type === 'wall') continue;
       state.grid[r][c].adjacent = countAdjacentGas(r, c);
     }
   }
@@ -164,7 +205,7 @@ function placeGoldVeins() {
   const safeCells = [];
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type !== 'gas') {
+      if (state.grid[r][c].type !== 'gas' && state.grid[r][c].type !== 'wall') {
         safeCells.push({ r, c, adj: state.grid[r][c].adjacent });
       }
     }
@@ -239,6 +280,7 @@ function isAdjacentToPlayer(r, c) {
 
 function handleClick(r, c) {
   if (state.gameOver) return;
+  if (state.grid[r][c].type === 'wall') return;  // NEW: walls are inert
 
   // Click on revealed cell = move there (free, if adjacent)
   if (state.revealed[r][c]) {
@@ -276,35 +318,41 @@ function handleClick(r, c) {
 }
 
 function ensureSafeStart(r, c) {
-  // Clear gas from start cell and its immediate neighbors
+  // Clear gas and walls from the start cell and its 8 neighbors
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
       const nr = r + dr;
       const nc = c + dc;
-      if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-        if (state.grid[nr][nc].type === 'gas') {
-          state.grid[nr][nc].type = 'empty';
-          state.grid[nr][nc].goldValue = 0;
-          // Relocate gas elsewhere
-          let placed = false;
-          while (!placed) {
-            const rr = Math.floor(Math.random() * state.rows);
-            const rc = Math.floor(Math.random() * state.cols);
-            const dist = Math.abs(rr - r) + Math.abs(rc - c);
-            if (state.grid[rr][rc].type === 'empty' && dist > 3) {
-              state.grid[rr][rc].type = 'gas';
-              placed = true;
-            }
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      const cell = state.grid[nr][nc];
+      if (cell.type === 'gas') {
+        cell.type = 'empty';
+        cell.goldValue = 0;
+        // Relocate gas to a distant cell
+        let relocated = false;
+        let attempts = 0;
+        while (!relocated && attempts < 500) {
+          attempts++;
+          const rr = Math.floor(Math.random() * state.rows);
+          const rc = Math.floor(Math.random() * state.cols);
+          const dist = Math.abs(rr - r) + Math.abs(rc - c);
+          if (state.grid[rr][rc].type === 'empty' && dist > 3) {
+            state.grid[rr][rc].type = 'gas';
+            relocated = true;
           }
         }
       }
+      if (cell.type === 'wall') {
+        cell.type = 'empty';
+      }
     }
   }
-  // Recalculate all adjacency numbers
+  // Recalculate adjacency for all non-gas, non-wall cells
   for (let row = 0; row < state.rows; row++) {
     for (let col = 0; col < state.cols; col++) {
-      if (state.grid[row][col].type !== 'gas') {
-        state.grid[row][col].adjacent = countAdjacentGas(row, col);
+      const c2 = state.grid[row][col];
+      if (c2.type !== 'gas' && c2.type !== 'wall') {
+        c2.adjacent = countAdjacentGas(row, col);
       }
     }
   }
@@ -372,6 +420,7 @@ function explodeGas(r, c) {
 
 function handleRightClick(r, c) {
   if (state.gameOver) return;
+  if (state.grid[r][c].type === 'wall') return;  // NEW
   if (state.revealed[r][c]) return;
   state.flagged[r][c] = !state.flagged[r][c];
   renderGrid();

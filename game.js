@@ -1249,6 +1249,12 @@ function initLevel() {
   if (state.merchant) {
     state.revealed[state.merchant.r][state.merchant.c] = true;
   }
+
+  // Reveal the player's start area so anchors can merge-check against it.
+  revealCell(state.playerRow, state.playerCol);
+
+  placeAnchors();
+
   collectAt(state.playerRow, state.playerCol);
 
   updateHud();

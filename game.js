@@ -7,7 +7,7 @@ const STEP_MS = 80;
 
 const state = {
   gold: 0,
-  runGold: 0,
+  stashGold: 0,
   hp: MAX_HP,
   level: 1,
   rows: 10,
@@ -33,7 +33,7 @@ function spendGold(amount) {
   } else {
     const remainder = amount - state.gold;
     state.gold = 0;
-    state.runGold -= remainder;
+    state.stashGold -= remainder;
   }
 }
 
@@ -219,7 +219,7 @@ function updatePlayerSprite(instant = false) {
 }
 
 function updateHud() {
-  goldDisplay.textContent = `💰 ${state.gold} (run: ${state.runGold + state.gold})`;
+  goldDisplay.textContent = `💰 ${state.gold} · Stash: ${state.stashGold}`;
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
   levelDisplay.textContent = `Level ${state.level}`;
   updateItemBar();
@@ -253,7 +253,7 @@ function showEscapedOverlay() {
   showOverlay(`
     <h2>Escaped!</h2>
     <p>Level ${state.level} cleared · +💰 ${state.gold}</p>
-    <p>Run total: 💰 ${state.runGold + state.gold}</p>
+    <p>Stash: 💰 ${state.stashGold + state.gold}</p>
     <p>Next: Level ${state.level + 1} (${nextSize}×${nextSize})</p>
     <button onclick="nextLevel()">Descend</button>
   `);
@@ -263,7 +263,7 @@ function showDeathOverlay() {
   showOverlay(`
     <h2>You died.</h2>
     <p>Level ${state.level} · Forfeited 💰 ${state.gold}</p>
-    <p>Run total banked: 💰 ${state.runGold}</p>
+    <p>Stash: 💰 ${state.stashGold}</p>
     <button onclick="retryLevel()">Retry Level</button>
     <button onclick="startGame()">New Run</button>
   `);
@@ -275,7 +275,7 @@ function showShopOverlay() {
   state.activeItem = null;
   updateItemBar();
 
-  const totalGold = state.gold + state.runGold;
+  const totalGold = state.gold + state.stashGold;
   const itemEmoji = { potion: '💊', pickaxe: '⛏️', scanner: '🔍' };
   const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner' };
 
@@ -295,7 +295,7 @@ function showShopOverlay() {
 
   showOverlay(`
     <h2>🧙 Merchant</h2>
-    <p>💰 Gold: ${state.gold} (run: ${totalGold})</p>
+    <p>💰 Gold: ${state.gold} · Stash: ${state.stashGold}</p>
     <div class="shop-slots">${slotsHtml}</div>
     <button onclick="leaveShop()">Leave</button>
   `);
@@ -305,7 +305,7 @@ function buyFromMerchant(idx) {
   if (!state.merchant) return;
   const slot = state.merchant.stock[idx];
   if (!slot || slot.sold) return;
-  const totalGold = state.gold + state.runGold;
+  const totalGold = state.gold + state.stashGold;
   if (totalGold < slot.price) return;
   spendGold(slot.price);
   state.items[slot.type]++;
@@ -1183,7 +1183,7 @@ function getLifetimeGold() {
 function startGame() {
   state.level = 1;
   state.gold = 0;
-  state.runGold = 0;
+  state.stashGold = 0;
   state.levelsSinceMerchant = 0;
   state.items = { potion: 1, scanner: 1, pickaxe: 1 };
   initLevel();
@@ -1194,7 +1194,7 @@ function startGame() {
 }
 
 function nextLevel() {
-  state.runGold += state.gold;
+  state.stashGold += state.gold;
   state.gold = 0;
   state.level++;
   if (state.merchant) {

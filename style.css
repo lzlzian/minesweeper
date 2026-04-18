@@ -67,6 +67,10 @@ body {
   animation: pickup-float-anim 1.1s ease-out forwards;
 }
 
+.pickup-float.float-danger {
+  color: #ff4444;
+}
+
 @keyframes pickup-float-anim {
   0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
   15%  { transform: translate(-50%, -80%) scale(1.15); opacity: 1; }
@@ -210,7 +214,6 @@ body {
   filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5));
 }
 
-.cell.gas .icon,
 .cell.detonated .icon {
   animation: none;
   filter: none;

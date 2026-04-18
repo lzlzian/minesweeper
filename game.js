@@ -235,11 +235,11 @@ function updatePlayerSprite(instant = false) {
 
 const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️' };
 
-function spawnPickupFloat(r, c, label) {
+function spawnPickupFloat(r, c, label, extraClass) {
   const x = BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
   const y = BOARD_PAD + r * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
   const el = document.createElement('div');
-  el.className = 'pickup-float';
+  el.className = 'pickup-float' + (extraClass ? ' ' + extraClass : '');
   el.textContent = label;
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
@@ -881,6 +881,7 @@ function collectAt(r, c) {
 function detonateGas(r, c) {
   state.grid[r][c].type = 'detonated';
   state.grid[r][c].goldValue = 0;
+  spawnPickupFloat(r, c, '💀', 'float-danger');
 }
 
 function sleep(ms) {

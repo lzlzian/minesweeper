@@ -206,6 +206,19 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 1.3rem;
+  animation: icon-bob 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5));
+}
+
+.cell.gas .icon,
+.cell.detonated .icon {
+  animation: none;
+  filter: none;
+}
+
+@keyframes icon-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
 }
 
 .cell.reachable {

@@ -86,32 +86,48 @@ const itemCounts = {
 const SFX_VOLUME = 0.5;
 const BGM_VOLUME = 0.15;
 
-const bgm = new Audio('assets/sounds/background-music.ogg');
+const bgm = new Audio('assets/sounds/background-music.mp3');
 bgm.loop = true;
 bgm.volume = BGM_VOLUME;
 
 // Preload one Audio per effect. For rapid-fire plays (steps, digs) we
 // clone the node so overlapping triggers don't cut each other off.
 const sfxBuffers = {
-  dig: 'assets/sounds/dig.ogg',
-  boom: 'assets/sounds/boom.ogg',
-  gold: 'assets/sounds/gold.ogg',
-  step: 'assets/sounds/step.ogg',
-  mark: 'assets/sounds/mark.ogg',
-  unmark: 'assets/sounds/unmark.ogg',
-  win: 'assets/sounds/win.ogg',
-  welcome: 'assets/sounds/welcome.ogg',
-  payment: 'assets/sounds/payment.ogg',
-  scan: 'assets/sounds/scan.ogg',
-  drink: 'assets/sounds/drink.ogg',
-  pickaxe: 'assets/sounds/pickaxe.ogg',
-  pickup: 'assets/sounds/pickup.ogg',
+  dig: 'assets/sounds/dig.mp3',
+  boom: 'assets/sounds/boom.mp3',
+  gold: 'assets/sounds/gold.mp3',
+  step: 'assets/sounds/step.mp3',
+  mark: 'assets/sounds/mark.mp3',
+  unmark: 'assets/sounds/unmark.mp3',
+  win: 'assets/sounds/win.mp3',
+  welcome: 'assets/sounds/welcome.mp3',
+  payment: 'assets/sounds/payment.mp3',
+  scan: 'assets/sounds/scan.mp3',
+  drink: 'assets/sounds/drink.mp3',
+  pickaxe: 'assets/sounds/pickaxe.mp3',
+  pickup: 'assets/sounds/pickup.mp3',
 };
 for (const key of Object.keys(sfxBuffers)) {
   const a = new Audio(sfxBuffers[key]);
   a.preload = 'auto';
   sfxBuffers[key] = a;
 }
+
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  // Play+pause each buffer to unlock it on iOS Safari.
+  for (const key of Object.keys(sfxBuffers)) {
+    const a = sfxBuffers[key];
+    a.volume = 0;
+    a.play().then(() => { a.pause(); a.currentTime = 0; a.volume = SFX_VOLUME; }).catch(() => {});
+  }
+  bgm.volume = 0;
+  bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; bgm.volume = BGM_VOLUME; }).catch(() => {});
+}
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
 
 function playSfx(name) {
   const src = sfxBuffers[name];

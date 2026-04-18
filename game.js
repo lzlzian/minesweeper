@@ -21,7 +21,7 @@ const state = {
   playerCol: 0,
   exit: { r: 0, c: 0 },
   items: { potion: 0, scanner: 0, pickaxe: 0 },
-  activeItem: null, // null | 'scanner' | 'pickaxe'
+  activeItem: null, // null | 'pickaxe'
   levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
   merchant: null, // level-scoped; { r, c, stock: [{ type, price, sold }, ...] } or null
 };
@@ -46,12 +46,14 @@ function gridSizeForLevel(level) {
 // Cell object shape:
 // { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number, item: null | 'potion' | 'scanner' | 'pickaxe' }
 // 'detonated' = a gas cell that was dug into; now passable floor that shows a red cross.
-// 'item' = if non-null, revealing this cell grants the player one of that item.
+// 'item' = if non-null, the item is visible on the revealed cell and gets
+// picked up when the player steps onto the cell (not merely on reveal).
 
 // ============================================================
 // UI REFERENCES
 // ============================================================
 
+const board = document.getElementById('board');
 const gridContainer = document.getElementById('grid-container');
 const goldDisplay = document.getElementById('gold-display');
 const hpDisplay = document.getElementById('hp-display');
@@ -94,6 +96,10 @@ const sfxBuffers = {
   win: 'assets/sounds/win.ogg',
   welcome: 'assets/sounds/welcome.ogg',
   payment: 'assets/sounds/payment.ogg',
+  scan: 'assets/sounds/scan.ogg',
+  drink: 'assets/sounds/drink.ogg',
+  pickaxe: 'assets/sounds/pickaxe.ogg',
+  pickup: 'assets/sounds/pickup.ogg',
 };
 for (const key of Object.keys(sfxBuffers)) {
   const a = new Audio(sfxBuffers[key]);
@@ -163,6 +169,7 @@ function renderGrid() {
           let icon = null;
           if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = '💰';
+          else if (g.item) icon = PICKUP_EMOJI[g.item];
 
           if (icon) {
             const iconSpan = document.createElement('span');
@@ -220,6 +227,20 @@ function updatePlayerSprite(instant = false) {
   }
 }
 
+const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️' };
+
+function spawnPickupFloat(r, c, label) {
+  const x = BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const y = BOARD_PAD + r * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const el = document.createElement('div');
+  el.className = 'pickup-float';
+  el.textContent = label;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  board.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
 function updateHud() {
   goldDisplay.textContent = `💰 ${state.gold} · Stash: ${state.stashGold}`;
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
@@ -235,6 +256,7 @@ function updateItemBar() {
     const btn = itemButtons[key];
     let disabled = count === 0 || state.gameOver;
     if (key === 'potion' && state.hp >= MAX_HP) disabled = true;
+    if (key === 'scanner' && !scannerHasTarget()) disabled = true;
     btn.disabled = disabled;
 
     btn.classList.toggle('active', state.activeItem === key);
@@ -279,7 +301,7 @@ function showShopOverlay(playWelcome = false) {
   if (playWelcome) playSfx('welcome');
 
   const totalGold = state.gold + state.stashGold;
-  const itemEmoji = { potion: '💊', pickaxe: '⛏️', scanner: '🔍' };
+  const itemEmoji = { potion: '🍺', pickaxe: '⛏️', scanner: '🔍' };
   const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner' };
 
   const slotsHtml = state.merchant.stock.map((slot, idx) => {
@@ -736,12 +758,19 @@ function isAdjacentToPlayer(r, c) {
   return dr <= 1 && dc <= 1;
 }
 
-function collectGoldAt(r, c) {
+function collectAt(r, c) {
   const cell = state.grid[r][c];
   if (cell.type === 'gold' && cell.goldValue > 0) {
     playSfx('gold');
+    spawnPickupFloat(r, c, `💰 +${cell.goldValue}`);
     state.gold += cell.goldValue;
     cell.goldValue = 0;
+  }
+  if (cell.item) {
+    state.items[cell.item]++;
+    spawnPickupFloat(r, c, `${PICKUP_EMOJI[cell.item] || ''} +1`);
+    cell.item = null;
+    playSfx('pickup');
   }
 }
 
@@ -769,7 +798,7 @@ async function animateWalk(path) {
     playSfx('step');
     updatePlayerSprite();
     await sleep(STEP_MS);
-    collectGoldAt(path[i].r, path[i].c);
+    collectAt(path[i].r, path[i].c);
     updateHud();
 
     if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
@@ -823,31 +852,6 @@ async function handleItemClick(r, c) {
   const item = state.activeItem;
   const cell = state.grid[r][c];
 
-  if (item === 'scanner') {
-    // Valid target: any unrevealed, non-wall cell.
-    if (state.revealed[r][c] || cell.type === 'wall') {
-      state.activeItem = null;
-      updateItemBar();
-      renderGrid();
-      return true;
-    }
-    state.items.scanner--;
-    state.activeItem = null;
-
-    if (cell.type === 'gas') {
-      // Detonate harmlessly — no HP cost, same red-cross result as dig-survive.
-      playSfx('boom');
-      detonateGas(r, c);
-      state.revealed[r][c] = true;
-    } else {
-      playSfx('dig');
-      revealCell(r, c);
-    }
-    updateHud();
-    renderGrid();
-    return true;
-  }
-
   if (item === 'pickaxe') {
     // Valid target: any wall cell.
     if (cell.type !== 'wall') {
@@ -878,7 +882,7 @@ async function handleItemClick(r, c) {
       }
     }
 
-    playSfx('dig');
+    playSfx('pickaxe');
     updateHud();
     renderGrid();
     return true;
@@ -954,7 +958,7 @@ async function handleClick(r, c) {
       state.playerRow = r;
       state.playerCol = c;
       updatePlayerSprite();
-      collectGoldAt(r, c);
+      collectAt(r, c);
       updateHud();
       renderGrid();
 
@@ -1020,12 +1024,6 @@ function revealCell(r, c) {
 
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
-
-  if (cell.item) {
-    state.items[cell.item]++;
-    cell.item = null;
-    playSfx('gold');
-  }
 
   if (cell.adjacent === 0) {
     for (let dr = -1; dr <= 1; dr++) {
@@ -1153,7 +1151,7 @@ function initLevel() {
   if (state.merchant) {
     state.revealed[state.merchant.r][state.merchant.c] = true;
   }
-  collectGoldAt(state.playerRow, state.playerCol);
+  collectAt(state.playerRow, state.playerCol);
 
   updateHud();
   renderGrid();
@@ -1166,7 +1164,7 @@ function showStartScreen() {
     <p>Reach the exit (🚪) to escape.</p>
     <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
     <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
-    <p>Items: 💊 heal · 🔍 reveal any cell safely · ⛏️ break a wall</p>
+    <p>Items: 🍺 heal · 🔍 reveal the 3×3 around you safely · ⛏️ break a wall</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items.</p>
     <button onclick="startGame()">Start Run</button>
   `);
@@ -1232,7 +1230,12 @@ function onItemButtonClick(itemKey) {
     return;
   }
 
-  // Scanner / Pickaxe: toggle targeting mode.
+  if (itemKey === 'scanner') {
+    useItemScanner();
+    return;
+  }
+
+  // Pickaxe: toggle targeting mode.
   if (state.activeItem === itemKey) {
     state.activeItem = null;
   } else {
@@ -1247,8 +1250,59 @@ function useItemPotion() {
   if (state.items.potion <= 0) return;
   state.items.potion--;
   state.hp = Math.min(MAX_HP, state.hp + 1);
-  playSfx('gold');
+  playSfx('drink');
   updateHud();
+}
+
+// True if the 3×3 around the player contains at least one unrevealed,
+// non-wall cell — i.e., scanning would actually do something.
+function scannerHasTarget() {
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const r = pr + dr;
+      const c = pc + dc;
+      if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) continue;
+      if (state.revealed[r][c]) continue;
+      if (state.grid[r][c].type === 'wall') continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+// Reveal the 3×3 area centered on the player. Gas in range detonates
+// harmlessly (red cross, no HP cost); walls stay walls; empty cells reveal
+// and cascade on 0 adjacency via revealCell.
+function useItemScanner() {
+  if (state.items.scanner <= 0) return;
+  if (!scannerHasTarget()) return;
+  state.items.scanner--;
+
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const r = pr + dr;
+      const c = pc + dc;
+      if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) continue;
+      if (state.revealed[r][c]) continue;
+      const cell = state.grid[r][c];
+      if (cell.type === 'wall') continue;
+      if (cell.type === 'gas') {
+        detonateGas(r, c);
+        state.revealed[r][c] = true;
+      } else {
+        revealCell(r, c);
+      }
+    }
+  }
+
+  playSfx('scan');
+  updateHud();
+  updateItemBar();
+  renderGrid();
 }
 
 // Cancel any active targeting mode on Escape.

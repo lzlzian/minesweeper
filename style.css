@@ -55,6 +55,24 @@ body {
   will-change: transform;
 }
 
+.pickup-float {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 1rem;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 6;
+  animation: pickup-float-anim 1.1s ease-out forwards;
+}
+
+@keyframes pickup-float-anim {
+  0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+  15%  { transform: translate(-50%, -80%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -160%) scale(1); opacity: 0; }
+}
+
 .cell {
   width: 40px;
   height: 40px;

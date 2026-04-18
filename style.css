@@ -32,8 +32,6 @@ body {
 #board {
   position: relative;
   padding: 1rem;
-  max-width: 100vw;
-  overflow: hidden;
   transform-origin: top center;
 }
 

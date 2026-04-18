@@ -194,6 +194,7 @@ function renderGrid() {
       cell.addEventListener('click', () => handleClick(r, c));
       cell.addEventListener('contextmenu', (e) => {
         e.preventDefault();
+        if (longPressTriggered) return;
         handleRightClick(r, c);
       });
 
@@ -209,12 +210,18 @@ const CELL_GAP = 2;
 const BOARD_PAD = 16; // #board padding in px (1rem)
 
 function fitBoard() {
-  const boardWidth = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP + BOARD_PAD * 2;
-  const viewWidth = window.innerWidth;
-  if (boardWidth > viewWidth) {
-    board.style.transform = `scale(${viewWidth / boardWidth})`;
+  const gridW = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  const gridH = state.rows * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  const boardW = gridW + BOARD_PAD * 2;
+  const boardH = gridH + BOARD_PAD * 2;
+  const maxW = window.innerWidth;
+  const scale = Math.min(1, maxW / boardW);
+  if (scale < 1) {
+    board.style.transform = `scale(${scale})`;
+    board.style.marginBottom = `-${boardH * (1 - scale)}px`;
   } else {
     board.style.transform = '';
+    board.style.marginBottom = '';
   }
 }
 

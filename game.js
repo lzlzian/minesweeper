@@ -649,7 +649,8 @@ function countAdjacentGas(r, c) {
       const nr = r + dr;
       const nc = c + dc;
       if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-        if (state.grid[nr][nc].type === 'gas') count++;
+        const t = state.grid[nr][nc].type;
+        if (t === 'gas' || t === 'detonated') count++;
       }
     }
   }

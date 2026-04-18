@@ -201,11 +201,22 @@ function renderGrid() {
     }
   }
   updatePlayerSprite();
+  fitBoard();
 }
 
 const CELL_SIZE = 40;
 const CELL_GAP = 2;
 const BOARD_PAD = 16; // #board padding in px (1rem)
+
+function fitBoard() {
+  const boardWidth = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP + BOARD_PAD * 2;
+  const viewWidth = window.innerWidth;
+  if (boardWidth > viewWidth) {
+    board.style.transform = `scale(${viewWidth / boardWidth})`;
+  } else {
+    board.style.transform = '';
+  }
+}
 
 let hurtFlashToken = 0;
 function flashHurtFace() {
@@ -1455,6 +1466,38 @@ function useItemScanner() {
   updateItemBar();
   renderGrid();
 }
+
+// Long-press to flag on touch devices (iOS Safari doesn't fire contextmenu).
+let longPressTimer = null;
+let longPressTriggered = false;
+
+gridContainer.addEventListener('touchstart', (e) => {
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  longPressTriggered = false;
+  const r = parseInt(cell.dataset.row);
+  const c = parseInt(cell.dataset.col);
+  longPressTimer = setTimeout(() => {
+    longPressTriggered = true;
+    handleRightClick(r, c);
+  }, 400);
+}, { passive: true });
+
+gridContainer.addEventListener('touchend', () => {
+  clearTimeout(longPressTimer);
+});
+
+gridContainer.addEventListener('touchmove', () => {
+  clearTimeout(longPressTimer);
+});
+
+// Suppress the click that follows a long-press flag.
+gridContainer.addEventListener('click', (e) => {
+  if (longPressTriggered) {
+    e.stopPropagation();
+    longPressTriggered = false;
+  }
+}, true);
 
 // Cancel any active targeting mode on Escape.
 document.addEventListener('keydown', (e) => {

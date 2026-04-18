@@ -285,3 +285,19 @@ body {
   min-width: 12px;
   text-align: right;
 }
+
+.cell.merchant {
+  background: #2a4a6b;
+  box-shadow: inset 0 0 10px rgba(100, 200, 255, 0.6);
+}
+
+.cell.merchant::before {
+  content: '🧙';
+  position: absolute;
+  font-size: 1.3rem;
+  pointer-events: none;
+}
+
+.cell.merchant.revealed {
+  background: #2a4a6b;
+}

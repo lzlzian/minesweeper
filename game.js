@@ -123,6 +123,9 @@ function renderGrid() {
         const isExit = (r === state.exit.r && c === state.exit.c);
         if (isExit) cell.classList.add('exit');
 
+        const isMerchant = state.merchant && r === state.merchant.r && c === state.merchant.c;
+        if (isMerchant) cell.classList.add('merchant');
+
         if (state.revealed[r][c]) {
           const g = state.grid[r][c];
           cell.classList.add('revealed');

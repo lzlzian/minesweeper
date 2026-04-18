@@ -779,6 +779,12 @@ async function animateWalk(path) {
     }
   }
   renderGrid();
+  // Open shop if we landed on the merchant.
+  if (state.merchant &&
+      state.playerRow === state.merchant.r &&
+      state.playerCol === state.merchant.c) {
+    showShopOverlay();
+  }
   return true;
 }
 
@@ -881,6 +887,13 @@ async function handleItemClick(r, c) {
 async function handleClick(r, c) {
   if (state.gameOver) return;
   if (state.busy) return;
+
+  // Re-open shop if player clicks their own cell and it's the merchant.
+  if (r === state.playerRow && c === state.playerCol &&
+      state.merchant && r === state.merchant.r && c === state.merchant.c) {
+    showShopOverlay();
+    return;
+  }
 
   if (state.activeItem) {
     await handleItemClick(r, c);

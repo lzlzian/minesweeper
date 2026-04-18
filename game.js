@@ -26,6 +26,17 @@ const state = {
   merchant: null, // level-scoped; { r, c, stock: [{ type, price, sold }, ...] } or null
 };
 
+function spendGold(amount) {
+  // Deduct from current-level gold first, overflow into run gold.
+  if (state.gold >= amount) {
+    state.gold -= amount;
+  } else {
+    const remainder = amount - state.gold;
+    state.gold = 0;
+    state.runGold -= remainder;
+  }
+}
+
 // Size at level N: 10 at 1-2, 12 at 3-4, ..., capped at 20.
 function gridSizeForLevel(level) {
   const size = 10 + 2 * Math.floor((level - 1) / 2);
@@ -256,6 +267,56 @@ function showDeathOverlay() {
     <button onclick="retryLevel()">Retry Level</button>
     <button onclick="startGame()">New Run</button>
   `);
+}
+
+function showShopOverlay() {
+  if (!state.merchant) return;
+  // Clear any active item targeting before opening the shop.
+  state.activeItem = null;
+  updateItemBar();
+
+  const totalGold = state.gold + state.runGold;
+  const itemEmoji = { potion: '💊', pickaxe: '⛏️', scanner: '🔍' };
+  const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner' };
+
+  const slotsHtml = state.merchant.stock.map((slot, idx) => {
+    const canAfford = totalGold >= slot.price;
+    const disabled = slot.sold || !canAfford;
+    const label = slot.sold ? 'Sold out' : 'Buy';
+    return `
+      <div class="shop-slot ${slot.sold ? 'sold' : ''}">
+        <div class="shop-slot-icon">${itemEmoji[slot.type]}</div>
+        <div class="shop-slot-name">${itemName[slot.type]}</div>
+        <div class="shop-slot-price">${slot.price}g</div>
+        <button onclick="buyFromMerchant(${idx})" ${disabled ? 'disabled' : ''}>${label}</button>
+      </div>
+    `;
+  }).join('');
+
+  showOverlay(`
+    <h2>🧙 Merchant</h2>
+    <p>💰 Gold: ${state.gold} (run: ${totalGold})</p>
+    <div class="shop-slots">${slotsHtml}</div>
+    <button onclick="leaveShop()">Leave</button>
+  `);
+}
+
+function buyFromMerchant(idx) {
+  if (!state.merchant) return;
+  const slot = state.merchant.stock[idx];
+  if (!slot || slot.sold) return;
+  const totalGold = state.gold + state.runGold;
+  if (totalGold < slot.price) return;
+  spendGold(slot.price);
+  state.items[slot.type]++;
+  slot.sold = true;
+  playSfx('gold');
+  updateHud();
+  showShopOverlay(); // re-render with updated state
+}
+
+function leaveShop() {
+  hideOverlay();
 }
 
 // ============================================================

@@ -301,3 +301,59 @@ body {
 .cell.merchant.revealed {
   background: #2a4a6b;
 }
+
+.shop-slots {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.shop-slot {
+  background: #0f1a30;
+  border: 2px solid #2a3a5a;
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 80px;
+}
+
+.shop-slot.sold {
+  opacity: 0.4;
+}
+
+.shop-slot-icon {
+  font-size: 1.8rem;
+}
+
+.shop-slot-name {
+  font-size: 0.9rem;
+}
+
+.shop-slot-price {
+  color: #ffd700;
+  font-weight: bold;
+}
+
+.shop-slot button {
+  margin-top: 0.25rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.9rem;
+  background: #e94560;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.shop-slot button:disabled {
+  background: #555;
+  cursor: default;
+}
+
+.shop-slot button:hover:not(:disabled) {
+  background: #c73e54;
+}

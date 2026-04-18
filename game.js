@@ -748,6 +748,98 @@ function placeItemDrops() {
   }
 }
 
+const ANCHOR_MIN_DIST_START = 4;
+const ANCHOR_MIN_DIST_EXIT = 3;
+const ANCHOR_MIN_DIST_BETWEEN = 5;
+
+function placeAnchors() {
+  const target = anchorCountForSize(state.rows);
+  if (target === 0) return;
+
+  const startR = state.playerRow;
+  const startC = state.playerCol;
+  const exitR = state.exit.r;
+  const exitC = state.exit.c;
+
+  // Collect candidates: adjacency-0, non-gas, non-wall, far enough from start/exit.
+  const candidates = [];
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const cell = state.grid[r][c];
+      if (cell.type === 'gas' || cell.type === 'wall') continue;
+      if (cell.adjacent !== 0) continue;
+      const distStart = Math.max(Math.abs(r - startR), Math.abs(c - startC));
+      const distExit = Math.max(Math.abs(r - exitR), Math.abs(c - exitC));
+      if (distStart < ANCHOR_MIN_DIST_START) continue;
+      if (distExit < ANCHOR_MIN_DIST_EXIT) continue;
+      candidates.push({ r, c });
+    }
+  }
+
+  // Shuffle candidates (Fisher-Yates).
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  // Pick anchors one at a time, enforcing spacing and merge checks.
+  const placed = [];
+
+  for (const cand of candidates) {
+    if (placed.length >= target) break;
+
+    // Enforce minimum distance from already-placed anchors.
+    const tooClose = placed.some(a =>
+      Math.max(Math.abs(cand.r - a.r), Math.abs(cand.c - a.c)) < ANCHOR_MIN_DIST_BETWEEN
+    );
+    if (tooClose) continue;
+
+    // Snapshot revealed state before cascading this anchor.
+    const snapshot = state.revealed.map(row => [...row]);
+
+    revealCell(cand.r, cand.c);
+
+    // Collect which cells were newly revealed.
+    const newCells = [];
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        if (state.revealed[r][c] && !snapshot[r][c]) {
+          newCells.push({ r, c });
+        }
+      }
+    }
+
+    // Merge check: if any newly-revealed cell is adjacent (Chebyshev 1)
+    // to a cell that was already revealed before this anchor, the cascade
+    // merged with an existing region. Roll it back.
+    let merged = false;
+    for (const nc of newCells) {
+      for (let dr = -1; dr <= 1 && !merged; dr++) {
+        for (let dc = -1; dc <= 1 && !merged; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = nc.r + dr;
+          const nc2 = nc.c + dc;
+          if (nr < 0 || nr >= state.rows || nc2 < 0 || nc2 >= state.cols) continue;
+          if (snapshot[nr][nc2]) {
+            merged = true;
+          }
+        }
+      }
+      if (merged) break;
+    }
+
+    if (merged) {
+      // Un-reveal all cells this anchor opened.
+      for (const nc of newCells) {
+        state.revealed[nc.r][nc.c] = false;
+      }
+      continue;
+    }
+
+    placed.push(cand);
+  }
+}
+
 function debugRevealAll() {
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {

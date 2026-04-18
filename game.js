@@ -985,6 +985,9 @@ function initLevel() {
   state.rows = gridSizeForLevel(state.level);
   state.cols = state.rows;
 
+  // Decide whether a merchant spawns this level.
+  const spawnMerchant = state.levelsSinceMerchant >= 2 || Math.random() < 0.33;
+
   const maxAttempts = 50;
   let solved = false;
 
@@ -1031,7 +1034,22 @@ function initLevel() {
       state.grid[exit.r][exit.c].goldValue = 0;
     }
 
-    if (isReachable(state.playerRow, state.playerCol, exit.r, exit.c)) {
+    // Merchant placement (if this level spawns one).
+    let merchantPos = null;
+    if (spawnMerchant) {
+      merchantPos = pickMerchantCorner();
+      if (!merchantPos) continue;
+      if (merchantPos.r === state.playerRow && merchantPos.c === state.playerCol) continue;
+      if (merchantPos.r === exit.r && merchantPos.c === exit.c) continue;
+      cleanMerchantCell(merchantPos.r, merchantPos.c);
+    }
+
+    const exitReachable = isReachable(state.playerRow, state.playerCol, exit.r, exit.c);
+    const merchantReachable = !merchantPos || isReachable(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
+    if (exitReachable && merchantReachable) {
+      if (merchantPos) {
+        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock() };
+      }
       solved = true;
     }
   }
@@ -1039,11 +1057,23 @@ function initLevel() {
   if (!solved) {
     console.warn('initLevel: 50 attempts failed, carving a guaranteed path from player to exit');
     carvePath(state.playerRow, state.playerCol, state.exit.r, state.exit.c);
+    if (spawnMerchant) {
+      // Place merchant at its corner anchor (may have been unreachable) and carve a path to it.
+      const merchantPos = pickMerchantCorner();
+      if (merchantPos) {
+        cleanMerchantCell(merchantPos.r, merchantPos.c);
+        carvePath(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
+        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock() };
+      }
+    }
   }
 
   // Pre-reveal exit cell and the player's starting cell only (no cascade — player digs from turn 1)
   state.revealed[state.exit.r][state.exit.c] = true;
   state.revealed[state.playerRow][state.playerCol] = true;
+  if (state.merchant) {
+    state.revealed[state.merchant.r][state.merchant.c] = true;
+  }
   collectGoldAt(state.playerRow, state.playerCol);
 
   updateHud();

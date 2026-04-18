@@ -776,6 +776,12 @@ function revealCell(r, c) {
   state.revealed[r][c] = true;
   const cell = state.grid[r][c];
 
+  if (cell.item) {
+    state.items[cell.item]++;
+    cell.item = null;
+    playSfx('gold');
+  }
+
   if (cell.adjacent === 0) {
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {

@@ -775,6 +775,8 @@ function initLevel() {
   state.hp = MAX_HP;
   state.gameOver = false;
   state.busy = false;
+  state.activeItem = null;
+  state.items = { potion: 1, scanner: 1, pickaxe: 1 };
   state.rows = gridSizeForLevel(state.level);
   state.cols = state.rows;
 

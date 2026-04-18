@@ -1269,6 +1269,10 @@ function initLevel() {
 }
 
 function showStartScreen() {
+  const save = loadRun();
+  const resumeBtn = save
+    ? `<button onclick="resumeGame(loadRun())">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
+    : '';
   showOverlay(`
     <h2>Mining Crawler</h2>
     <p>Reach the exit (🚪) to escape.</p>
@@ -1276,11 +1280,33 @@ function showStartScreen() {
     <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
     <p>Items: 🍺 heal · 🔍 reveal the 3×3 around you safely · ⛏️ break a wall</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items.</p>
-    <button onclick="startGame()">Start Run</button>
+    ${resumeBtn}
+    <button onclick="startGame()">New Run</button>
   `);
 }
 
+const SAVE_KEY = 'miningCrawler.runState';
 const LIFETIME_GOLD_KEY = 'miningCrawler.lifetimeGold';
+
+function saveRun() {
+  const data = {
+    level: state.level,
+    stashGold: state.stashGold,
+    items: { ...state.items },
+    levelsSinceMerchant: state.levelsSinceMerchant,
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+}
+
+function loadRun() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function clearSave() {
+  localStorage.removeItem(SAVE_KEY);
+}
 
 function addToLifetimeGold(amount) {
   const cur = parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
@@ -1292,11 +1318,25 @@ function getLifetimeGold() {
 }
 
 function startGame() {
+  clearSave();
   state.level = 1;
   state.gold = 0;
   state.stashGold = 0;
   state.levelsSinceMerchant = 0;
   state.items = { potion: 1, scanner: 1, pickaxe: 1 };
+  initLevel();
+  updatePlayerSprite(true);
+  hurtFlashToken++;
+  playerSprite.textContent = '🙂';
+  startBgm();
+}
+
+function resumeGame(save) {
+  state.level = save.level;
+  state.gold = 0;
+  state.stashGold = save.stashGold;
+  state.levelsSinceMerchant = save.levelsSinceMerchant;
+  state.items = { ...save.items };
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1313,6 +1353,7 @@ function nextLevel() {
   } else {
     state.levelsSinceMerchant++;
   }
+  saveRun();
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

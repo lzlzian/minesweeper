@@ -123,8 +123,6 @@ function unlockAudio() {
     a.volume = 0;
     a.play().then(() => { a.pause(); a.currentTime = 0; a.volume = SFX_VOLUME; }).catch(() => {});
   }
-  bgm.volume = 0;
-  bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; bgm.volume = BGM_VOLUME; }).catch(() => {});
 }
 document.addEventListener('touchstart', unlockAudio, { once: true });
 document.addEventListener('click', unlockAudio, { once: true });

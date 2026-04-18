@@ -715,9 +715,37 @@ async function handleItemClick(r, c) {
   }
 
   if (item === 'pickaxe') {
-    // Handled in Task 8. For now treat as unimplemented — cancel and fall through.
+    // Valid target: any wall cell.
+    if (cell.type !== 'wall') {
+      state.activeItem = null;
+      updateItemBar();
+      renderGrid();
+      return true;
+    }
+    state.items.pickaxe--;
     state.activeItem = null;
-    updateItemBar();
+
+    // Convert wall to revealed floor. Walls never participated in adjacency
+    // counts, so neighbor numbers are already correct — only the new cell
+    // needs its adjacency computed.
+    cell.type = 'empty';
+    cell.goldValue = 0;
+    cell.item = null; // defensive: walls shouldn't have items but be safe
+    cell.adjacent = countAdjacentGas(r, c);
+    state.revealed[r][c] = true;
+
+    // Cascade if adjacency is 0 — opens a pocket the way a scanner would.
+    if (cell.adjacent === 0) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          revealCell(r + dr, c + dc);
+        }
+      }
+    }
+
+    playSfx('dig');
+    updateHud();
     renderGrid();
     return true;
   }

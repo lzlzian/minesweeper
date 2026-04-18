@@ -1057,7 +1057,6 @@ function initLevel() {
   state.gameOver = false;
   state.busy = false;
   state.activeItem = null;
-  state.items = { potion: 1, scanner: 1, pickaxe: 1 };
   state.merchant = null;
   state.rows = gridSizeForLevel(state.level);
   state.cols = state.rows;
@@ -1186,6 +1185,7 @@ function startGame() {
   state.gold = 0;
   state.runGold = 0;
   state.levelsSinceMerchant = 0;
+  state.items = { potion: 1, scanner: 1, pickaxe: 1 };
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

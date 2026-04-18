@@ -1251,8 +1251,12 @@ function initLevel() {
     state.revealed[state.merchant.r][state.merchant.c] = true;
   }
 
-  // Reveal the player's start area so anchors can merge-check against it.
-  revealCell(state.playerRow, state.playerCol);
+  // Reveal the player's start 3×3 so new players see safe ground around them.
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      revealCell(state.playerRow + dr, state.playerCol + dc);
+    }
+  }
 
   placeAnchors();
 

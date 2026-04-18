@@ -22,6 +22,8 @@ const state = {
   exit: { r: 0, c: 0 },
   items: { potion: 0, scanner: 0, pickaxe: 0 },
   activeItem: null, // null | 'scanner' | 'pickaxe'
+  levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
+  merchant: null, // level-scoped; { r, c, stock: [{ type, price, sold }, ...] } or null
 };
 
 // Size at level N: 10 at 1-2, 12 at 3-4, ..., capped at 20.
@@ -920,6 +922,7 @@ function initLevel() {
   state.busy = false;
   state.activeItem = null;
   state.items = { potion: 1, scanner: 1, pickaxe: 1 };
+  state.merchant = null;
   state.rows = gridSizeForLevel(state.level);
   state.cols = state.rows;
 
@@ -1015,6 +1018,7 @@ function startGame() {
   state.level = 1;
   state.gold = 0;
   state.runGold = 0;
+  state.levelsSinceMerchant = 0;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1026,6 +1030,11 @@ function nextLevel() {
   state.runGold += state.gold;
   state.gold = 0;
   state.level++;
+  if (state.merchant) {
+    state.levelsSinceMerchant = 0;
+  } else {
+    state.levelsSinceMerchant++;
+  }
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

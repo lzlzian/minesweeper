@@ -92,6 +92,8 @@ const sfxBuffers = {
   mark: 'assets/sounds/mark.ogg',
   unmark: 'assets/sounds/unmark.ogg',
   win: 'assets/sounds/win.ogg',
+  welcome: 'assets/sounds/welcome.ogg',
+  payment: 'assets/sounds/payment.ogg',
 };
 for (const key of Object.keys(sfxBuffers)) {
   const a = new Audio(sfxBuffers[key]);
@@ -269,11 +271,12 @@ function showDeathOverlay() {
   `);
 }
 
-function showShopOverlay() {
+function showShopOverlay(playWelcome = false) {
   if (!state.merchant) return;
   // Clear any active item targeting before opening the shop.
   state.activeItem = null;
   updateItemBar();
+  if (playWelcome) playSfx('welcome');
 
   const totalGold = state.gold + state.stashGold;
   const itemEmoji = { potion: '💊', pickaxe: '⛏️', scanner: '🔍' };
@@ -310,7 +313,7 @@ function buyFromMerchant(idx) {
   spendGold(slot.price);
   state.items[slot.type]++;
   slot.sold = true;
-  playSfx('gold');
+  playSfx('payment');
   updateHud();
   showShopOverlay(); // re-render with updated state
 }
@@ -783,7 +786,7 @@ async function animateWalk(path) {
   if (state.merchant &&
       state.playerRow === state.merchant.r &&
       state.playerCol === state.merchant.c) {
-    showShopOverlay();
+    showShopOverlay(true);
   }
   return true;
 }
@@ -891,7 +894,7 @@ async function handleClick(r, c) {
   // Re-open shop if player clicks their own cell and it's the merchant.
   if (r === state.playerRow && c === state.playerCol &&
       state.merchant && r === state.merchant.r && c === state.merchant.c) {
-    showShopOverlay();
+    showShopOverlay(true);
     return;
   }
 

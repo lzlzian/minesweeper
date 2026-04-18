@@ -80,19 +80,19 @@ const itemCounts = {
 };
 
 // ============================================================
-// AUDIO (Web Audio API for SFX, HTML5 Audio for BGM)
+// AUDIO
 // ============================================================
 
 const SFX_VOLUME = 0.5;
 const BGM_VOLUME = 0.15;
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-const sfxGain = audioCtx.createGain();
-sfxGain.gain.value = SFX_VOLUME;
-sfxGain.connect(audioCtx.destination);
+const bgm = new Audio('assets/sounds/background-music.mp3');
+bgm.loop = true;
+bgm.volume = BGM_VOLUME;
 
-const sfxBuffers = {};
-const sfxPaths = {
+// Preload one Audio per effect. For rapid-fire plays (steps, digs) we
+// clone the node so overlapping triggers don't cut each other off.
+const sfxBuffers = {
   dig: 'assets/sounds/dig.mp3',
   boom: 'assets/sounds/boom.mp3',
   gold: 'assets/sounds/gold.mp3',
@@ -107,33 +107,33 @@ const sfxPaths = {
   pickaxe: 'assets/sounds/pickaxe.mp3',
   pickup: 'assets/sounds/pickup.mp3',
 };
-
-for (const [name, path] of Object.entries(sfxPaths)) {
-  fetch(path)
-    .then(r => r.arrayBuffer())
-    .then(buf => audioCtx.decodeAudioData(buf))
-    .then(decoded => { sfxBuffers[name] = decoded; })
-    .catch(() => {});
+for (const key of Object.keys(sfxBuffers)) {
+  const a = new Audio(sfxBuffers[key]);
+  a.preload = 'auto';
+  sfxBuffers[key] = a;
 }
 
-function resumeAudioCtx() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  // Play+pause each buffer to unlock it on iOS Safari.
+  for (const key of Object.keys(sfxBuffers)) {
+    const a = sfxBuffers[key];
+    a.volume = 0;
+    a.play().then(() => { a.pause(); a.currentTime = 0; a.volume = SFX_VOLUME; }).catch(() => {});
+  }
 }
-document.addEventListener('touchstart', resumeAudioCtx, { once: true });
-document.addEventListener('click', resumeAudioCtx, { once: true });
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
 
 function playSfx(name) {
-  const buf = sfxBuffers[name];
-  if (!buf) return;
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  src.connect(sfxGain);
-  src.start();
+  const src = sfxBuffers[name];
+  if (!src) return;
+  const node = src.cloneNode();
+  node.volume = SFX_VOLUME;
+  node.play().catch(() => {});
 }
-
-const bgm = new Audio('assets/sounds/background-music.mp3');
-bgm.loop = true;
-bgm.volume = BGM_VOLUME;
 
 function startBgm() {
   bgm.play().catch(() => {});

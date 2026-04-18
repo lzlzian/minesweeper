@@ -20,6 +20,8 @@ const state = {
   playerRow: 0,
   playerCol: 0,
   exit: { r: 0, c: 0 },
+  items: { potion: 0, scanner: 0, pickaxe: 0 },
+  activeItem: null, // null | 'scanner' | 'pickaxe'
 };
 
 // Size at level N: 10 at 1-2, 12 at 3-4, ..., capped at 20.
@@ -29,8 +31,9 @@ function gridSizeForLevel(level) {
 }
 
 // Cell object shape:
-// { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number }
+// { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number, item: null | 'potion' | 'scanner' | 'pickaxe' }
 // 'detonated' = a gas cell that was dug into; now passable floor that shows a red cross.
+// 'item' = if non-null, revealing this cell grants the player one of that item.
 
 // ============================================================
 // UI REFERENCES
@@ -422,6 +425,7 @@ function generateGrid(gasCount) {
       type: 'empty',
       adjacent: 0,
       goldValue: 0,
+      item: null,
     }))
   );
 

@@ -995,6 +995,7 @@ function showStartScreen() {
     <p>Reach the exit (🚪) to escape.</p>
     <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
     <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
+    <p>Items: 💊 heal · 🔍 reveal any cell safely · ⛏️ break a wall</p>
     <button onclick="startGame()">Start Run</button>
   `);
 }

@@ -1243,7 +1243,7 @@ function initLevel() {
     }
   }
 
-  // Pre-reveal exit cell and the player's starting cell only (no cascade — player digs from turn 1)
+  // Pre-reveal exit, start, and merchant cells; start cell cascades for anchor merge-check.
   state.revealed[state.exit.r][state.exit.c] = true;
   state.revealed[state.playerRow][state.playerCol] = true;
   if (state.merchant) {

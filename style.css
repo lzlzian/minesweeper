@@ -236,3 +236,52 @@ body {
 .cell.exit.revealed {
   background: #6b3a1a;
 }
+
+#item-bar {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  justify-content: center;
+}
+
+.item-btn {
+  background: #16213e;
+  border: 2px solid #2a3a5a;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  color: #eee;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 64px;
+  transition: background 0.1s, border-color 0.1s, transform 0.05s;
+}
+
+.item-btn:hover:not(:disabled) {
+  background: #1f2d52;
+  border-color: #3a4a6a;
+}
+
+.item-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.item-btn.active {
+  border-color: #ffd700;
+  background: #2a2a3a;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.item-btn .item-icon {
+  font-size: 1.3rem;
+}
+
+.item-btn .item-count {
+  font-weight: bold;
+  font-size: 1rem;
+  min-width: 12px;
+  text-align: right;
+}

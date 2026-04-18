@@ -46,6 +46,17 @@ const levelDisplay = document.getElementById('level-display');
 const playerSprite = document.getElementById('player-sprite');
 const overlay = document.getElementById('overlay');
 const overlayContent = document.getElementById('overlay-content');
+const itemBar = document.getElementById('item-bar');
+const itemButtons = {
+  potion: document.getElementById('item-potion'),
+  scanner: document.getElementById('item-scanner'),
+  pickaxe: document.getElementById('item-pickaxe'),
+};
+const itemCounts = {
+  potion: document.getElementById('item-potion-count'),
+  scanner: document.getElementById('item-scanner-count'),
+  pickaxe: document.getElementById('item-pickaxe-count'),
+};
 
 // ============================================================
 // AUDIO
@@ -195,6 +206,21 @@ function updateHud() {
   goldDisplay.textContent = `💰 ${state.gold} (run: ${state.runGold + state.gold})`;
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
   levelDisplay.textContent = `Level ${state.level}`;
+  updateItemBar();
+}
+
+function updateItemBar() {
+  for (const key of ['potion', 'scanner', 'pickaxe']) {
+    const count = state.items[key];
+    itemCounts[key].textContent = count;
+
+    const btn = itemButtons[key];
+    let disabled = count === 0 || state.gameOver;
+    if (key === 'potion' && state.hp >= MAX_HP) disabled = true;
+    btn.disabled = disabled;
+
+    btn.classList.toggle('active', state.activeItem === key);
+  }
 }
 
 function showOverlay(html) {

@@ -681,9 +681,59 @@ function findBestApproach(tr, tc) {
   return best;
 }
 
+// Applies the currently-active item to cell (r, c) if valid, or cancels
+// targeting if invalid. Returns true if the click was consumed (caller
+// should stop); false if no active item (caller proceeds with normal dig).
+async function handleItemClick(r, c) {
+  if (!state.activeItem) return false;
+  const item = state.activeItem;
+  const cell = state.grid[r][c];
+
+  if (item === 'scanner') {
+    // Valid target: any unrevealed, non-wall cell.
+    if (state.revealed[r][c] || cell.type === 'wall') {
+      state.activeItem = null;
+      updateItemBar();
+      renderGrid();
+      return true;
+    }
+    state.items.scanner--;
+    state.activeItem = null;
+
+    if (cell.type === 'gas') {
+      // Detonate harmlessly — no HP cost, same red-cross result as dig-survive.
+      playSfx('boom');
+      detonateGas(r, c);
+      state.revealed[r][c] = true;
+    } else {
+      playSfx('dig');
+      revealCell(r, c);
+    }
+    updateHud();
+    renderGrid();
+    return true;
+  }
+
+  if (item === 'pickaxe') {
+    // Handled in Task 8. For now treat as unimplemented — cancel and fall through.
+    state.activeItem = null;
+    updateItemBar();
+    renderGrid();
+    return true;
+  }
+
+  return false;
+}
+
 async function handleClick(r, c) {
   if (state.gameOver) return;
   if (state.busy) return;
+
+  if (state.activeItem) {
+    await handleItemClick(r, c);
+    return;
+  }
+
   if (state.grid[r][c].type === 'wall') return;
 
   state.busy = true;

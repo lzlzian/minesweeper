@@ -159,7 +159,12 @@ function renderGrid() {
           else if (g.type === 'detonated') cell.classList.add('detonated');
           else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
 
-          if (g.adjacent > 0 && g.type !== 'gas' && g.type !== 'detonated') {
+          if (g.type === 'detonated') {
+            const numSpan = document.createElement('span');
+            numSpan.className = 'num cross';
+            numSpan.textContent = '✖';
+            cell.appendChild(numSpan);
+          } else if (g.adjacent > 0 && g.type !== 'gas') {
             cell.dataset.adjacent = g.adjacent;
             const numSpan = document.createElement('span');
             numSpan.className = 'num';
@@ -168,7 +173,7 @@ function renderGrid() {
           }
 
           let icon = null;
-          if (g.type === 'gas' || g.type === 'detonated') icon = '💀';
+          if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = '💰';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
 

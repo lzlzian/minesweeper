@@ -338,6 +338,65 @@ function pickExit(playerR, playerC) {
   return found;
 }
 
+function pickMerchantCorner() {
+  // Pick one of the two corners not used by player or exit.
+  // Corner indices: 0=TL, 1=TR, 2=BL, 3=BR. Player = state._startCornerIdx,
+  // exit = 3 - state._startCornerIdx. Off-diagonal corners are the other two.
+  const playerIdx = state._startCornerIdx;
+  const exitIdx = 3 - playerIdx;
+  const offDiagonal = [0, 1, 2, 3].filter(i => i !== playerIdx && i !== exitIdx);
+  const pickedIdx = offDiagonal[Math.floor(Math.random() * offDiagonal.length)];
+  const corners = [
+    { r: 0, c: 0 },
+    { r: 0, c: state.cols - 1 },
+    { r: state.rows - 1, c: 0 },
+    { r: state.rows - 1, c: state.cols - 1 },
+  ];
+  const anchor = corners[pickedIdx];
+  const found = findNearCorner(anchor.r, anchor.c);
+  if (!found) return null;
+  if (!hasNonWallNeighbor(found.r, found.c)) return null;
+  return found;
+}
+
+const MERCHANT_PRICES = { potion: 10, pickaxe: 15, scanner: 20 };
+
+function rollMerchantStock() {
+  const slotCount = Math.random() < 0.5 ? 2 : 3;
+  const itemTypes = ['potion', 'scanner', 'pickaxe'];
+  const stock = [];
+  for (let i = 0; i < slotCount; i++) {
+    const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+    stock.push({ type, price: MERCHANT_PRICES[type], sold: false });
+  }
+  return stock;
+}
+
+function cleanMerchantCell(r, c) {
+  const cell = state.grid[r][c];
+  const hadGas = cell.type === 'gas';
+  cell.type = 'empty';
+  cell.goldValue = 0;
+  cell.item = null;
+  // Recompute the merchant cell's own adjacency (was 0 if it was gas/wall).
+  cell.adjacent = countAdjacentGas(r, c);
+  // If gas was removed, neighbors' adjacency counts also need recomputation.
+  if (hadGas) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        const n = state.grid[nr][nc];
+        if (n.type !== 'gas' && n.type !== 'wall') {
+          n.adjacent = countAdjacentGas(nr, nc);
+        }
+      }
+    }
+  }
+}
+
 function hasNonWallNeighbor(r, c) {
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {

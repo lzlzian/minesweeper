@@ -961,4 +961,50 @@ function retryLevel() {
   playerSprite.textContent = '🙂';
 }
 
+// ============================================================
+// ITEM USAGE
+// ============================================================
+
+function onItemButtonClick(itemKey) {
+  if (state.gameOver || state.busy) return;
+  if (state.items[itemKey] <= 0) return;
+
+  if (itemKey === 'potion') {
+    useItemPotion();
+    return;
+  }
+
+  // Scanner / Pickaxe: toggle targeting mode.
+  if (state.activeItem === itemKey) {
+    state.activeItem = null;
+  } else {
+    state.activeItem = itemKey;
+  }
+  updateItemBar();
+  renderGrid();
+}
+
+function useItemPotion() {
+  if (state.hp >= MAX_HP) return;
+  if (state.items.potion <= 0) return;
+  state.items.potion--;
+  state.hp = Math.min(MAX_HP, state.hp + 1);
+  playSfx('gold');
+  updateHud();
+}
+
+// Cancel any active targeting mode on Escape.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.activeItem) {
+    state.activeItem = null;
+    updateItemBar();
+    renderGrid();
+  }
+});
+
+// Wire button clicks
+for (const key of ['potion', 'scanner', 'pickaxe']) {
+  itemButtons[key].addEventListener('click', () => onItemButtonClick(key));
+}
+
 showStartScreen();

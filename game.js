@@ -454,6 +454,9 @@ function generateGrid(gasCount) {
 
   // Place gold veins — bias high values toward high-adjacency cells
   placeGoldVeins();
+
+  // Place 1-2 item drops on plain empty cells
+  placeItemDrops();
 }
 
 function countAdjacentGas(r, c) {
@@ -530,6 +533,36 @@ function placeGoldVeins() {
         state.grid[r][c].goldValue = 1;
       }
     }
+  }
+}
+
+function placeItemDrops() {
+  // Collect empty, goldless, non-gas, non-wall cells as drop candidates.
+  // We skip gold cells (already have a payoff) to keep item drops as a
+  // distinct reward. Spawn/exit exclusions happen in initLevel, which
+  // overwrites the item field on those cells if they landed on drops.
+  const candidates = [];
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const cell = state.grid[r][c];
+      if (cell.type === 'empty' && cell.goldValue === 0) {
+        candidates.push({ r, c });
+      }
+    }
+  }
+  if (candidates.length === 0) return;
+
+  // Fisher-Yates shuffle, then take 1 or 2.
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const dropCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2)); // 1 or 2
+  const itemTypes = ['potion', 'scanner', 'pickaxe'];
+  for (let i = 0; i < dropCount; i++) {
+    const pick = candidates[i];
+    const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+    state.grid[pick.r][pick.c].item = itemType;
   }
 }
 
@@ -794,6 +827,8 @@ function initLevel() {
     state.playerRow = start.r;
     state.playerCol = start.c;
     ensureSafeStart(state.playerRow, state.playerCol);
+    // Spawn cell auto-reveals; don't grant a free item there.
+    state.grid[state.playerRow][state.playerCol].item = null;
 
     const exit = pickExit(state.playerRow, state.playerCol);
     if (!exit) continue;
@@ -815,6 +850,8 @@ function initLevel() {
         }
       }
     }
+    // Exit cell stays mechanically clean — no item drop there either.
+    state.grid[exit.r][exit.c].item = null;
 
     // Exit cell should not carry gold — keeps the exit cell mechanically clean
     if (state.grid[exit.r][exit.c].type === 'gold') {

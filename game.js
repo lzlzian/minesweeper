@@ -43,6 +43,12 @@ function gridSizeForLevel(level) {
   return Math.min(20, size);
 }
 
+function anchorCountForSize(size) {
+  if (size <= 12) return 1;
+  if (size <= 14) return 2;
+  return Math.random() < 0.5 ? 2 : 3;
+}
+
 // Cell object shape:
 // { type: 'empty' | 'gas' | 'gold' | 'wall' | 'detonated', adjacent: number, goldValue: number, item: null | 'potion' | 'scanner' | 'pickaxe' }
 // 'detonated' = a gas cell that was dug into; now passable floor that shows a red cross.

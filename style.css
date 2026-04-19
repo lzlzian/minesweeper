@@ -30,12 +30,6 @@ body {
   border-radius: 6px;
 }
 
-#board {
-  position: relative;
-  padding: 1rem;
-  transform-origin: top center;
-}
-
 #grid-container {
   display: grid;
   gap: 2px;
@@ -394,4 +388,42 @@ body {
 
 .shop-slot button:hover:not(:disabled) {
   background: #c73e54;
+}
+
+#play-area {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+#viewport {
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  touch-action: none;
+}
+
+#viewport #board {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 16px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+#minimap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 100px;
+  height: 100px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  z-index: 8;
+  cursor: pointer;
 }

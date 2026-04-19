@@ -338,23 +338,8 @@ function renderGrid() {
     }
   }
   updatePlayerSprite();
-  fitBoard();
-}
-
-function fitBoard() {
-  const gridW = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-  const gridH = state.rows * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-  const boardW = gridW + BOARD_PAD * 2;
-  const boardH = gridH + BOARD_PAD * 2;
-  const maxW = window.innerWidth;
-  const scale = Math.min(1, maxW / boardW);
-  if (scale < 1) {
-    board.style.transform = `scale(${scale})`;
-    board.style.marginBottom = `-${boardH * (1 - scale)}px`;
-  } else {
-    board.style.transform = '';
-    board.style.marginBottom = '';
-  }
+  applyPan();
+  renderMinimap();
 }
 
 let hurtFlashToken = 0;
@@ -1415,6 +1400,10 @@ function initLevel() {
 
   updateHud();
   renderGrid();
+  // Snap pan to center on player at level start (instant, not animated).
+  const vp = getViewportSize();
+  const cc = cellCenterPx(state.playerRow, state.playerCol);
+  setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
   hideOverlay();
 }
 

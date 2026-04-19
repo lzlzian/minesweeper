@@ -620,3 +620,62 @@ body:not(.in-run) #pause-btn {
   display: none;
 }
 
+#tooltip {
+  position: fixed;
+  background: #16213e;
+  border: 1px solid #3a4a6a;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  color: #eee;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  max-width: 220px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+#tooltip.hidden {
+  display: none;
+}
+
+#tooltip .tooltip-name {
+  font-weight: bold;
+  margin-bottom: 0.15rem;
+}
+
+#tooltip .tooltip-desc {
+  font-weight: normal;
+}
+
+#tooltip .tooltip-howto {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #8899bb;
+}
+
+#tooltip::before {
+  content: '';
+  position: absolute;
+  left: var(--tooltip-tail-x, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}
+
+/* Default: tooltip above trigger, tail points DOWN from bottom of tooltip */
+#tooltip::before {
+  bottom: -6px;
+  border-top: 6px solid #16213e;
+}
+
+/* Flipped: tooltip below trigger, tail points UP from top of tooltip */
+#tooltip.tooltip-below::before {
+  bottom: auto;
+  top: -6px;
+  border-top: none;
+  border-bottom: 6px solid #16213e;
+}

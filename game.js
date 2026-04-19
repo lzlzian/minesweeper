@@ -1538,7 +1538,7 @@ function startGame() {
   state.gold = 0;
   state.stashGold = 0;
   state.levelsSinceMerchant = 0;
-  state.items = { potion: 1, scanner: 1, pickaxe: 1 };
+  state.items = { potion: 1, scanner: 1, pickaxe: 1, row: 1, column: 1, cross: 1 };
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1552,6 +1552,10 @@ function resumeGame(save) {
   state.stashGold = save.stashGold;
   state.levelsSinceMerchant = save.levelsSinceMerchant;
   state.items = { ...save.items };
+  // Back-compat: saves from before line-reveal items lack these keys.
+  state.items.row = state.items.row ?? 0;
+  state.items.column = state.items.column ?? 0;
+  state.items.cross = state.items.cross ?? 0;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

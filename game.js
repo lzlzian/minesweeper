@@ -1518,7 +1518,7 @@ function showStartScreen() {
     <p>Reach the exit (🚪) to escape.</p>
     <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
     <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
-    <p>Items: 🍺 heal · 🔍 reveal the 3×3 around you safely · ⛏️ break a wall</p>
+    <p>Items: 🍺 heal · 🔍 scan 3×3 · ⛏️ break wall · ↔️ row · ↕️ column · ✖️ diagonals</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items.</p>
     ${resumeBtn}
     <button onclick="startGame()">New Run</button>

@@ -79,6 +79,128 @@ const itemCounts = {
   pickaxe: document.getElementById('item-pickaxe-count'),
 };
 
+const CELL_SIZE = 40;
+const CELL_GAP = 2;
+const BOARD_PAD = 16;
+
+// ============================================================
+// VIEWPORT / PAN
+// ============================================================
+
+const viewportEl = document.getElementById('viewport');
+const minimapEl = document.getElementById('minimap');
+
+const pan = {
+  x: 0,
+  y: 0,
+  lastManualPanAt: 0, // timestamp ms; auto-recenter skips within 2000ms of this
+};
+
+function getViewportSize() {
+  return { w: viewportEl.clientWidth, h: viewportEl.clientHeight };
+}
+
+function getBoardSize() {
+  const gridW = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  const gridH = state.rows * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  return { w: gridW + BOARD_PAD * 2, h: gridH + BOARD_PAD * 2 };
+}
+
+function cellCenterPx(r, c) {
+  return {
+    x: BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+    y: BOARD_PAD + r * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+  };
+}
+
+function clampPan(x, y) {
+  const { w: vw, h: vh } = getViewportSize();
+  const { w: bw, h: bh } = getBoardSize();
+  const overshootX = vw * 0.5;
+  const overshootY = vh * 0.5;
+
+  let clampedX, clampedY;
+  if (bw >= vw) {
+    clampedX = Math.max(vw - bw - overshootX, Math.min(overshootX, x));
+  } else {
+    clampedX = (vw - bw) / 2;
+  }
+  if (bh >= vh) {
+    clampedY = Math.max(vh - bh - overshootY, Math.min(overshootY, y));
+  } else {
+    clampedY = (vh - bh) / 2;
+  }
+  return { x: clampedX, y: clampedY };
+}
+
+function applyPan() {
+  board.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
+}
+
+function setPan(x, y) {
+  const clamped = clampPan(x, y);
+  pan.x = clamped.x;
+  pan.y = clamped.y;
+  applyPan();
+}
+
+// Animate pan from current position to (targetX, targetY) over durationMs.
+let panAnimId = 0;
+function animatePanTo(targetX, targetY, durationMs = 200) {
+  const clamped = clampPan(targetX, targetY);
+  const startX = pan.x;
+  const startY = pan.y;
+  const dx = clamped.x - startX;
+  const dy = clamped.y - startY;
+  const startTime = performance.now();
+  const myId = ++panAnimId;
+
+  function step(now) {
+    if (myId !== panAnimId) return; // cancelled by newer animation
+    const t = Math.min(1, (now - startTime) / durationMs);
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    pan.x = startX + dx * eased;
+    pan.y = startY + dy * eased;
+    applyPan();
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Center main viewport on a specific board (row, col), animated.
+function centerOnCell(r, c, durationMs = 200) {
+  const { w: vw, h: vh } = getViewportSize();
+  const cc = cellCenterPx(r, c);
+  animatePanTo(vw / 2 - cc.x, vh / 2 - cc.y, durationMs);
+}
+
+function isCellOutsideCenterRect(r, c) {
+  const { w: vw, h: vh } = getViewportSize();
+  const cc = cellCenterPx(r, c);
+  const screenX = cc.x + pan.x;
+  const screenY = cc.y + pan.y;
+  return (
+    screenX < vw * 0.2 || screenX > vw * 0.8 ||
+    screenY < vh * 0.2 || screenY > vh * 0.8
+  );
+}
+
+function autoRecenterOnPlayer() {
+  // Honor manual scouting: skip if user panned within the last 2s.
+  if (performance.now() - pan.lastManualPanAt < 2000) return;
+  if (isCellOutsideCenterRect(state.playerRow, state.playerCol)) {
+    centerOnCell(state.playerRow, state.playerCol, 200);
+  }
+}
+
+// Stub replaced in Task 7 with full implementation.
+function renderMinimap() { /* no-op until Task 7 */ }
+
+window.addEventListener('resize', () => {
+  setPan(pan.x, pan.y); // re-clamp under new viewport size
+  renderMinimap();
+});
+
 // ============================================================
 // AUDIO (Web Audio API for SFX, HTML5 Audio for BGM)
 // ============================================================
@@ -218,10 +340,6 @@ function renderGrid() {
   updatePlayerSprite();
   fitBoard();
 }
-
-const CELL_SIZE = 40;
-const CELL_GAP = 2;
-const BOARD_PAD = 16; // #board padding in px (1rem)
 
 function fitBoard() {
   const gridW = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP;

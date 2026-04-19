@@ -1720,6 +1720,7 @@ function initLevel() {
 }
 
 function renderStartMenu() {
+  document.body.classList.remove('in-run');
   const save = loadRun();
   const continueBtn = save
     ? `<button class="menu-btn-primary" onclick="resumeGame(loadRun())">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
@@ -1809,6 +1810,7 @@ function getLifetimeGold() {
 }
 
 function startGame() {
+  document.body.classList.add('in-run');
   clearSave();
   state.level = 1;
   state.gold = 0;
@@ -1824,6 +1826,7 @@ function startGame() {
 }
 
 function resumeGame(save) {
+  document.body.classList.add('in-run');
   state.level = save.level;
   state.gold = 0;
   state.stashGold = save.stashGold;

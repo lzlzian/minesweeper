@@ -523,8 +523,8 @@ function showShopOverlay(playWelcome = false) {
   if (playWelcome) playSfx('welcome');
 
   const totalGold = state.gold + state.stashGold;
-  const itemEmoji = { potion: '🍺', pickaxe: '⛏️', scanner: '🔍' };
-  const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner' };
+  const itemEmoji = { potion: '🍺', pickaxe: '⛏️', scanner: '🔍', row: '↔️', column: '↕️', cross: '✖️' };
+  const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner', row: 'Row Scan', column: 'Column Scan', cross: 'Cross Scan' };
 
   const slotsHtml = state.merchant.stock.map((slot, idx) => {
     const canAfford = totalGold >= slot.price;
@@ -670,11 +670,11 @@ function pickMerchantCorner() {
   return found;
 }
 
-const MERCHANT_PRICES = { potion: 10, pickaxe: 15, scanner: 20 };
+const MERCHANT_PRICES = { potion: 10, pickaxe: 15, scanner: 20, row: 25, column: 25, cross: 30 };
 
 function rollMerchantStock() {
   const slotCount = Math.random() < 0.5 ? 2 : 3;
-  const itemTypes = ['potion', 'scanner', 'pickaxe'];
+  const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   const stock = [];
   for (let i = 0; i < slotCount; i++) {
     const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];

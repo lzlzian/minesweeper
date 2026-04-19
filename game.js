@@ -49,7 +49,7 @@ function spendGold(amount) {
 // - apply runs AFTER level generation (may mutate the finished board/entities).
 // Both hooks are optional.
 const RULESETS = [
-  { id: 'regular',          weight: 1, prepare: null,                   apply: null },
+  { id: 'regular',          weight: 9, prepare: null,                   apply: null },
   { id: 'treasure_chamber', weight: 1, prepare: prepareTreasureChamber, apply: applyTreasureChamber },
 ];
 

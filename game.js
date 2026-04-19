@@ -1804,6 +1804,7 @@ function saveRun() {
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
     rulesetId: state.rulesetId,
+    hp: state.hp,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -1858,6 +1859,8 @@ function resumeGame(save) {
   // Back-compat: saves from before the ruleset framework lack this key.
   // Leaving it null lets initLevel roll fresh (regular on level <13, uniform on >=13).
   state.rulesetId = save.rulesetId ?? null;
+  // Back-compat: saves from before persistent HP lack this key; treat as full HP.
+  state.hp = save.hp ?? MAX_HP;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

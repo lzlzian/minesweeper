@@ -436,6 +436,7 @@ document.addEventListener('touchstart', resumeAudioCtx, { once: true });
 document.addEventListener('click', resumeAudioCtx, { once: true });
 
 function playSfx(name) {
+  if (!settings.sfxOn) return;
   const buf = sfxBuffers[name];
   if (!buf) return;
   const src = audioCtx.createBufferSource();

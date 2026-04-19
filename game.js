@@ -24,6 +24,7 @@ const state = {
   activeItem: null, // null | 'pickaxe'
   levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
   merchant: null, // level-scoped; { r, c, rerollCount, stock: [{ type, basePrice, discountKey, price, sold }, ...] } or null
+  fountain: null, // level-scoped; { r, c, used: false } or null
   rulesetId: null, // level-scoped; string id from RULESETS; null => initLevel rolls
   biomeOverrides: null, // level-scoped; object or null, set by ruleset.prepare
 };
@@ -1601,6 +1602,7 @@ function initLevel() {
   state.busy = false;
   state.activeItem = null;
   state.merchant = null;
+  state.fountain = null;
   state.rows = gridSizeForLevel(state.level);
   state.cols = state.rows;
 

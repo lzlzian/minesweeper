@@ -1658,6 +1658,50 @@ function scannerHasTarget() {
   return false;
 }
 
+// True if the player's row contains at least one unrevealed, non-wall cell
+// within wall-bounded range on either side.
+function rowHasTarget() {
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  let found = false;
+  const check = (r, c) => {
+    if (!state.revealed[r][c]) found = true;
+  };
+  walkRay(pr, pc, 0, -1, check);
+  walkRay(pr, pc, 0, 1, check);
+  return found;
+}
+
+// True if the player's column contains at least one unrevealed, non-wall
+// cell within wall-bounded range up or down.
+function columnHasTarget() {
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  let found = false;
+  const check = (r, c) => {
+    if (!state.revealed[r][c]) found = true;
+  };
+  walkRay(pr, pc, -1, 0, check);
+  walkRay(pr, pc, 1, 0, check);
+  return found;
+}
+
+// True if any of the four diagonal rays from the player contains at least
+// one unrevealed, non-wall cell within wall-bounded range.
+function crossHasTarget() {
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  let found = false;
+  const check = (r, c) => {
+    if (!state.revealed[r][c]) found = true;
+  };
+  walkRay(pr, pc, -1, -1, check);
+  walkRay(pr, pc, -1, 1, check);
+  walkRay(pr, pc, 1, -1, check);
+  walkRay(pr, pc, 1, 1, check);
+  return found;
+}
+
 // Reveal the 3×3 area centered on the player. Gas in range detonates
 // harmlessly (red cross, no HP cost); walls stay walls; empty cells reveal
 // and cascade on 0 adjacency via revealCell.

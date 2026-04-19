@@ -13,7 +13,7 @@ body {
   align-items: center;
   min-height: 100vh;
   user-select: none;
-  touch-action: manipulation;
+  overscroll-behavior: none;
 }
 
 #hud {
@@ -426,4 +426,10 @@ body {
   border-radius: 4px;
   z-index: 8;
   cursor: pointer;
+}
+
+#viewport, #viewport * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

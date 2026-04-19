@@ -1708,6 +1708,9 @@ function cellFromClientPoint(clientX, clientY) {
 
 function onViewportPointerDown(e) {
   if (activePointer !== null) return; // ignore secondary pointers
+  // Non-primary mouse buttons (right-click, middle-click) are handled by the
+  // contextmenu listener; don't let them arm the tap/long-press/drag machine.
+  if (e.button !== 0) return;
   const hit = cellFromClientPoint(e.clientX, e.clientY);
   activePointer = {
     id: e.pointerId,

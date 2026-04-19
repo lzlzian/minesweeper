@@ -529,22 +529,49 @@ function showShopOverlay(playWelcome = false) {
   const slotsHtml = state.merchant.stock.map((slot, idx) => {
     const canAfford = totalGold >= slot.price;
     const disabled = slot.sold || !canAfford;
-    const label = slot.sold ? 'Sold out' : 'Buy';
+    const label = slot.sold ? 'Sold' : 'Buy';
+
+    let badgeHtml = '';
+    if (slot.discountKey !== 'full') {
+      const badgeText = slot.discountKey === 'free' ? 'FREE'
+                      : slot.discountKey === 'd90' ? '-90%'
+                      : slot.discountKey === 'd75' ? '-75%'
+                      : slot.discountKey === 'd50' ? '-50%'
+                      : '-25%';
+      badgeHtml = `<div class="shop-badge shop-badge-${slot.discountKey}">${badgeText}</div>`;
+    }
+
+    let priceHtml;
+    if (slot.price === 0) {
+      priceHtml = `<div class="shop-slot-price shop-slot-price-free">FREE</div>`;
+    } else if (slot.discountKey !== 'full') {
+      priceHtml = `<div class="shop-slot-price"><s>${slot.basePrice}g</s> ${slot.price}g</div>`;
+    } else {
+      priceHtml = `<div class="shop-slot-price">${slot.price}g</div>`;
+    }
+
     return `
       <div class="shop-slot ${slot.sold ? 'sold' : ''}">
+        ${badgeHtml}
         <div class="shop-slot-icon">${itemEmoji[slot.type]}</div>
         <div class="shop-slot-name">${itemName[slot.type]}</div>
-        <div class="shop-slot-price">${slot.price}g</div>
+        ${priceHtml}
         <button onclick="buyFromMerchant(${idx})" ${disabled ? 'disabled' : ''}>${label}</button>
       </div>
     `;
   }).join('');
 
+  const rerollCost = 10 * (state.merchant.rerollCount + 1);
+  const canAffordReroll = totalGold >= rerollCost;
+
   showOverlay(`
     <h2>🧙 Merchant</h2>
     <p>💰 Gold: ${state.gold} · Stash: ${state.stashGold}</p>
     <div class="shop-slots">${slotsHtml}</div>
-    <button onclick="leaveShop()">Leave</button>
+    <div class="shop-actions">
+      <button onclick="rerollMerchant()" ${canAffordReroll ? '' : 'disabled'}>🎲 Reroll (${rerollCost}g)</button>
+      <button onclick="leaveShop()">Leave</button>
+    </div>
   `);
 }
 

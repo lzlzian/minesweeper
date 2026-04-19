@@ -181,6 +181,15 @@ const itemCounts = {
   cross: document.getElementById('item-cross-count'),
 };
 
+const ITEM_TOOLTIPS = {
+  potion:  { name: 'Potion',      desc: 'Restore 1 ❤️.',                                         howto: 'Tap to use instantly.' },
+  scanner: { name: 'Scanner',     desc: 'Reveal the 3×3 around you.',                             howto: 'Tap to use instantly.' },
+  pickaxe: { name: 'Pickaxe',     desc: 'Break one wall tile.',                                   howto: 'Tap, then select a wall.' },
+  row:     { name: 'Row Scan',    desc: 'Reveal along your row until walls stop it.',             howto: 'Tap to use instantly.' },
+  column:  { name: 'Column Scan', desc: 'Reveal along your column until walls stop it.',          howto: 'Tap to use instantly.' },
+  cross:   { name: 'Cross Scan',  desc: 'Reveal along all four diagonals until walls stop them.', howto: 'Tap to use instantly.' },
+};
+
 const CELL_SIZE = 40;
 const CELL_GAP = 2;
 const BOARD_PAD = 16;

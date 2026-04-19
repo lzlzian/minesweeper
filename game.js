@@ -65,7 +65,50 @@ function prepareTreasureChamber(state) {
 }
 
 function applyTreasureChamber(state) {
-  // Stub — filled in Task 9.
+  // Compute the two off-diagonal corners (neither player start nor exit).
+  const playerIdx = state._startCornerIdx;
+  const exitIdx = 3 - playerIdx;
+  const offDiagonalIdxs = [0, 1, 2, 3].filter(i => i !== playerIdx && i !== exitIdx);
+  const cornerCoords = [
+    { r: 0, c: 0 },
+    { r: 0, c: state.cols - 1 },
+    { r: state.rows - 1, c: 0 },
+    { r: state.rows - 1, c: state.cols - 1 },
+  ];
+
+  for (const idx of offDiagonalIdxs) {
+    const { r, c } = cornerCoords[idx];
+    const cell = state.grid[r][c];
+    const hadGas = cell.type === 'gas';
+
+    // Overwrite whatever landed here with a chest-gold cell.
+    cell.type = 'gold';
+    cell.goldValue = 25;
+    cell.item = null;
+    cell.chest = true;
+    cell.adjacent = countAdjacentGas(r, c);
+
+    // If we removed a gas cell, neighbors' adjacency counts need recomputing.
+    if (hadGas) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+          const n = state.grid[nr][nc];
+          if (n.type !== 'gas' && n.type !== 'wall') {
+            n.adjacent = countAdjacentGas(nr, nc);
+          }
+        }
+      }
+    }
+
+    // Pre-reveal the chest cell.
+    state.revealed[r][c] = true;
+  }
+
+  renderGrid();
 }
 
 function weightedPick(list) {

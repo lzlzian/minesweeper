@@ -72,11 +72,17 @@ const itemButtons = {
   potion: document.getElementById('item-potion'),
   scanner: document.getElementById('item-scanner'),
   pickaxe: document.getElementById('item-pickaxe'),
+  row: document.getElementById('item-row'),
+  column: document.getElementById('item-column'),
+  cross: document.getElementById('item-cross'),
 };
 const itemCounts = {
   potion: document.getElementById('item-potion-count'),
   scanner: document.getElementById('item-scanner-count'),
   pickaxe: document.getElementById('item-pickaxe-count'),
+  row: document.getElementById('item-row-count'),
+  column: document.getElementById('item-column-count'),
+  cross: document.getElementById('item-cross-count'),
 };
 
 const CELL_SIZE = 40;
@@ -1947,7 +1953,7 @@ viewportEl.addEventListener('contextmenu', (e) => {
 });
 
 // Wire button clicks
-for (const key of ['potion', 'scanner', 'pickaxe']) {
+for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
   itemButtons[key].addEventListener('click', () => onItemButtonClick(key));
 }
 

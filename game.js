@@ -25,6 +25,7 @@ const state = {
   levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
   merchant: null, // level-scoped; { r, c, rerollCount, stock: [{ type, basePrice, discountKey, price, sold }, ...] } or null
   rulesetId: null, // level-scoped; string id from RULESETS; null => initLevel rolls
+  biomeOverrides: null, // level-scoped; object or null, set by ruleset.prepare
 };
 
 function spendGold(amount) {

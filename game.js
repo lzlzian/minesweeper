@@ -1665,6 +1665,7 @@ function rowHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
+    if (found) return false;
     if (!state.revealed[r][c]) {
       found = true;
       return false;
@@ -1682,6 +1683,7 @@ function columnHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
+    if (found) return false;
     if (!state.revealed[r][c]) {
       found = true;
       return false;
@@ -1699,6 +1701,7 @@ function crossHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
+    if (found) return false;
     if (!state.revealed[r][c]) {
       found = true;
       return false;

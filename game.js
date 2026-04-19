@@ -1508,7 +1508,9 @@ function initLevel() {
   state.cols = state.rows;
 
   // Decide whether a merchant spawns this level.
-  const spawnMerchant = state.levelsSinceMerchant >= 2 || Math.random() < 0.50;
+  const spawnMerchant = state.biomeOverrides?.suppressMerchant
+    ? false
+    : (state.levelsSinceMerchant >= 2 || Math.random() < 0.50);
 
   const maxAttempts = 50;
   let solved = false;

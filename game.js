@@ -1105,6 +1105,7 @@ async function animateWalk(path) {
     playSfx('step');
     updatePlayerSprite();
     autoRecenterOnPlayer();
+    renderMinimap();
     await sleep(STEP_MS);
     collectAt(path[i].r, path[i].c);
     updateHud();

@@ -639,7 +639,8 @@ function leaveShop() {
 // ============================================================
 
 function placeWallClumps() {
-  const targetWallCount = Math.floor(state.rows * state.cols * 0.25);
+  const wallDensity = state.biomeOverrides?.wallDensity ?? 0.25;
+  const targetWallCount = Math.floor(state.rows * state.cols * wallDensity);
   let placed = 0;
   let attempts = 0;
   const maxAttempts = 500;

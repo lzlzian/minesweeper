@@ -1055,7 +1055,8 @@ function placeItemDrops() {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
-  const dropCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2)); // 1 or 2
+  const requestedDrops = state.biomeOverrides?.guaranteedItemDrops ?? (1 + Math.floor(Math.random() * 2));
+  const dropCount = Math.min(candidates.length, requestedDrops);
   const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   for (let i = 0; i < dropCount; i++) {
     const pick = candidates[i];

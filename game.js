@@ -1797,4 +1797,11 @@ for (const key of ['potion', 'scanner', 'pickaxe']) {
   itemButtons[key].addEventListener('click', () => onItemButtonClick(key));
 }
 
+// Register service worker so Android Chrome offers install.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 showStartScreen();

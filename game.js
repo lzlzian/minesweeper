@@ -1689,6 +1689,10 @@ const LONG_PRESS_MS = 400;
 
 // One active pointer at a time. Multi-touch is ignored for gameplay.
 let activePointer = null;
+// Timestamp of the last long-press flag. Android fires a native contextmenu
+// after a touch long-press, so the contextmenu handler must suppress itself
+// when our timer already fired the flag.
+let lastLongPressAt = 0;
 // { id, startX, startY, lastX, lastY, startTime, cellR, cellC, state: 'pending'|'drag', longPressFired, longPressTimer }
 
 function cellFromClientPoint(clientX, clientY) {
@@ -1725,6 +1729,7 @@ function onViewportPointerDown(e) {
     if (activePointer && activePointer.state === 'pending' &&
         activePointer.cellR !== undefined && activePointer.cellC !== undefined) {
       activePointer.longPressFired = true;
+      lastLongPressAt = performance.now();
       handleRightClick(activePointer.cellR, activePointer.cellC);
     }
   }, LONG_PRESS_MS);
@@ -1784,8 +1789,12 @@ viewportEl.addEventListener('pointercancel', onViewportPointerCancel);
 
 // Prevent native contextmenu (desktop right-click) from showing the browser menu.
 // We keep desktop right-click-to-flag by handling it explicitly.
+// Suppress firing if our long-press timer already handled this touch — Android
+// Chrome fires a synthetic contextmenu after a long-press which would otherwise
+// toggle the flag right back off.
 viewportEl.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (performance.now() - lastLongPressAt < 1000) return;
   const hit = cellFromClientPoint(e.clientX, e.clientY);
   if (hit) {
     handleRightClick(hit.r, hit.c);

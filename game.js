@@ -1597,7 +1597,6 @@ function initLevel() {
   const ruleset = resolveRuleset(state.rulesetId);
   ruleset.prepare?.(state);
 
-  state.hp = MAX_HP;
   state.gameOver = false;
   state.busy = false;
   state.activeItem = null;
@@ -1832,6 +1831,7 @@ function startGame() {
   document.body.classList.add('in-run');
   clearSave();
   state.level = 1;
+  state.hp = MAX_HP;
   state.gold = 0;
   state.stashGold = 0;
   state.levelsSinceMerchant = 0;
@@ -1886,6 +1886,7 @@ function nextLevel() {
 
 function retryLevel() {
   state.gold = 0;
+  state.hp = MAX_HP;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

@@ -1718,6 +1718,7 @@ function initLevel() {
     for (let r = 0; r < state.rows; r++) {
       for (let c = 0; c < state.cols; c++) {
         if (state.grid[r][c].type !== 'empty') continue;
+        if (state.grid[r][c].item) continue;
         if (r === state.playerRow && c === state.playerCol) continue;
         if (r === state.exit.r && c === state.exit.c) continue;
         if (state.merchant && r === state.merchant.r && c === state.merchant.c) continue;

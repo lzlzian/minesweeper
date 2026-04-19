@@ -82,6 +82,13 @@ function applyTreasureChamber(state) {
     const cell = state.grid[r][c];
     const hadGas = cell.type === 'gas';
 
+    // If the fountain happened to land on this corner, clear it — the chest
+    // overwrites the cell and state.fountain would otherwise point at a now-chest
+    // cell, causing a double reward on pickup.
+    if (state.fountain && state.fountain.r === r && state.fountain.c === c) {
+      state.fountain = null;
+    }
+
     // Overwrite whatever landed here with a chest-gold cell.
     cell.type = 'gold';
     cell.goldValue = 25;

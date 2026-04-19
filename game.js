@@ -49,8 +49,17 @@ function spendGold(amount) {
 // - apply runs AFTER level generation (may mutate the finished board/entities).
 // Both hooks are optional.
 const RULESETS = [
-  { id: 'regular', weight: 1, prepare: null, apply: null },
+  { id: 'regular',          weight: 1, prepare: null,                   apply: null },
+  { id: 'treasure_chamber', weight: 1, prepare: prepareTreasureChamber, apply: applyTreasureChamber },
 ];
+
+function prepareTreasureChamber(state) {
+  // Stub — filled in Task 8.
+}
+
+function applyTreasureChamber(state) {
+  // Stub — filled in Task 9.
+}
 
 function weightedPick(list) {
   const total = list.reduce((s, x) => s + x.weight, 0);

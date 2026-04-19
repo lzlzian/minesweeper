@@ -591,3 +591,23 @@ body {
 #overlay-content .toggle-btn.toggle-off {
   background: #555;
 }
+
+#pause-btn {
+  background: #16213e;
+  color: #eee;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#pause-btn:hover {
+  background: #1f2d52;
+}
+
+body:not(.in-run) #pause-btn {
+  display: none;
+}

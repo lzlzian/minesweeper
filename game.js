@@ -1692,11 +1692,34 @@ function initLevel() {
     }
   }
 
+  // Roll fountain (50%, no pity, ruleset-agnostic). Placement is independent
+  // of reachability — a walled-off fountain is acceptable.
+  if (Math.random() < 0.50) {
+    const candidates = [];
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        if (state.grid[r][c].type !== 'empty') continue;
+        if (r === state.playerRow && c === state.playerCol) continue;
+        if (r === state.exit.r && c === state.exit.c) continue;
+        if (state.merchant && r === state.merchant.r && c === state.merchant.c) continue;
+        candidates.push({ r, c });
+      }
+    }
+    if (candidates.length > 0) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      state.grid[pick.r][pick.c].type = 'fountain';
+      state.fountain = { r: pick.r, c: pick.c, used: false };
+    }
+  }
+
   // Pre-reveal exit, start, and merchant cells; start cell cascades for anchor merge-check.
   state.revealed[state.exit.r][state.exit.c] = true;
   state.revealed[state.playerRow][state.playerCol] = true;
   if (state.merchant) {
     state.revealed[state.merchant.r][state.merchant.c] = true;
+  }
+  if (state.fountain) {
+    state.revealed[state.fountain.r][state.fountain.c] = true;
   }
 
   // Reveal the player's start 3×3 so new players see safe ground around them.

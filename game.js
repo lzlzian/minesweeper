@@ -1514,7 +1514,8 @@ function initLevel() {
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
     state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
     state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-    const gasCount = Math.floor(state.rows * state.cols * 0.20);
+    const gasDensity = state.biomeOverrides?.gasDensity ?? 0.20;
+    const gasCount = Math.floor(state.rows * state.cols * gasDensity);
     generateGrid(gasCount);
 
     const start = pickPlayerStart();

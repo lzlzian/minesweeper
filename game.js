@@ -450,7 +450,23 @@ bgm.loop = true;
 bgm.volume = BGM_VOLUME;
 
 function startBgm() {
+  if (!settings.musicOn) return;
   bgm.play().catch(() => {});
+}
+
+function setMusicOn(value) {
+  settings.musicOn = value;
+  saveSettings();
+  if (value) {
+    bgm.play().catch(() => {});
+  } else {
+    bgm.pause();
+  }
+}
+
+function setSfxOn(value) {
+  settings.sfxOn = value;
+  saveSettings();
 }
 
 // ============================================================

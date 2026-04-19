@@ -1487,6 +1487,15 @@ function handleRightClick(r, c) {
 // ============================================================
 
 function initLevel() {
+  // Roll ruleset if not already set (retries/resumes preserve it).
+  if (!state.rulesetId) {
+    state.rulesetId = (state.level >= 13 && RULESETS.length > 1)
+      ? weightedPick(RULESETS).id
+      : 'regular';
+  }
+  const ruleset = resolveRuleset(state.rulesetId);
+  ruleset.prepare?.(state);
+
   state.hp = MAX_HP;
   state.gameOver = false;
   state.busy = false;
@@ -1602,6 +1611,7 @@ function initLevel() {
   const vp = getViewportSize();
   const cc = cellCenterPx(state.playerRow, state.playerCol);
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
+  ruleset.apply?.(state);
   hideOverlay();
 }
 

@@ -400,10 +400,10 @@ body {
   color: #ffd700;
 }
 
-.shop-slot button {
+#overlay-content .shop-slot button {
   width: 100%;
   min-height: 1.8rem;
-  margin-top: 0.25rem;
+  margin: 0.25rem 0 0 0;
   padding: 0.25rem 0;
   font-size: 0.85rem;
   background: #e94560;
@@ -414,12 +414,12 @@ body {
   white-space: nowrap;
 }
 
-.shop-slot button:disabled {
+#overlay-content .shop-slot button:disabled {
   background: #555;
   cursor: default;
 }
 
-.shop-slot button:hover:not(:disabled) {
+#overlay-content .shop-slot button:hover:not(:disabled) {
   background: #c73e54;
 }
 
@@ -430,7 +430,8 @@ body {
   margin-top: 0.5rem;
 }
 
-.shop-actions button {
+#overlay-content .shop-actions button {
+  margin: 0;
   padding: 0.4rem 0.9rem;
   font-size: 0.95rem;
   background: #e94560;
@@ -440,12 +441,12 @@ body {
   cursor: pointer;
 }
 
-.shop-actions button:disabled {
+#overlay-content .shop-actions button:disabled {
   background: #555;
   cursor: default;
 }
 
-.shop-actions button:hover:not(:disabled) {
+#overlay-content .shop-actions button:hover:not(:disabled) {
   background: #c73e54;
 }
 

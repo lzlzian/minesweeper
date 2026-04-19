@@ -193,8 +193,87 @@ function autoRecenterOnPlayer() {
   }
 }
 
-// Stub replaced in Task 7 with full implementation.
-function renderMinimap() { /* no-op until Task 7 */ }
+function renderMinimap() {
+  if (!state.grid || !state.grid.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssSize = 100;
+  // Resize backing store for crisp rendering on high-DPI displays.
+  if (minimapEl.width !== cssSize * dpr) {
+    minimapEl.width = cssSize * dpr;
+    minimapEl.height = cssSize * dpr;
+  }
+  const ctx = minimapEl.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Pixel-per-cell, use the larger board dimension so the board fits.
+  const boardDim = Math.max(state.rows, state.cols);
+  const pxPerCell = Math.floor(cssSize / boardDim);
+  const drawW = pxPerCell * state.cols;
+  const drawH = pxPerCell * state.rows;
+  const offsetX = (cssSize - drawW) / 2;
+  const offsetY = (cssSize - drawH) / 2;
+
+  // Background (fully opaque so unrevealed area is visibly dark even over faint BG).
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, cssSize, cssSize);
+
+  // Draw each cell.
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const x = offsetX + c * pxPerCell;
+      const y = offsetY + r * pxPerCell;
+      const cell = state.grid[r][c];
+
+      if (!state.revealed[r][c]) {
+        ctx.fillStyle = '#222';
+      } else if (cell.type === 'wall') {
+        ctx.fillStyle = '#333';
+      } else {
+        ctx.fillStyle = '#666';
+      }
+      ctx.fillRect(x, y, pxPerCell, pxPerCell);
+    }
+  }
+
+  // Special markers (drawn on top).
+  const markerSize = Math.max(2, Math.floor(pxPerCell * 0.6));
+
+  function drawMarker(r, c, color) {
+    const x = offsetX + c * pxPerCell + (pxPerCell - markerSize) / 2;
+    const y = offsetY + r * pxPerCell + (pxPerCell - markerSize) / 2;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, markerSize, markerSize);
+  }
+
+  // Exit (always pre-revealed).
+  drawMarker(state.exit.r, state.exit.c, '#33ff33');
+
+  // Merchant (if spawned; always pre-revealed).
+  if (state.merchant) {
+    drawMarker(state.merchant.r, state.merchant.c, '#ff33ff');
+  }
+
+  // Player last so it's always visible.
+  drawMarker(state.playerRow, state.playerCol, '#ffdd00');
+}
+
+minimapEl.addEventListener('click', (e) => {
+  const rect = minimapEl.getBoundingClientRect();
+  const clickX = e.clientX - rect.left;
+  const clickY = e.clientY - rect.top;
+  const cssSize = 100;
+  const boardDim = Math.max(state.rows, state.cols);
+  const pxPerCell = Math.floor(cssSize / boardDim);
+  const drawW = pxPerCell * state.cols;
+  const drawH = pxPerCell * state.rows;
+  const offsetX = (cssSize - drawW) / 2;
+  const offsetY = (cssSize - drawH) / 2;
+  const c = Math.floor((clickX - offsetX) / pxPerCell);
+  const r = Math.floor((clickY - offsetY) / pxPerCell);
+  if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
+  pan.lastManualPanAt = performance.now(); // treat as manual pan
+  centerOnCell(r, c, 200);
+});
 
 window.addEventListener('resize', () => {
   setPan(pan.x, pan.y); // re-clamp under new viewport size

@@ -637,6 +637,7 @@ function showOverlay(html) {
 }
 
 function hideOverlay() {
+  hideTooltip();
   overlay.classList.add('hidden');
 }
 
@@ -663,6 +664,7 @@ function showDeathOverlay() {
 
 function showShopOverlay(playWelcome = false) {
   if (!state.merchant) return;
+  hideTooltip();
   // Clear any active item targeting before opening the shop.
   state.activeItem = null;
   updateItemBar();
@@ -725,7 +727,6 @@ function showShopOverlay(playWelcome = false) {
   state.merchant.stock.forEach((slot, idx) => {
     const el = slotEls[idx];
     if (!el) return;
-    el.dataset.slotIdx = idx;
     attachTooltip(el, slot.type);
   });
 }

@@ -1719,20 +1719,59 @@ function initLevel() {
   hideOverlay();
 }
 
-function showStartScreen() {
+function renderStartMenu() {
   const save = loadRun();
-  const resumeBtn = save
-    ? `<button onclick="resumeGame(loadRun())">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
+  const continueBtn = save
+    ? `<button class="menu-btn-primary" onclick="resumeGame(loadRun())">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
     : '';
+  const newRunOnClick = save ? 'renderNewRunConfirm()' : 'startGame()';
+  const newRunClass = save ? 'menu-btn-secondary' : 'menu-btn-primary';
   showOverlay(`
     <h2>Mining Crawler</h2>
+    ${continueBtn}
+    <button class="${newRunClass}" onclick="${newRunOnClick}">New Run</button>
+    <button class="menu-btn-secondary" onclick="renderRules('start')">Rules</button>
+    <button class="menu-btn-secondary" onclick="renderSettings('start')">Settings</button>
+  `);
+}
+
+function renderNewRunConfirm() {
+  showOverlay(`
+    <h2>New Run?</h2>
+    <p>Starting a new run will erase your saved progress.</p>
+    <button class="menu-btn-primary" onclick="startGame()">Start New Run</button>
+    <button class="menu-btn-secondary" onclick="renderStartMenu()">Cancel</button>
+  `);
+}
+
+function renderRules(parent) {
+  const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
+  showOverlay(`
+    <h2>Rules</h2>
     <p>Reach the exit (🚪) to escape.</p>
     <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
     <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
     <p>Items: 🍺 heal · 🔍 scan 3×3 · ⛏️ break wall · ↔️ row · ↕️ column · ✖️ diagonals</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items.</p>
-    ${resumeBtn}
-    <button onclick="startGame()">New Run</button>
+    <button class="menu-btn-primary" onclick="${back}">Back</button>
+  `);
+}
+
+function renderSettings(parent) {
+  const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
+  const musicLabel = settings.musicOn ? 'On' : 'Off';
+  const sfxLabel = settings.sfxOn ? 'On' : 'Off';
+  showOverlay(`
+    <h2>Settings</h2>
+    <div class="toggle-row">
+      <span>🎵 Music</span>
+      <button class="toggle-btn ${settings.musicOn ? 'toggle-on' : 'toggle-off'}" onclick="setMusicOn(!settings.musicOn); renderSettings('${parent}')">${musicLabel}</button>
+    </div>
+    <div class="toggle-row">
+      <span>🔊 Sound Effects</span>
+      <button class="toggle-btn ${settings.sfxOn ? 'toggle-on' : 'toggle-off'}" onclick="setSfxOn(!settings.sfxOn); renderSettings('${parent}')">${sfxLabel}</button>
+    </div>
+    <button class="menu-btn-primary" onclick="${back}">Back</button>
   `);
 }
 
@@ -2201,4 +2240,4 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-showStartScreen();
+renderStartMenu();

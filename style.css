@@ -528,3 +528,66 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
+
+#overlay-content .menu-btn-primary,
+#overlay-content .menu-btn-secondary {
+  display: block;
+  width: 100%;
+  margin: 0.4rem 0;
+  padding: 0.75rem 1rem;
+  font-size: 1.1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: white;
+}
+
+#overlay-content .menu-btn-primary {
+  background: #e94560;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+#overlay-content .menu-btn-primary:hover {
+  background: #c73e54;
+}
+
+#overlay-content .menu-btn-secondary {
+  background: #2a3a5a;
+}
+
+#overlay-content .menu-btn-secondary:hover {
+  background: #3a4a6a;
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  background: #0f1a30;
+  border-radius: 6px;
+  font-size: 1.1rem;
+}
+
+#overlay-content .toggle-btn {
+  margin: 0;
+  padding: 0.4rem 1.2rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  min-width: 4rem;
+}
+
+#overlay-content .toggle-btn.toggle-on {
+  background: #4ade80;
+  color: #0f1a30;
+  font-weight: bold;
+}
+
+#overlay-content .toggle-btn.toggle-off {
+  background: #555;
+}

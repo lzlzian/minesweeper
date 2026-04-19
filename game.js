@@ -1290,6 +1290,19 @@ function collectAt(r, c) {
     cell.item = null;
     playSfx('pickup');
   }
+  if (state.fountain &&
+      r === state.fountain.r &&
+      c === state.fountain.c &&
+      !state.fountain.used) {
+    if (state.hp >= MAX_HP) {
+      spawnPickupFloat(r, c, 'Already at full HP', 'float-info');
+    } else {
+      state.hp = MAX_HP;
+      state.fountain.used = true;
+      spawnPickupFloat(r, c, '+❤️', 'float-heal');
+      playSfx('drink');
+    }
+  }
 }
 
 // Walk from (startR, startC) stepping (dR, dC) each iteration. Skips the

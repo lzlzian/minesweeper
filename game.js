@@ -2448,9 +2448,10 @@ function attachTooltip(el, itemKey) {
 window.addEventListener('scroll', hideTooltip, true);
 window.addEventListener('resize', hideTooltip);
 
-// Wire button clicks
+// Wire button clicks and tooltips
 for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
   itemButtons[key].addEventListener('click', () => onItemButtonClick(key));
+  attachTooltip(itemButtons[key], key);
 }
 
 // Register service worker so Android Chrome offers install.

@@ -716,11 +716,11 @@ const MERCHANT_PRICES = { potion: 10, pickaxe: 15, scanner: 20, row: 25, column:
 // Each slot's discount is rolled independently.
 const DISCOUNT_TIERS = [
   { key: 'free', weight: 1,  mult: 0 },
-  { key: 'd90',  weight: 5,  mult: 0.10 },
+  { key: 'd90',  weight: 3,  mult: 0.10 },
   { key: 'd75',  weight: 15, mult: 0.25 },
-  { key: 'd50',  weight: 20, mult: 0.50 },
-  { key: 'd25',  weight: 25, mult: 0.75 },
-  { key: 'full', weight: 34, mult: 1.00 },
+  { key: 'd50',  weight: 15, mult: 0.50 },
+  { key: 'd25',  weight: 20, mult: 0.75 },
+  { key: 'full', weight: 46, mult: 1.00 },
 ];
 
 function rollDiscountTier() {

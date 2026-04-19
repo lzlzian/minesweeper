@@ -1745,6 +1745,15 @@ function renderNewRunConfirm() {
   `);
 }
 
+function renderPauseMenu() {
+  showOverlay(`
+    <h2>Paused</h2>
+    <button class="menu-btn-primary" onclick="hideOverlay()">Resume</button>
+    <button class="menu-btn-secondary" onclick="renderRules('pause')">Rules</button>
+    <button class="menu-btn-secondary" onclick="renderSettings('pause')">Settings</button>
+  `);
+}
+
 function renderRules(parent) {
   const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
   showOverlay(`

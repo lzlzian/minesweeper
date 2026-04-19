@@ -446,7 +446,7 @@ function updatePlayerSprite(instant = false) {
   }
 }
 
-const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️' };
+const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️', row: '↔️', column: '↕️', cross: '✖️' };
 
 function spawnPickupFloat(r, c, label, extraClass) {
   const x = BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
@@ -957,7 +957,7 @@ function placeItemDrops() {
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
   const dropCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2)); // 1 or 2
-  const itemTypes = ['potion', 'scanner', 'pickaxe'];
+  const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   for (let i = 0; i < dropCount; i++) {
     const pick = candidates[i];
     const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];

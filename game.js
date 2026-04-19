@@ -1665,7 +1665,10 @@ function rowHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
-    if (!state.revealed[r][c]) found = true;
+    if (!state.revealed[r][c]) {
+      found = true;
+      return false;
+    }
   };
   walkRay(pr, pc, 0, -1, check);
   walkRay(pr, pc, 0, 1, check);
@@ -1679,7 +1682,10 @@ function columnHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
-    if (!state.revealed[r][c]) found = true;
+    if (!state.revealed[r][c]) {
+      found = true;
+      return false;
+    }
   };
   walkRay(pr, pc, -1, 0, check);
   walkRay(pr, pc, 1, 0, check);
@@ -1693,7 +1699,10 @@ function crossHasTarget() {
   const pc = state.playerCol;
   let found = false;
   const check = (r, c) => {
-    if (!state.revealed[r][c]) found = true;
+    if (!state.revealed[r][c]) {
+      found = true;
+      return false;
+    }
   };
   walkRay(pr, pc, -1, -1, check);
   walkRay(pr, pc, -1, 1, check);

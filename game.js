@@ -348,6 +348,11 @@ function renderMinimap() {
     drawMarker(state.merchant.r, state.merchant.c, '#ff33ff');
   }
 
+  // Fountain (if spawned and unused; always pre-revealed).
+  if (state.fountain && !state.fountain.used) {
+    drawMarker(state.fountain.r, state.fountain.c, '#33ccff');
+  }
+
   // Player last so it's always visible.
   drawMarker(state.playerRow, state.playerCol, '#ffdd00');
 }
@@ -520,6 +525,7 @@ function renderGrid() {
           let icon = null;
           if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
+          else if (g.type === 'fountain' && state.fountain && !state.fountain.used) icon = '💧';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
 
           if (icon) {

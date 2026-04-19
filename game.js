@@ -2337,14 +2337,9 @@ const TOOLTIP_LONG_PRESS_MS = 400;
 const TOOLTIP_MOVE_THRESHOLD = 8;
 const TOOLTIP_GAP = 8;
 
-let tooltipTimer = null;
 let tooltipShownFor = null; // element currently showing tooltip, or null
 
 function hideTooltip() {
-  if (tooltipTimer) {
-    clearTimeout(tooltipTimer);
-    tooltipTimer = null;
-  }
   tooltipEl.classList.add('hidden');
   tooltipEl.classList.remove('tooltip-below');
   tooltipEl.style.setProperty('--tooltip-tail-x', '50%');
@@ -2401,19 +2396,25 @@ function attachTooltip(el, itemKey) {
   let startX = 0;
   let startY = 0;
   let pending = false;
+  let timer = null;
+
+  const clearTimer = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  };
 
   el.addEventListener('pointerenter', (e) => {
     if (e.pointerType !== 'mouse') return;
-    if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(() => {
-      tooltipTimer = null;
+    clearTimer();
+    timer = setTimeout(() => {
+      timer = null;
       showTooltip(el, itemKey);
     }, TOOLTIP_HOVER_DELAY_MS);
   });
 
   el.addEventListener('pointerleave', (e) => {
     if (e.pointerType !== 'mouse') return;
-    hideTooltip();
+    clearTimer();
+    if (tooltipShownFor === el) hideTooltip();
   });
 
   el.addEventListener('pointerdown', (e) => {
@@ -2421,9 +2422,9 @@ function attachTooltip(el, itemKey) {
     startX = e.clientX;
     startY = e.clientY;
     pending = true;
-    if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(() => {
-      tooltipTimer = null;
+    clearTimer();
+    timer = setTimeout(() => {
+      timer = null;
       if (!pending) return;
       el._suppressNextClick = true;
       showTooltip(el, itemKey);
@@ -2437,30 +2438,21 @@ function attachTooltip(el, itemKey) {
     const dy = e.clientY - startY;
     if (dx * dx + dy * dy > TOOLTIP_MOVE_THRESHOLD * TOOLTIP_MOVE_THRESHOLD) {
       pending = false;
-      if (tooltipTimer) {
-        clearTimeout(tooltipTimer);
-        tooltipTimer = null;
-      }
+      clearTimer();
     }
   });
 
   el.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'mouse') return;
     pending = false;
-    if (tooltipTimer) {
-      clearTimeout(tooltipTimer);
-      tooltipTimer = null;
-    }
+    clearTimer();
     if (tooltipShownFor === el) hideTooltip();
   });
 
   el.addEventListener('pointercancel', (e) => {
     if (e.pointerType === 'mouse') return;
     pending = false;
-    if (tooltipTimer) {
-      clearTimeout(tooltipTimer);
-      tooltipTimer = null;
-    }
+    clearTimer();
     if (tooltipShownFor === el) hideTooltip();
   });
 }

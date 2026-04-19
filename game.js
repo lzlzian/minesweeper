@@ -1496,6 +1496,8 @@ function initLevel() {
       ? weightedPick(RULESETS).id
       : 'regular';
   }
+  // Clear biome overrides from any previous level before prepare sets them again.
+  state.biomeOverrides = null;
   const ruleset = resolveRuleset(state.rulesetId);
   ruleset.prepare?.(state);
 
@@ -1710,7 +1712,9 @@ function nextLevel() {
   state.stashGold += state.gold;
   state.gold = 0;
   state.level++;
-  if (state.merchant) {
+  if (state.biomeOverrides?.freezePityTick) {
+    // Freeze pity timer: do not increment levelsSinceMerchant across this level.
+  } else if (state.merchant) {
     state.levelsSinceMerchant = 0;
   } else {
     state.levelsSinceMerchant++;

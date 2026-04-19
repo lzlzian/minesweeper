@@ -1751,6 +1751,7 @@ function renderPauseMenu() {
     <button class="menu-btn-primary" onclick="hideOverlay()">Resume</button>
     <button class="menu-btn-secondary" onclick="renderRules('pause')">Rules</button>
     <button class="menu-btn-secondary" onclick="renderSettings('pause')">Settings</button>
+    <button class="menu-btn-secondary" onclick="renderStartMenu()">Quit to Menu</button>
   `);
 }
 

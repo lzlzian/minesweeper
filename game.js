@@ -1747,6 +1747,72 @@ function useItemScanner() {
   renderGrid();
 }
 
+// Shared ray-reveal loop used by row/column/cross. For each cell along the
+// ray: if gas, detonate and mark revealed; otherwise call revealCell
+// (which handles cascade + pickup logic). Walls were already filtered by
+// walkRay itself.
+function revealAlongRay(startR, startC, dR, dC) {
+  walkRay(startR, startC, dR, dC, (r, c) => {
+    if (state.revealed[r][c]) return true;
+    const cell = state.grid[r][c];
+    if (cell.type === 'gas') {
+      detonateGas(r, c);
+      state.revealed[r][c] = true;
+    } else {
+      revealCell(r, c);
+    }
+    return true;
+  });
+}
+
+// Reveal the player's row — two rays (west, east), stop at walls, gas
+// detonates harmlessly, empty cells may cascade via revealCell.
+function useItemRow() {
+  if (state.items.row <= 0) return;
+  if (!rowHasTarget()) return;
+  state.items.row--;
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  revealAlongRay(pr, pc, 0, -1);
+  revealAlongRay(pr, pc, 0, 1);
+  playSfx('scan');
+  updateHud();
+  updateItemBar();
+  renderGrid();
+}
+
+// Reveal the player's column — two rays (north, south), stop at walls.
+function useItemColumn() {
+  if (state.items.column <= 0) return;
+  if (!columnHasTarget()) return;
+  state.items.column--;
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  revealAlongRay(pr, pc, -1, 0);
+  revealAlongRay(pr, pc, 1, 0);
+  playSfx('scan');
+  updateHud();
+  updateItemBar();
+  renderGrid();
+}
+
+// Reveal the four diagonals from the player — four rays, stop at walls.
+function useItemCross() {
+  if (state.items.cross <= 0) return;
+  if (!crossHasTarget()) return;
+  state.items.cross--;
+  const pr = state.playerRow;
+  const pc = state.playerCol;
+  revealAlongRay(pr, pc, -1, -1);
+  revealAlongRay(pr, pc, -1, 1);
+  revealAlongRay(pr, pc, 1, -1);
+  revealAlongRay(pr, pc, 1, 1);
+  playSfx('scan');
+  updateHud();
+  updateItemBar();
+  renderGrid();
+}
+
 // Cancel any active targeting mode on Escape.
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && state.activeItem) {

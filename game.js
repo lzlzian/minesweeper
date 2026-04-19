@@ -1759,11 +1759,20 @@ function renderRules(parent) {
   const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
   showOverlay(`
     <h2>Rules</h2>
-    <p>Reach the exit (🚪) to escape.</p>
-    <p>Dig adjacent cells to reveal paths. Numbers count nearby gas.</p>
-    <p>You have 3 ❤️. Digging gas costs 1 ❤️. Gold is optional treasure.</p>
-    <p>Items: 🍺 heal · 🔍 scan 3×3 · ⛏️ break wall · ↔️ row · ↕️ column · ✖️ diagonals</p>
-    <p>A 🧙 merchant sometimes appears — spend gold for items.</p>
+    <p>Reach the exit (🚪) to escape to the next level.</p>
+    <p>Dig adjacent cells to reveal paths. Numbers count gas tiles in the 8 surrounding cells.</p>
+    <p>You have 3 ❤️. Hitting gas damages you for 1 ❤️. Dying forfeits your current-level gold, but stash and items are safe.</p>
+    <p>Gold (💰) is optional — step onto revealed gold to collect it.</p>
+    <p><strong>Items</strong> — walk onto the tile, or buy from 🧙:</p>
+    <ul class="rules-items">
+      <li>🍺 <strong>Potion</strong> — restore 1 ❤️</li>
+      <li>🔍 <strong>Scanner</strong> — reveal the 3×3 around you</li>
+      <li>⛏️ <strong>Pickaxe</strong> — break one wall tile</li>
+      <li>↔️ <strong>Row Scan</strong> — reveal along your row until walls stop it</li>
+      <li>↕️ <strong>Column Scan</strong> — reveal along your column until walls stop it</li>
+      <li>✖️ <strong>Cross Scan</strong> — reveal along all four diagonals until walls stop them</li>
+    </ul>
+    <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
     <button class="menu-btn-primary" onclick="${back}">Back</button>
   `);
 }

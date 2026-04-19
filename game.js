@@ -54,7 +54,14 @@ const RULESETS = [
 ];
 
 function prepareTreasureChamber(state) {
-  // Stub — filled in Task 8.
+  state.biomeOverrides = {
+    wallDensity:         0.15,
+    gasDensity:          0.12,
+    goldScatterDensity:  0.30,
+    guaranteedItemDrops: 2,
+    suppressMerchant:    true,
+    freezePityTick:      true,
+  };
 }
 
 function applyTreasureChamber(state) {

@@ -2307,6 +2307,147 @@ viewportEl.addEventListener('contextmenu', (e) => {
   }
 });
 
+// ============================================================
+// ITEM TOOLTIPS
+// ============================================================
+
+const tooltipEl = document.getElementById('tooltip');
+const TOOLTIP_HOVER_DELAY_MS = 300;
+const TOOLTIP_LONG_PRESS_MS = 400;
+const TOOLTIP_MOVE_THRESHOLD = 8;
+const TOOLTIP_GAP = 8;
+
+let tooltipTimer = null;
+let tooltipShownFor = null; // element currently showing tooltip, or null
+
+function hideTooltip() {
+  if (tooltipTimer) {
+    clearTimeout(tooltipTimer);
+    tooltipTimer = null;
+  }
+  tooltipEl.classList.add('hidden');
+  tooltipEl.classList.remove('tooltip-below');
+  tooltipEl.style.setProperty('--tooltip-tail-x', '50%');
+  tooltipShownFor = null;
+}
+
+function showTooltip(triggerEl, itemKey) {
+  const data = ITEM_TOOLTIPS[itemKey];
+  if (!data) return;
+  tooltipEl.innerHTML =
+    '<div class="tooltip-name">' + data.name + '</div>' +
+    '<div class="tooltip-desc">' + data.desc + '</div>' +
+    '<div class="tooltip-howto">' + data.howto + '</div>';
+  tooltipEl.classList.remove('hidden');
+  tooltipEl.classList.remove('tooltip-below');
+  positionTooltip(triggerEl);
+  tooltipShownFor = triggerEl;
+}
+
+function positionTooltip(triggerEl) {
+  const trigRect = triggerEl.getBoundingClientRect();
+  const tipRect = tooltipEl.getBoundingClientRect();
+  const vw = window.innerWidth;
+
+  // Preferred: above trigger
+  let top = trigRect.top - tipRect.height - TOOLTIP_GAP;
+  let flipBelow = false;
+  if (top < TOOLTIP_GAP) {
+    top = trigRect.bottom + TOOLTIP_GAP;
+    flipBelow = true;
+  }
+
+  // Horizontal center on trigger, clamped to viewport
+  const trigCenterX = trigRect.left + trigRect.width / 2;
+  const preferredLeft = trigCenterX - tipRect.width / 2;
+  const clampedLeft = Math.max(
+    TOOLTIP_GAP,
+    Math.min(preferredLeft, vw - tipRect.width - TOOLTIP_GAP)
+  );
+
+  // Tail stays centered on the trigger, even if tooltip is clamped
+  const tailX = trigCenterX - clampedLeft;
+  tooltipEl.style.setProperty('--tooltip-tail-x', tailX + 'px');
+
+  tooltipEl.style.left = clampedLeft + 'px';
+  tooltipEl.style.top = top + 'px';
+
+  if (flipBelow) {
+    tooltipEl.classList.add('tooltip-below');
+  }
+}
+
+function attachTooltip(el, itemKey) {
+  let startX = 0;
+  let startY = 0;
+  let pending = false;
+
+  el.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (tooltipTimer) clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(() => {
+      tooltipTimer = null;
+      showTooltip(el, itemKey);
+    }, TOOLTIP_HOVER_DELAY_MS);
+  });
+
+  el.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    hideTooltip();
+  });
+
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    startX = e.clientX;
+    startY = e.clientY;
+    pending = true;
+    if (tooltipTimer) clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(() => {
+      tooltipTimer = null;
+      if (!pending) return;
+      el._suppressNextClick = true;
+      showTooltip(el, itemKey);
+    }, TOOLTIP_LONG_PRESS_MS);
+  });
+
+  el.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') return;
+    if (!pending) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (dx * dx + dy * dy > TOOLTIP_MOVE_THRESHOLD * TOOLTIP_MOVE_THRESHOLD) {
+      pending = false;
+      if (tooltipTimer) {
+        clearTimeout(tooltipTimer);
+        tooltipTimer = null;
+      }
+    }
+  });
+
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse') return;
+    pending = false;
+    if (tooltipTimer) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    if (tooltipShownFor === el) hideTooltip();
+  });
+
+  el.addEventListener('pointercancel', (e) => {
+    if (e.pointerType === 'mouse') return;
+    pending = false;
+    if (tooltipTimer) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    if (tooltipShownFor === el) hideTooltip();
+  });
+}
+
+window.addEventListener('scroll', hideTooltip, true);
+window.addEventListener('resize', hideTooltip);
+
 // Wire button clicks
 for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
   itemButtons[key].addEventListener('click', () => onItemButtonClick(key));

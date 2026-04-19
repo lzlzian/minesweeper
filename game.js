@@ -1490,7 +1490,7 @@ function initLevel() {
     const merchantReachable = !merchantPos || isReachable(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
     if (exitReachable && merchantReachable) {
       if (merchantPos) {
-        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock() };
+        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 };
       }
       solved = true;
     }
@@ -1505,7 +1505,7 @@ function initLevel() {
       if (merchantPos) {
         cleanMerchantCell(merchantPos.r, merchantPos.c);
         carvePath(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
-        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock() };
+        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 };
       }
     }
   }

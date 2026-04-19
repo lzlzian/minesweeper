@@ -1814,15 +1814,6 @@ function renderRules(parent) {
     <p>Dig adjacent cells to reveal paths. Numbers count gas tiles in the 8 surrounding cells.</p>
     <p>You have 3 ❤️. Hitting gas damages you for 1 ❤️. HP carries between levels — dying forfeits your current-level gold, but stash and items are safe.</p>
     <p>Gold (💰) is optional — step onto revealed gold to collect it.</p>
-    <p><strong>Items</strong> — walk onto the tile, or buy from 🧙:</p>
-    <ul class="rules-items">
-      <li>🍺 <strong>Potion</strong> — restore 1 ❤️</li>
-      <li>🔍 <strong>Scanner</strong> — reveal the 3×3 around you</li>
-      <li>⛏️ <strong>Pickaxe</strong> — break one wall tile</li>
-      <li>↔️ <strong>Row Scan</strong> — reveal along your row until walls stop it</li>
-      <li>↕️ <strong>Column Scan</strong> — reveal along your column until walls stop it</li>
-      <li>✖️ <strong>Cross Scan</strong> — reveal along all four diagonals until walls stop them</li>
-    </ul>
     <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
     <p>💧 A <strong>Health Fountain</strong> sometimes appears — step on it to heal to full. Single use.</p>
     <button class="menu-btn-primary" onclick="${back}">Back</button>

@@ -1104,6 +1104,7 @@ async function animateWalk(path) {
     state.playerCol = path[i].c;
     playSfx('step');
     updatePlayerSprite();
+    autoRecenterOnPlayer();
     await sleep(STEP_MS);
     collectAt(path[i].r, path[i].c);
     updateHud();
@@ -1253,6 +1254,7 @@ async function handleClick(r, c) {
       flashHurtFace();
       updateHud();
       renderGrid();
+      autoRecenterOnPlayer();
 
       if (state.hp <= 0) {
         state.gameOver = true;
@@ -1268,6 +1270,7 @@ async function handleClick(r, c) {
       collectAt(r, c);
       updateHud();
       renderGrid();
+      autoRecenterOnPlayer();
 
       if (r === state.exit.r && c === state.exit.c) {
         playSfx('win');

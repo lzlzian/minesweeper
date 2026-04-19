@@ -20,7 +20,7 @@ const state = {
   playerRow: 0,
   playerCol: 0,
   exit: { r: 0, c: 0 },
-  items: { potion: 0, scanner: 0, pickaxe: 0 },
+  items: { potion: 0, scanner: 0, pickaxe: 0, row: 0, column: 0, cross: 0 },
   activeItem: null, // null | 'pickaxe'
   levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
   merchant: null, // level-scoped; { r, c, stock: [{ type, price, sold }, ...] } or null

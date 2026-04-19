@@ -1080,6 +1080,22 @@ function collectAt(r, c) {
   }
 }
 
+// Walk from (startR, startC) stepping (dR, dC) each iteration. Skips the
+// starting cell (callback fires on each subsequent cell). Stops at the
+// first wall or grid boundary. The callback receives (r, c) — return true
+// to continue, false to halt (e.g., to stop after a specific event).
+function walkRay(startR, startC, dR, dC, callback) {
+  let r = startR + dR;
+  let c = startC + dC;
+  while (r >= 0 && r < state.rows && c >= 0 && c < state.cols) {
+    if (state.grid[r][c].type === 'wall') return;
+    const keepGoing = callback(r, c);
+    if (keepGoing === false) return;
+    r += dR;
+    c += dC;
+  }
+}
+
 // Dig into a gas cell: mark it as detonated (passable, no icon, leaves a
 // red cross marker). Neighbor adjacency numbers are intentionally NOT
 // recomputed — a revealed "3" stays "3" even after you detonate one of

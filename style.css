@@ -449,6 +449,37 @@ body {
   background: #c73e54;
 }
 
+.shop-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 2px 5px;
+  font-size: 0.6rem;
+  font-weight: bold;
+  border-radius: 999px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.shop-badge-d25  { background: #4ade80; color: #0f1a30; }
+.shop-badge-d50  { background: #fbbf24; color: #0f1a30; }
+.shop-badge-d75  { background: #fb923c; color: #0f1a30; }
+.shop-badge-d90  { background: #ef4444; color: #ffffff; }
+
+.shop-badge-free {
+  color: #ffffff;
+  background: linear-gradient(90deg, #ff5f6d, #ffc371, #4ade80, #60a5fa, #a78bfa);
+  background-size: 200% 100%;
+  animation: shop-badge-free-pulse 2s linear infinite;
+  text-shadow: 0 0 2px rgba(0,0,0,0.8);
+}
+
+@keyframes shop-badge-free-pulse {
+  0%   { background-position:   0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
 #play-area {
   position: relative;
   width: 100vw;

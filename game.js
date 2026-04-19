@@ -1641,6 +1641,7 @@ function saveRun() {
     stashGold: state.stashGold,
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
+    rulesetId: state.rulesetId,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -1689,6 +1690,9 @@ function resumeGame(save) {
   state.items.row = state.items.row ?? 0;
   state.items.column = state.items.column ?? 0;
   state.items.cross = state.items.cross ?? 0;
+  // Back-compat: saves from before the ruleset framework lack this key.
+  // Leaving it null lets initLevel roll fresh (regular on level <13, uniform on >=13).
+  state.rulesetId = save.rulesetId ?? null;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;

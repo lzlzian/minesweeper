@@ -468,7 +468,7 @@ function updateHud() {
 }
 
 function updateItemBar() {
-  for (const key of ['potion', 'scanner', 'pickaxe']) {
+  for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
     const count = state.items[key];
     itemCounts[key].textContent = count;
 
@@ -476,6 +476,9 @@ function updateItemBar() {
     let disabled = count === 0 || state.gameOver;
     if (key === 'potion' && state.hp >= MAX_HP) disabled = true;
     if (key === 'scanner' && !scannerHasTarget()) disabled = true;
+    if (key === 'row' && !rowHasTarget()) disabled = true;
+    if (key === 'column' && !columnHasTarget()) disabled = true;
+    if (key === 'cross' && !crossHasTarget()) disabled = true;
     btn.disabled = disabled;
 
     btn.classList.toggle('active', state.activeItem === key);
@@ -1624,6 +1627,21 @@ function onItemButtonClick(itemKey) {
 
   if (itemKey === 'scanner') {
     useItemScanner();
+    return;
+  }
+
+  if (itemKey === 'row') {
+    useItemRow();
+    return;
+  }
+
+  if (itemKey === 'column') {
+    useItemColumn();
+    return;
+  }
+
+  if (itemKey === 'cross') {
+    useItemCross();
     return;
   }
 

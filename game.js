@@ -1023,9 +1023,10 @@ function placeGoldVeins() {
   }
 
   // Scatter some low-value gold (value 1) on remaining empty cells
+  const scatterDensity = state.biomeOverrides?.goldScatterDensity ?? 0.2;
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type === 'empty' && Math.random() < 0.2) {
+      if (state.grid[r][c].type === 'empty' && Math.random() < scatterDensity) {
         state.grid[r][c].type = 'gold';
         state.grid[r][c].goldValue = 1;
       }

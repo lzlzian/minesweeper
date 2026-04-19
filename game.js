@@ -375,6 +375,24 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================================
+// SETTINGS
+// ============================================================
+
+const SETTINGS_KEY = 'miningCrawler.settings';
+
+function loadSettings() {
+  try {
+    return { musicOn: true, sfxOn: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+  } catch { return { musicOn: true, sfxOn: true }; }
+}
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+const settings = loadSettings();
+
+// ============================================================
 // AUDIO (Web Audio API for SFX, HTML5 Audio for BGM)
 // ============================================================
 

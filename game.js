@@ -483,7 +483,7 @@ function renderGrid() {
 
           let icon = null;
           if (g.type === 'gas') icon = '💀';
-          else if (g.type === 'gold' && g.goldValue > 0) icon = '💰';
+          else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
 
           if (icon) {
@@ -1237,9 +1237,10 @@ function collectAt(r, c) {
   const cell = state.grid[r][c];
   if (cell.type === 'gold' && cell.goldValue > 0) {
     playSfx('gold');
-    spawnPickupFloat(r, c, `💰 +${cell.goldValue}`);
+    spawnPickupFloat(r, c, `${cell.chest ? '🎁' : '💰'} +${cell.goldValue}`);
     state.gold += cell.goldValue;
     cell.goldValue = 0;
+    cell.chest = false;
   }
   if (cell.item) {
     state.items[cell.item]++;

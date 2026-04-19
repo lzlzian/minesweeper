@@ -1661,6 +1661,7 @@ function startGame() {
   state.stashGold = 0;
   state.levelsSinceMerchant = 0;
   state.items = { potion: 1, scanner: 1, pickaxe: 1, row: 1, column: 1, cross: 1 };
+  state.rulesetId = null;
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1694,6 +1695,7 @@ function nextLevel() {
   } else {
     state.levelsSinceMerchant++;
   }
+  state.rulesetId = null;
   saveRun();
   initLevel();
   updatePlayerSprite(true);

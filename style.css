@@ -76,6 +76,14 @@ body {
   color: #ff4444;
 }
 
+.pickup-float.float-heal {
+  color: #55ee77;
+}
+
+.pickup-float.float-info {
+  color: #e0e0e0;
+}
+
 @keyframes pickup-float-anim {
   0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
   15%  { transform: translate(-50%, -80%) scale(1.15); opacity: 1; }

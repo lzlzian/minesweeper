@@ -731,6 +731,11 @@ function showShopOverlay(playWelcome = false) {
 }
 
 function buyFromMerchant(idx) {
+  const slotEl = document.querySelectorAll('#overlay-content .shop-slot')[idx];
+  if (slotEl && slotEl._suppressNextClick) {
+    slotEl._suppressNextClick = false;
+    return;
+  }
   if (!state.merchant) return;
   const slot = state.merchant.stock[idx];
   if (!slot || slot.sold) return;

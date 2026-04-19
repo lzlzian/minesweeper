@@ -719,6 +719,15 @@ function showShopOverlay(playWelcome = false) {
       <button onclick="leaveShop()">Leave</button>
     </div>
   `);
+
+  // Wire tooltips onto each shop slot (slots re-render per buy/reroll).
+  const slotEls = document.querySelectorAll('#overlay-content .shop-slot');
+  state.merchant.stock.forEach((slot, idx) => {
+    const el = slotEls[idx];
+    if (!el) return;
+    el.dataset.slotIdx = idx;
+    attachTooltip(el, slot.type);
+  });
 }
 
 function buyFromMerchant(idx) {

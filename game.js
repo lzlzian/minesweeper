@@ -589,6 +589,19 @@ function buyFromMerchant(idx) {
   showShopOverlay(); // re-render with updated state
 }
 
+function rerollMerchant() {
+  if (!state.merchant) return;
+  const cost = 10 * (state.merchant.rerollCount + 1);
+  const totalGold = state.gold + state.stashGold;
+  if (totalGold < cost) return;
+  spendGold(cost);
+  state.merchant.rerollCount++;
+  state.merchant.stock = rollMerchantStock();
+  playSfx('payment');
+  updateHud();
+  showShopOverlay(); // re-render with new stock and new reroll cost
+}
+
 function leaveShop() {
   hideOverlay();
 }

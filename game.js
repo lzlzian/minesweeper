@@ -1954,6 +1954,11 @@ function retryLevel() {
 // ============================================================
 
 function onItemButtonClick(itemKey) {
+  const btn = itemButtons[itemKey];
+  if (btn && btn._suppressNextClick) {
+    btn._suppressNextClick = false;
+    return;
+  }
   if (state.gameOver || state.busy) return;
   if (state.items[itemKey] <= 0) return;
 

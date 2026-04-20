@@ -87,13 +87,14 @@ test('gridSizeForLevel curve', () => {
   if (s20 < s1) throw new Error(`level 20 should be >= level 1`);
 });
 
-test('anchorCountForSize monotonic non-decreasing', () => {
-  const sizes = [10, 12, 14, 16, 18, 20];
-  let prev = -1;
-  for (const s of sizes) {
+test('anchorCountForSize returns expected counts per size bracket', () => {
+  assertEq(anchorCountForSize(10), 1);
+  assertEq(anchorCountForSize(12), 1);
+  assertEq(anchorCountForSize(14), 2);
+  // Sizes >= 16 randomise between 2 and 3. Accept either.
+  for (const s of [16, 18, 20]) {
     const n = anchorCountForSize(s);
-    if (n < prev) throw new Error(`anchor count decreased at size ${s}`);
-    prev = n;
+    if (n !== 2 && n !== 3) throw new Error(`size ${s}: expected 2 or 3, got ${n}`);
   }
 });
 

@@ -2466,6 +2466,8 @@ for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
   attachTooltip(itemButtons[key], key);
 }
 
+document.getElementById('pause-btn').addEventListener('click', renderPauseMenu);
+
 // Register service worker so Android Chrome offers install.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

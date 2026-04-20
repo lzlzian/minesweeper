@@ -2468,6 +2468,17 @@ for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
 
 document.getElementById('pause-btn').addEventListener('click', renderPauseMenu);
 
+// Module-scope doesn't expose names to inline onclick= handlers in overlay
+// HTML templates. Bridge the ones used by those templates until overlay
+// rendering is refactored in Task 12.
+Object.assign(window, {
+  startGame, resumeGame, loadRun, nextLevel, retryLevel,
+  renderNewRunConfirm, renderRules, renderSettings, renderStartMenu, renderPauseMenu,
+  hideOverlay, saveRun,
+  buyFromMerchant, rerollMerchant, leaveShop,
+  setMusicOn, setSfxOn, settings,
+});
+
 // Register service worker so Android Chrome offers install.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

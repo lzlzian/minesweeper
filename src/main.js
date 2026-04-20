@@ -1616,6 +1616,8 @@ function initLevel() {
   // Clear biome overrides from any previous level before prepare sets them again.
   setBiomeOverrides(null);
   const ruleset = resolveRuleset(getRulesetId());
+  // Ruleset hooks receive the raw state singleton as their parameter — see
+  // the RULESETS contract at the top of this file.
   ruleset.prepare?.(getState());
 
   setGameOver(false);
@@ -1759,6 +1761,7 @@ function initLevel() {
   const vp = getViewportSize();
   const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
+  // Ruleset hooks receive the raw state singleton — see RULESETS contract.
   ruleset.apply?.(getState());
   hideOverlay();
 }

@@ -17,7 +17,43 @@ function assertApprox(a, b, epsilon, msg) {
   if (Math.abs(a - b) > epsilon) throw new Error(msg ?? `expected ~${b} (±${epsilon}), got ${a}`);
 }
 
-// Tests get added in later tasks.
+// -- state round-trip --
+import {
+  resetForNewRun, getSavePayload, applySavePayload,
+  getLevel, getHp, getItems, getStashGold, getRulesetId,
+  setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem,
+} from '../src/state.js';
+
+test('save/load round-trip preserves run-scoped fields', () => {
+  resetForNewRun();
+  setLevel(5);
+  damagePlayer(1);
+  addGold(20);
+  moveGoldToStash();
+  consumeItem('potion');
+
+  const snap = getSavePayload();
+
+  setLevel(99);
+  damagePlayer(2);
+  addGold(1000);
+
+  applySavePayload(snap);
+
+  assertEq(getLevel(), 5);
+  assertEq(getHp(), 2);
+  assertEq(getStashGold(), 20);
+  assertEq(getItems().potion, 0);
+});
+
+test('resetForNewRun restores defaults', () => {
+  damagePlayer(2);
+  addGold(500);
+  resetForNewRun();
+  assertEq(getHp(), 3);
+  assertEq(getItems().potion, 1);
+  assertEq(getStashGold(), 0);
+});
 
 // Render
 const out = document.getElementById('out');

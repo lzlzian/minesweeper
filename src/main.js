@@ -1,44 +1,21 @@
-// ============================================================
-// STATE
-// ============================================================
-
-const MAX_HP = 3;
-const STEP_MS = 80;
-
-const state = {
-  gold: 0,
-  stashGold: 0,
-  hp: MAX_HP,
-  level: 1,
-  rows: 10,
-  cols: 10,
-  grid: [],
-  revealed: [],
-  flagged: [],
-  gameOver: false,
-  busy: false,
-  playerRow: 0,
-  playerCol: 0,
-  exit: { r: 0, c: 0 },
-  items: { potion: 0, scanner: 0, pickaxe: 0, row: 0, column: 0, cross: 0 },
-  activeItem: null, // null | 'pickaxe'
-  levelsSinceMerchant: 0, // run-scoped; >=2 forces merchant spawn next level
-  merchant: null, // level-scoped; { r, c, rerollCount, stock: [{ type, basePrice, discountKey, price, sold }, ...] } or null
-  fountain: null, // level-scoped; { r, c, used: false } or null
-  rulesetId: null, // level-scoped; string id from RULESETS; null => initLevel rolls
-  biomeOverrides: null, // level-scoped; object or null, set by ruleset.prepare
-};
-
-function spendGold(amount) {
-  // Deduct from current-level gold first, overflow into run gold.
-  if (state.gold >= amount) {
-    state.gold -= amount;
-  } else {
-    const remainder = amount - state.gold;
-    state.gold = 0;
-    state.stashGold -= remainder;
-  }
-}
+import {
+  MAX_HP, STEP_MS, CELL_SIZE, CELL_GAP, BOARD_PAD,
+  getState,
+  getGold, getStashGold, getHp, getLevel, getRows, getCols,
+  getGrid, getRevealed, getFlagged, getGameOver, getBusy,
+  getPlayerRow, getPlayerCol, getExit, getItems, getItemCount,
+  getActiveItem, getLevelsSinceMerchant, getMerchant, getFountain,
+  getRulesetId, getBiomeOverrides,
+  addGold, spendGold, moveGoldToStash, damagePlayer, healPlayer,
+  addItem, consumeItem,
+  setPlayerPosition, setGrid, setRevealed, setFlagged, setGameOver,
+  setBusy, setExit, setActiveItem, setLevelsSinceMerchant,
+  incrementLevelsSinceMerchant, setMerchant, setFountain, setLevel,
+  incrementLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
+  setItems,
+  resetForNewRun, resetLevelGold, fullHeal,
+  getSavePayload, applySavePayload,
+} from './state.js';
 
 // ============================================================
 // RULESETS
@@ -72,21 +49,21 @@ function applyTreasureChamber(state) {
   const offDiagonalIdxs = [0, 1, 2, 3].filter(i => i !== playerIdx && i !== exitIdx);
   const cornerCoords = [
     { r: 0, c: 0 },
-    { r: 0, c: state.cols - 1 },
-    { r: state.rows - 1, c: 0 },
-    { r: state.rows - 1, c: state.cols - 1 },
+    { r: 0, c: getCols() - 1 },
+    { r: getRows() - 1, c: 0 },
+    { r: getRows() - 1, c: getCols() - 1 },
   ];
 
   for (const idx of offDiagonalIdxs) {
     const { r, c } = cornerCoords[idx];
-    const cell = state.grid[r][c];
+    const cell = getGrid()[r][c];
     const hadGas = cell.type === 'gas';
 
     // If the fountain happened to land on this corner, clear it — the chest
-    // overwrites the cell and state.fountain would otherwise point at a now-chest
+    // overwrites the cell and getFountain() would otherwise point at a now-chest
     // cell, causing a double reward on pickup.
-    if (state.fountain && state.fountain.r === r && state.fountain.c === c) {
-      state.fountain = null;
+    if (getFountain() && getFountain().r === r && getFountain().c === c) {
+      setFountain(null);
     }
 
     // Overwrite whatever landed here with a chest-gold cell.
@@ -103,8 +80,8 @@ function applyTreasureChamber(state) {
           if (dr === 0 && dc === 0) continue;
           const nr = r + dr;
           const nc = c + dc;
-          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-          const n = state.grid[nr][nc];
+          if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+          const n = getGrid()[nr][nc];
           if (n.type !== 'gas' && n.type !== 'wall') {
             n.adjacent = countAdjacentGas(nr, nc);
           }
@@ -113,7 +90,7 @@ function applyTreasureChamber(state) {
     }
 
     // Pre-reveal the chest cell.
-    state.revealed[r][c] = true;
+    getRevealed()[r][c] = true;
   }
 
   renderGrid();
@@ -190,10 +167,6 @@ const ITEM_TOOLTIPS = {
   cross:   { name: 'Cross Scan',  desc: 'Reveal along all four diagonals until walls stop them.', howto: 'Tap to use instantly.' },
 };
 
-const CELL_SIZE = 40;
-const CELL_GAP = 2;
-const BOARD_PAD = 16;
-
 // ============================================================
 // VIEWPORT / PAN
 // ============================================================
@@ -212,8 +185,8 @@ function getViewportSize() {
 }
 
 function getBoardSize() {
-  const gridW = state.cols * (CELL_SIZE + CELL_GAP) - CELL_GAP;
-  const gridH = state.rows * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  const gridW = getCols() * (CELL_SIZE + CELL_GAP) - CELL_GAP;
+  const gridH = getRows() * (CELL_SIZE + CELL_GAP) - CELL_GAP;
   return { w: gridW + BOARD_PAD * 2, h: gridH + BOARD_PAD * 2 };
 }
 
@@ -299,13 +272,13 @@ function isCellOutsideCenterRect(r, c) {
 function autoRecenterOnPlayer() {
   // Honor manual scouting: skip if user panned within the last 2s.
   if (performance.now() - pan.lastManualPanAt < 2000) return;
-  if (isCellOutsideCenterRect(state.playerRow, state.playerCol)) {
-    centerOnCell(state.playerRow, state.playerCol, 200);
+  if (isCellOutsideCenterRect(getPlayerRow(), getPlayerCol())) {
+    centerOnCell(getPlayerRow(), getPlayerCol(), 200);
   }
 }
 
 function renderMinimap() {
-  if (!state.grid || !state.grid.length) return;
+  if (!getGrid() || !getGrid().length) return;
   const dpr = window.devicePixelRatio || 1;
   const cssSize = 100;
   // Resize backing store for crisp rendering on high-DPI displays.
@@ -317,10 +290,10 @@ function renderMinimap() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   // Pixel-per-cell, use the larger board dimension so the board fits.
-  const boardDim = Math.max(state.rows, state.cols);
+  const boardDim = Math.max(getRows(), getCols());
   const pxPerCell = Math.floor(cssSize / boardDim);
-  const drawW = pxPerCell * state.cols;
-  const drawH = pxPerCell * state.rows;
+  const drawW = pxPerCell * getCols();
+  const drawH = pxPerCell * getRows();
   const offsetX = (cssSize - drawW) / 2;
   const offsetY = (cssSize - drawH) / 2;
 
@@ -329,13 +302,13 @@ function renderMinimap() {
   ctx.fillRect(0, 0, cssSize, cssSize);
 
   // Draw each cell.
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
       const x = offsetX + c * pxPerCell;
       const y = offsetY + r * pxPerCell;
-      const cell = state.grid[r][c];
+      const cell = getGrid()[r][c];
 
-      if (!state.revealed[r][c]) {
+      if (!getRevealed()[r][c]) {
         ctx.fillStyle = '#222';
       } else if (cell.type === 'wall') {
         ctx.fillStyle = '#333';
@@ -357,20 +330,20 @@ function renderMinimap() {
   }
 
   // Exit (always pre-revealed).
-  drawMarker(state.exit.r, state.exit.c, '#33ff33');
+  drawMarker(getExit().r, getExit().c, '#33ff33');
 
   // Merchant (if spawned; always pre-revealed).
-  if (state.merchant) {
-    drawMarker(state.merchant.r, state.merchant.c, '#ff33ff');
+  if (getMerchant()) {
+    drawMarker(getMerchant().r, getMerchant().c, '#ff33ff');
   }
 
   // Fountain (if spawned and unused; always pre-revealed).
-  if (state.fountain && !state.fountain.used) {
-    drawMarker(state.fountain.r, state.fountain.c, '#33ccff');
+  if (getFountain() && !getFountain().used) {
+    drawMarker(getFountain().r, getFountain().c, '#33ccff');
   }
 
   // Player last so it's always visible.
-  drawMarker(state.playerRow, state.playerCol, '#ffdd00');
+  drawMarker(getPlayerRow(), getPlayerCol(), '#ffdd00');
 }
 
 minimapEl.addEventListener('click', (e) => {
@@ -378,15 +351,15 @@ minimapEl.addEventListener('click', (e) => {
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
   const cssSize = 100;
-  const boardDim = Math.max(state.rows, state.cols);
+  const boardDim = Math.max(getRows(), getCols());
   const pxPerCell = Math.floor(cssSize / boardDim);
-  const drawW = pxPerCell * state.cols;
-  const drawH = pxPerCell * state.rows;
+  const drawW = pxPerCell * getCols();
+  const drawH = pxPerCell * getRows();
   const offsetX = (cssSize - drawW) / 2;
   const offsetY = (cssSize - drawH) / 2;
   const c = Math.floor((clickX - offsetX) / pxPerCell);
   const r = Math.floor((clickY - offsetY) / pxPerCell);
-  if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
+  if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) return;
   pan.lastManualPanAt = performance.now(); // treat as manual pan
   centerOnCell(r, c, 200);
 });
@@ -497,10 +470,10 @@ function setSfxOn(value) {
 
 function renderGrid() {
   gridContainer.innerHTML = '';
-  gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, 40px)`;
+  gridContainer.style.gridTemplateColumns = `repeat(${getCols()}, 40px)`;
 
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.row = r;
@@ -508,17 +481,17 @@ function renderGrid() {
 
       const isAdjacent = isAdjacentToPlayer(r, c);
 
-      if (state.grid[r][c].type === 'wall') {
+      if (getGrid()[r][c].type === 'wall') {
         cell.classList.add('wall');
       } else {
-        const isExit = (r === state.exit.r && c === state.exit.c);
+        const isExit = (r === getExit().r && c === getExit().c);
         if (isExit) cell.classList.add('exit');
 
-        const isMerchant = state.merchant && r === state.merchant.r && c === state.merchant.c;
+        const isMerchant = getMerchant() && r === getMerchant().r && c === getMerchant().c;
         if (isMerchant) cell.classList.add('merchant');
 
-        if (state.revealed[r][c]) {
-          const g = state.grid[r][c];
+        if (getRevealed()[r][c]) {
+          const g = getGrid()[r][c];
           cell.classList.add('revealed');
 
           if (g.type === 'gas') cell.classList.add('gas');
@@ -541,7 +514,7 @@ function renderGrid() {
           let icon = null;
           if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
-          else if (g.type === 'fountain' && state.fountain && !state.fountain.used) icon = '💧';
+          else if (g.type === 'fountain' && getFountain() && !getFountain().used) icon = '💧';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
 
           if (icon) {
@@ -550,7 +523,7 @@ function renderGrid() {
             iconSpan.textContent = icon;
             cell.appendChild(iconSpan);
           }
-        } else if (state.flagged[r][c]) {
+        } else if (getFlagged()[r][c]) {
           cell.classList.add('flagged');
           if (isAdjacent) cell.classList.add('reachable');
         } else {
@@ -578,8 +551,8 @@ function flashHurtFace() {
 }
 
 function updatePlayerSprite(instant = false) {
-  const x = BOARD_PAD + state.playerCol * (CELL_SIZE + CELL_GAP);
-  const y = BOARD_PAD + state.playerRow * (CELL_SIZE + CELL_GAP);
+  const x = BOARD_PAD + getPlayerCol() * (CELL_SIZE + CELL_GAP);
+  const y = BOARD_PAD + getPlayerRow() * (CELL_SIZE + CELL_GAP);
   if (instant) {
     const prev = playerSprite.style.transition;
     playerSprite.style.transition = 'none';
@@ -607,27 +580,27 @@ function spawnPickupFloat(r, c, label, extraClass) {
 }
 
 function updateHud() {
-  goldDisplay.textContent = `💰 ${state.gold} · Stash: ${state.stashGold}`;
-  hpDisplay.textContent = '❤️'.repeat(Math.max(0, state.hp)) + '🖤'.repeat(Math.max(0, MAX_HP - state.hp));
-  levelDisplay.textContent = `Level ${state.level}`;
+  goldDisplay.textContent = `💰 ${getGold()} · Stash: ${getStashGold()}`;
+  hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, MAX_HP - getHp()));
+  levelDisplay.textContent = `Level ${getLevel()}`;
   updateItemBar();
 }
 
 function updateItemBar() {
   for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
-    const count = state.items[key];
+    const count = getItemCount(key);
     itemCounts[key].textContent = count;
 
     const btn = itemButtons[key];
-    let disabled = count === 0 || state.gameOver;
-    if (key === 'potion' && state.hp >= MAX_HP) disabled = true;
+    let disabled = count === 0 || getGameOver();
+    if (key === 'potion' && getHp() >= MAX_HP) disabled = true;
     if (key === 'scanner' && !scannerHasTarget()) disabled = true;
     if (key === 'row' && !rowHasTarget()) disabled = true;
     if (key === 'column' && !columnHasTarget()) disabled = true;
     if (key === 'cross' && !crossHasTarget()) disabled = true;
     btn.disabled = disabled;
 
-    btn.classList.toggle('active', state.activeItem === key);
+    btn.classList.toggle('active', getActiveItem() === key);
   }
 }
 
@@ -642,12 +615,12 @@ function hideOverlay() {
 }
 
 function showEscapedOverlay() {
-  const nextSize = gridSizeForLevel(state.level + 1);
+  const nextSize = gridSizeForLevel(getLevel() + 1);
   showOverlay(`
     <h2>Escaped!</h2>
-    <p>Level ${state.level} cleared · +💰 ${state.gold}</p>
-    <p>Stash: 💰 ${state.stashGold + state.gold}</p>
-    <p>Next: Level ${state.level + 1} (${nextSize}×${nextSize})</p>
+    <p>Level ${getLevel()} cleared · +💰 ${getGold()}</p>
+    <p>Stash: 💰 ${getStashGold() + getGold()}</p>
+    <p>Next: Level ${getLevel() + 1} (${nextSize}×${nextSize})</p>
     <button onclick="nextLevel()">Descend</button>
   `);
 }
@@ -655,26 +628,26 @@ function showEscapedOverlay() {
 function showDeathOverlay() {
   showOverlay(`
     <h2>You died.</h2>
-    <p>Level ${state.level} · Forfeited 💰 ${state.gold}</p>
-    <p>Stash: 💰 ${state.stashGold}</p>
+    <p>Level ${getLevel()} · Forfeited 💰 ${getGold()}</p>
+    <p>Stash: 💰 ${getStashGold()}</p>
     <button onclick="retryLevel()">Retry Level</button>
     <button onclick="startGame()">New Run</button>
   `);
 }
 
 function showShopOverlay(playWelcome = false) {
-  if (!state.merchant) return;
+  if (!getMerchant()) return;
   hideTooltip();
   // Clear any active item targeting before opening the shop.
-  state.activeItem = null;
+  setActiveItem(null);
   updateItemBar();
   if (playWelcome) playSfx('welcome');
 
-  const totalGold = state.gold + state.stashGold;
+  const totalGold = getGold() + getStashGold();
   const itemEmoji = { potion: '🍺', pickaxe: '⛏️', scanner: '🔍', row: '↔️', column: '↕️', cross: '✖️' };
   const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner', row: 'Row Scan', column: 'Column Scan', cross: 'Cross Scan' };
 
-  const slotsHtml = state.merchant.stock.map((slot, idx) => {
+  const slotsHtml = getMerchant().stock.map((slot, idx) => {
     const canAfford = totalGold >= slot.price;
     const disabled = slot.sold || !canAfford;
     const label = slot.sold ? 'Sold' : 'Buy';
@@ -709,12 +682,12 @@ function showShopOverlay(playWelcome = false) {
     `;
   }).join('');
 
-  const rerollCost = 10 * (state.merchant.rerollCount + 1);
+  const rerollCost = 10 * (getMerchant().rerollCount + 1);
   const canAffordReroll = totalGold >= rerollCost;
 
   showOverlay(`
     <h2>🧙 Merchant</h2>
-    <p>💰 Gold: ${state.gold} · Stash: ${state.stashGold}</p>
+    <p>💰 Gold: ${getGold()} · Stash: ${getStashGold()}</p>
     <div class="shop-slots">${slotsHtml}</div>
     <div class="shop-actions">
       <button onclick="rerollMerchant()" ${canAffordReroll ? '' : 'disabled'}>🎲 Reroll (${rerollCost}g)</button>
@@ -724,7 +697,7 @@ function showShopOverlay(playWelcome = false) {
 
   // Wire tooltips onto each shop slot (slots re-render per buy/reroll).
   const slotEls = document.querySelectorAll('#overlay-content .shop-slot');
-  state.merchant.stock.forEach((slot, idx) => {
+  getMerchant().stock.forEach((slot, idx) => {
     const el = slotEls[idx];
     if (!el) return;
     attachTooltip(el, slot.type);
@@ -737,13 +710,13 @@ function buyFromMerchant(idx) {
     slotEl._suppressNextClick = false;
     return;
   }
-  if (!state.merchant) return;
-  const slot = state.merchant.stock[idx];
+  if (!getMerchant()) return;
+  const slot = getMerchant().stock[idx];
   if (!slot || slot.sold) return;
-  const totalGold = state.gold + state.stashGold;
+  const totalGold = getGold() + getStashGold();
   if (totalGold < slot.price) return;
   spendGold(slot.price);
-  state.items[slot.type]++;
+  addItem(slot.type, 1);
   slot.sold = true;
   playSfx('payment');
   updateHud();
@@ -751,13 +724,13 @@ function buyFromMerchant(idx) {
 }
 
 function rerollMerchant() {
-  if (!state.merchant) return;
-  const cost = 10 * (state.merchant.rerollCount + 1);
-  const totalGold = state.gold + state.stashGold;
+  if (!getMerchant()) return;
+  const cost = 10 * (getMerchant().rerollCount + 1);
+  const totalGold = getGold() + getStashGold();
   if (totalGold < cost) return;
   spendGold(cost);
-  state.merchant.rerollCount++;
-  state.merchant.stock = rollMerchantStock();
+  getMerchant().rerollCount++;
+  getMerchant().stock = rollMerchantStock();
   playSfx('payment');
   updateHud();
   showShopOverlay(); // re-render with new stock and new reroll cost
@@ -772,8 +745,8 @@ function leaveShop() {
 // ============================================================
 
 function placeWallClumps() {
-  const wallDensity = state.biomeOverrides?.wallDensity ?? 0.25;
-  const targetWallCount = Math.floor(state.rows * state.cols * wallDensity);
+  const wallDensity = getBiomeOverrides()?.wallDensity ?? 0.25;
+  const targetWallCount = Math.floor(getRows() * getCols() * wallDensity);
   let placed = 0;
   let attempts = 0;
   const maxAttempts = 500;
@@ -781,11 +754,11 @@ function placeWallClumps() {
   while (placed < targetWallCount && attempts < maxAttempts) {
     attempts++;
     const clumpSize = 2 + Math.floor(Math.random() * 4); // 2..5
-    const startR = Math.floor(Math.random() * state.rows);
-    const startC = Math.floor(Math.random() * state.cols);
-    if (state.grid[startR][startC].type !== 'empty') continue;
+    const startR = Math.floor(Math.random() * getRows());
+    const startC = Math.floor(Math.random() * getCols());
+    if (getGrid()[startR][startC].type !== 'empty') continue;
 
-    state.grid[startR][startC].type = 'wall';
+    getGrid()[startR][startC].type = 'wall';
     placed++;
 
     const clump = [{ r: startR, c: startC }];
@@ -795,9 +768,9 @@ function placeWallClumps() {
       const [dr, dc] = dirs[Math.floor(Math.random() * dirs.length)];
       const nr = anchor.r + dr;
       const nc = anchor.c + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      if (state.grid[nr][nc].type !== 'empty') continue;
-      state.grid[nr][nc].type = 'wall';
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      if (getGrid()[nr][nc].type !== 'empty') continue;
+      getGrid()[nr][nc].type = 'wall';
       clump.push({ r: nr, c: nc });
       placed++;
     }
@@ -808,12 +781,12 @@ function placeWallClumps() {
 // for a non-wall cell. Used to anchor player/exit near a corner even when
 // the corner itself got walled.
 function findNearCorner(anchorR, anchorC) {
-  const maxDist = Math.max(state.rows, state.cols);
+  const maxDist = Math.max(getRows(), getCols());
   for (let d = 0; d < maxDist; d++) {
-    for (let r = Math.max(0, anchorR - d); r <= Math.min(state.rows - 1, anchorR + d); r++) {
-      for (let c = Math.max(0, anchorC - d); c <= Math.min(state.cols - 1, anchorC + d); c++) {
+    for (let r = Math.max(0, anchorR - d); r <= Math.min(getRows() - 1, anchorR + d); r++) {
+      for (let c = Math.max(0, anchorC - d); c <= Math.min(getCols() - 1, anchorC + d); c++) {
         if (Math.max(Math.abs(r - anchorR), Math.abs(c - anchorC)) !== d) continue;
-        if (state.grid[r][c].type === 'wall') continue;
+        if (getGrid()[r][c].type === 'wall') continue;
         return { r, c };
       }
     }
@@ -824,9 +797,9 @@ function findNearCorner(anchorR, anchorC) {
 function pickPlayerStart() {
   const corners = [
     { r: 0, c: 0 },
-    { r: 0, c: state.cols - 1 },
-    { r: state.rows - 1, c: 0 },
-    { r: state.rows - 1, c: state.cols - 1 },
+    { r: 0, c: getCols() - 1 },
+    { r: getRows() - 1, c: 0 },
+    { r: getRows() - 1, c: getCols() - 1 },
   ];
   const cornerIdx = Math.floor(Math.random() * 4);
   state._startCornerIdx = cornerIdx;
@@ -838,9 +811,9 @@ function pickExit(playerR, playerC) {
   // Exit sits in the corner diagonally opposite to the player's start corner.
   const corners = [
     { r: 0, c: 0 },
-    { r: 0, c: state.cols - 1 },
-    { r: state.rows - 1, c: 0 },
-    { r: state.rows - 1, c: state.cols - 1 },
+    { r: 0, c: getCols() - 1 },
+    { r: getRows() - 1, c: 0 },
+    { r: getRows() - 1, c: getCols() - 1 },
   ];
   const oppositeIdx = 3 - state._startCornerIdx;
   const anchor = corners[oppositeIdx];
@@ -861,9 +834,9 @@ function pickMerchantCorner() {
   const pickedIdx = offDiagonal[Math.floor(Math.random() * offDiagonal.length)];
   const corners = [
     { r: 0, c: 0 },
-    { r: 0, c: state.cols - 1 },
-    { r: state.rows - 1, c: 0 },
-    { r: state.rows - 1, c: state.cols - 1 },
+    { r: 0, c: getCols() - 1 },
+    { r: getRows() - 1, c: 0 },
+    { r: getRows() - 1, c: getCols() - 1 },
   ];
   const anchor = corners[pickedIdx];
   const found = findNearCorner(anchor.r, anchor.c);
@@ -915,7 +888,7 @@ function rollMerchantStock() {
 }
 
 function cleanMerchantCell(r, c) {
-  const cell = state.grid[r][c];
+  const cell = getGrid()[r][c];
   const hadGas = cell.type === 'gas';
   cell.type = 'empty';
   cell.goldValue = 0;
@@ -929,8 +902,8 @@ function cleanMerchantCell(r, c) {
         if (dr === 0 && dc === 0) continue;
         const nr = r + dr;
         const nc = c + dc;
-        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-        const n = state.grid[nr][nc];
+        if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+        const n = getGrid()[nr][nc];
         if (n.type !== 'gas' && n.type !== 'wall') {
           n.adjacent = countAdjacentGas(nr, nc);
         }
@@ -945,16 +918,16 @@ function hasNonWallNeighbor(r, c) {
       if (dr === 0 && dc === 0) continue;
       const nr = r + dr;
       const nc = c + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      if (state.grid[nr][nc].type !== 'wall') return true;
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      if (getGrid()[nr][nc].type !== 'wall') return true;
     }
   }
   return false;
 }
 
 function isReachable(fromR, fromC, toR, toC) {
-  const visited = Array.from({ length: state.rows }, () =>
-    Array(state.cols).fill(false)
+  const visited = Array.from({ length: getRows() }, () =>
+    Array(getCols()).fill(false)
   );
   const queue = [{ r: fromR, c: fromC }];
   visited[fromR][fromC] = true;
@@ -966,9 +939,9 @@ function isReachable(fromR, fromC, toR, toC) {
         if (dr === 0 && dc === 0) continue;
         const nr = r + dr;
         const nc = c + dc;
-        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
         if (visited[nr][nc]) continue;
-        const t = state.grid[nr][nc].type;
+        const t = getGrid()[nr][nc].type;
         if (t === 'wall' || t === 'gas') continue;
         visited[nr][nc] = true;
         queue.push({ r: nr, c: nc });
@@ -988,16 +961,16 @@ function carvePath(fromR, fromC, toR, toC) {
     else if (r > toR) r--;
     if (c < toC) c++;
     else if (c > toC) c--;
-    const cell = state.grid[r][c];
+    const cell = getGrid()[r][c];
     if (cell.type === 'wall' || cell.type === 'gas') {
       cell.type = 'empty';
       cell.goldValue = 0;
     }
   }
   // Recompute adjacency for the whole grid (cheap at 12x12)
-  for (let rr = 0; rr < state.rows; rr++) {
-    for (let cc = 0; cc < state.cols; cc++) {
-      const g = state.grid[rr][cc];
+  for (let rr = 0; rr < getRows(); rr++) {
+    for (let cc = 0; cc < getCols(); cc++) {
+      const g = getGrid()[rr][cc];
       if (g.type !== 'gas' && g.type !== 'wall') {
         g.adjacent = countAdjacentGas(rr, cc);
       }
@@ -1014,8 +987,8 @@ const STEP_DIRS = [
 
 function findPath(fromR, fromC, toR, toC) {
   if (fromR === toR && fromC === toC) return [{ r: fromR, c: fromC }];
-  const visited = Array.from({ length: state.rows }, () =>
-    Array(state.cols).fill(null)
+  const visited = Array.from({ length: getRows() }, () =>
+    Array(getCols()).fill(null)
   );
   const queue = [{ r: fromR, c: fromC }];
   visited[fromR][fromC] = { r: -1, c: -1 };
@@ -1035,11 +1008,11 @@ function findPath(fromR, fromC, toR, toC) {
     for (const [dr, dc] of STEP_DIRS) {
       const nr = r + dr;
       const nc = c + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
       if (visited[nr][nc] !== null) continue;
-      const t = state.grid[nr][nc].type;
+      const t = getGrid()[nr][nc].type;
       if (t === 'wall' || t === 'gas') continue;
-      if (!state.revealed[nr][nc]) continue;
+      if (!getRevealed()[nr][nc]) continue;
       visited[nr][nc] = { r, c };
       queue.push({ r: nr, c: nc });
     }
@@ -1049,14 +1022,14 @@ function findPath(fromR, fromC, toR, toC) {
 
 function generateGrid(gasCount) {
   // Initialize empty grid
-  state.grid = Array.from({ length: state.rows }, () =>
-    Array.from({ length: state.cols }, () => ({
+  setGrid(Array.from({ length: getRows() }, () =>
+    Array.from({ length: getCols() }, () => ({
       type: 'empty',
       adjacent: 0,
       goldValue: 0,
       item: null,
     }))
-  );
+  ));
 
   // NEW: place walls first
   placeWallClumps();
@@ -1064,20 +1037,20 @@ function generateGrid(gasCount) {
   // Place gas pockets randomly (skip walls — 'empty' check below handles this)
   let placed = 0;
   while (placed < gasCount) {
-    const r = Math.floor(Math.random() * state.rows);
-    const c = Math.floor(Math.random() * state.cols);
-    if (state.grid[r][c].type === 'empty') {
-      state.grid[r][c].type = 'gas';
+    const r = Math.floor(Math.random() * getRows());
+    const c = Math.floor(Math.random() * getCols());
+    if (getGrid()[r][c].type === 'empty') {
+      getGrid()[r][c].type = 'gas';
       placed++;
     }
   }
 
   // Calculate adjacency numbers (walls are skipped — they neither count nor get counted)
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type === 'gas') continue;
-      if (state.grid[r][c].type === 'wall') continue;
-      state.grid[r][c].adjacent = countAdjacentGas(r, c);
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      if (getGrid()[r][c].type === 'gas') continue;
+      if (getGrid()[r][c].type === 'wall') continue;
+      getGrid()[r][c].adjacent = countAdjacentGas(r, c);
     }
   }
 
@@ -1095,8 +1068,8 @@ function countAdjacentGas(r, c) {
       if (dr === 0 && dc === 0) continue;
       const nr = r + dr;
       const nc = c + dc;
-      if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-        const t = state.grid[nr][nc].type;
+      if (nr >= 0 && nr < getRows() && nc >= 0 && nc < getCols()) {
+        const t = getGrid()[nr][nc].type;
         if (t === 'gas' || t === 'detonated') count++;
       }
     }
@@ -1107,10 +1080,10 @@ function countAdjacentGas(r, c) {
 function placeGoldVeins() {
   // Collect all safe cells and sort by adjacency (high first)
   const safeCells = [];
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type !== 'gas' && state.grid[r][c].type !== 'wall') {
-        safeCells.push({ r, c, adj: state.grid[r][c].adjacent });
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      if (getGrid()[r][c].type !== 'gas' && getGrid()[r][c].type !== 'wall') {
+        safeCells.push({ r, c, adj: getGrid()[r][c].adjacent });
       }
     }
   }
@@ -1132,7 +1105,7 @@ function placeGoldVeins() {
 
   // Assign gold values: center = 10, neighbors = 5
   for (const center of centers) {
-    const cell = state.grid[center.r][center.c];
+    const cell = getGrid()[center.r][center.c];
     if (cell.type !== 'gas') {
       cell.type = 'gold';
       cell.goldValue = 10;
@@ -1144,8 +1117,8 @@ function placeGoldVeins() {
         if (dr === 0 && dc === 0) continue;
         const nr = center.r + dr;
         const nc = center.c + dc;
-        if (nr >= 0 && nr < state.rows && nc >= 0 && nc < state.cols) {
-          const neighbor = state.grid[nr][nc];
+        if (nr >= 0 && nr < getRows() && nc >= 0 && nc < getCols()) {
+          const neighbor = getGrid()[nr][nc];
           if (neighbor.type === 'empty') {
             neighbor.type = 'gold';
             neighbor.goldValue = 5;
@@ -1156,12 +1129,12 @@ function placeGoldVeins() {
   }
 
   // Scatter some low-value gold (value 1) on remaining empty cells
-  const scatterDensity = state.biomeOverrides?.goldScatterDensity ?? 0.2;
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      if (state.grid[r][c].type === 'empty' && Math.random() < scatterDensity) {
-        state.grid[r][c].type = 'gold';
-        state.grid[r][c].goldValue = 1;
+  const scatterDensity = getBiomeOverrides()?.goldScatterDensity ?? 0.2;
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      if (getGrid()[r][c].type === 'empty' && Math.random() < scatterDensity) {
+        getGrid()[r][c].type = 'gold';
+        getGrid()[r][c].goldValue = 1;
       }
     }
   }
@@ -1173,9 +1146,9 @@ function placeItemDrops() {
   // distinct reward. Spawn/exit exclusions happen in initLevel, which
   // overwrites the item field on those cells if they landed on drops.
   const candidates = [];
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      const cell = state.grid[r][c];
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      const cell = getGrid()[r][c];
       if (cell.type === 'empty' && cell.goldValue === 0) {
         candidates.push({ r, c });
       }
@@ -1188,13 +1161,13 @@ function placeItemDrops() {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
-  const requestedDrops = state.biomeOverrides?.guaranteedItemDrops ?? (1 + Math.floor(Math.random() * 2));
+  const requestedDrops = getBiomeOverrides()?.guaranteedItemDrops ?? (1 + Math.floor(Math.random() * 2));
   const dropCount = Math.min(candidates.length, requestedDrops);
   const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   for (let i = 0; i < dropCount; i++) {
     const pick = candidates[i];
     const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-    state.grid[pick.r][pick.c].item = itemType;
+    getGrid()[pick.r][pick.c].item = itemType;
   }
 }
 
@@ -1203,19 +1176,19 @@ const ANCHOR_MIN_DIST_EXIT = 3;
 const ANCHOR_MIN_DIST_BETWEEN = 5;
 
 function placeAnchors() {
-  const target = anchorCountForSize(state.rows);
+  const target = anchorCountForSize(getRows());
   if (target === 0) return;
 
-  const startR = state.playerRow;
-  const startC = state.playerCol;
-  const exitR = state.exit.r;
-  const exitC = state.exit.c;
+  const startR = getPlayerRow();
+  const startC = getPlayerCol();
+  const exitR = getExit().r;
+  const exitC = getExit().c;
 
   // Collect candidates: adjacency-0, non-gas, non-wall, far enough from start/exit.
   const candidates = [];
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      const cell = state.grid[r][c];
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      const cell = getGrid()[r][c];
       if (cell.type === 'gas' || cell.type === 'wall') continue;
       if (cell.adjacent !== 0) continue;
       const distStart = Math.max(Math.abs(r - startR), Math.abs(c - startC));
@@ -1245,15 +1218,15 @@ function placeAnchors() {
     if (tooClose) continue;
 
     // Snapshot revealed state before cascading this anchor.
-    const snapshot = state.revealed.map(row => [...row]);
+    const snapshot = getRevealed().map(row => [...row]);
 
     revealCell(cand.r, cand.c);
 
     // Collect which cells were newly revealed.
     const newCells = [];
-    for (let r = 0; r < state.rows; r++) {
-      for (let c = 0; c < state.cols; c++) {
-        if (state.revealed[r][c] && !snapshot[r][c]) {
+    for (let r = 0; r < getRows(); r++) {
+      for (let c = 0; c < getCols(); c++) {
+        if (getRevealed()[r][c] && !snapshot[r][c]) {
           newCells.push({ r, c });
         }
       }
@@ -1269,7 +1242,7 @@ function placeAnchors() {
           if (dr === 0 && dc === 0) continue;
           const nr = nc.r + dr;
           const nc2 = nc.c + dc;
-          if (nr < 0 || nr >= state.rows || nc2 < 0 || nc2 >= state.cols) continue;
+          if (nr < 0 || nr >= getRows() || nc2 < 0 || nc2 >= getCols()) continue;
           if (snapshot[nr][nc2]) {
             merged = true;
           }
@@ -1281,7 +1254,7 @@ function placeAnchors() {
     if (merged) {
       // Un-reveal all cells this anchor opened.
       for (const nc of newCells) {
-        state.revealed[nc.r][nc.c] = false;
+        getRevealed()[nc.r][nc.c] = false;
       }
       continue;
     }
@@ -1291,45 +1264,45 @@ function placeAnchors() {
 }
 
 function debugRevealAll() {
-  for (let r = 0; r < state.rows; r++) {
-    for (let c = 0; c < state.cols; c++) {
-      state.revealed[r][c] = true;
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      getRevealed()[r][c] = true;
     }
   }
   renderGrid();
 }
 
 function isAdjacentToPlayer(r, c) {
-  const dr = Math.abs(r - state.playerRow);
-  const dc = Math.abs(c - state.playerCol);
+  const dr = Math.abs(r - getPlayerRow());
+  const dc = Math.abs(c - getPlayerCol());
   if (dr === 0 && dc === 0) return false;
   return dr <= 1 && dc <= 1;
 }
 
 function collectAt(r, c) {
-  const cell = state.grid[r][c];
+  const cell = getGrid()[r][c];
   if (cell.type === 'gold' && cell.goldValue > 0) {
     playSfx('gold');
     spawnPickupFloat(r, c, `${cell.chest ? '🎁' : '💰'} +${cell.goldValue}`);
-    state.gold += cell.goldValue;
+    addGold(cell.goldValue);
     cell.goldValue = 0;
     cell.chest = false;
   }
   if (cell.item) {
-    state.items[cell.item]++;
+    addItem(cell.item, 1);
     spawnPickupFloat(r, c, `${PICKUP_EMOJI[cell.item] || ''} +1`);
     cell.item = null;
     playSfx('pickup');
   }
-  if (state.fountain &&
-      r === state.fountain.r &&
-      c === state.fountain.c &&
-      !state.fountain.used) {
-    if (state.hp >= MAX_HP) {
+  if (getFountain() &&
+      r === getFountain().r &&
+      c === getFountain().c &&
+      !getFountain().used) {
+    if (getHp() >= MAX_HP) {
       spawnPickupFloat(r, c, 'Already at full HP', 'float-info');
     } else {
-      state.hp = MAX_HP;
-      state.fountain.used = true;
+      fullHeal();
+      getFountain().used = true;
       spawnPickupFloat(r, c, '+❤️', 'float-heal');
       playSfx('drink');
     }
@@ -1343,8 +1316,8 @@ function collectAt(r, c) {
 function walkRay(startR, startC, dR, dC, callback) {
   let r = startR + dR;
   let c = startC + dC;
-  while (r >= 0 && r < state.rows && c >= 0 && c < state.cols) {
-    if (state.grid[r][c].type === 'wall') return;
+  while (r >= 0 && r < getRows() && c >= 0 && c < getCols()) {
+    if (getGrid()[r][c].type === 'wall') return;
     const keepGoing = callback(r, c);
     if (keepGoing === false) return;
     r += dR;
@@ -1358,8 +1331,8 @@ function walkRay(startR, startC, dR, dC, callback) {
 // the three gases, preserving the deduction info the player already
 // earned.
 function detonateGas(r, c) {
-  state.grid[r][c].type = 'detonated';
-  state.grid[r][c].goldValue = 0;
+  getGrid()[r][c].type = 'detonated';
+  getGrid()[r][c].goldValue = 0;
   spawnPickupFloat(r, c, '💀', 'float-danger');
 }
 
@@ -1372,8 +1345,7 @@ function sleep(ms) {
 // something stopped it (e.g., win handled).
 async function animateWalk(path) {
   for (let i = 1; i < path.length; i++) {
-    state.playerRow = path[i].r;
-    state.playerCol = path[i].c;
+    setPlayerPosition(path[i].r, path[i].c);
     playSfx('step');
     updatePlayerSprite();
     autoRecenterOnPlayer();
@@ -1382,20 +1354,20 @@ async function animateWalk(path) {
     collectAt(path[i].r, path[i].c);
     updateHud();
 
-    if (path[i].r === state.exit.r && path[i].c === state.exit.c) {
+    if (path[i].r === getExit().r && path[i].c === getExit().c) {
       playSfx('win');
-      state.gameOver = true;
+      setGameOver(true);
       renderGrid();
-      addToLifetimeGold(state.gold);
+      addToLifetimeGold(getGold());
       showEscapedOverlay();
       return false;
     }
   }
   renderGrid();
   // Open shop if we landed on the merchant.
-  if (state.merchant &&
-      state.playerRow === state.merchant.r &&
-      state.playerCol === state.merchant.c) {
+  if (getMerchant() &&
+      getPlayerRow() === getMerchant().r &&
+      getPlayerCol() === getMerchant().c) {
     showShopOverlay(true);
   }
   return true;
@@ -1411,11 +1383,11 @@ function findBestApproach(tr, tc) {
       if (dr === 0 && dc === 0) continue;
       const nr = tr + dr;
       const nc = tc + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      if (!state.revealed[nr][nc]) continue;
-      const t = state.grid[nr][nc].type;
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      if (!getRevealed()[nr][nc]) continue;
+      const t = getGrid()[nr][nc].type;
       if (t === 'wall' || t === 'gas') continue;
-      const path = findPath(state.playerRow, state.playerCol, nr, nc);
+      const path = findPath(getPlayerRow(), getPlayerCol(), nr, nc);
       if (!path) continue;
       if (!best || path.length < best.path.length) {
         best = { r: nr, c: nc, path };
@@ -1429,20 +1401,20 @@ function findBestApproach(tr, tc) {
 // targeting if invalid. Returns true if the click was consumed (caller
 // should stop); false if no active item (caller proceeds with normal dig).
 async function handleItemClick(r, c) {
-  if (!state.activeItem) return false;
-  const item = state.activeItem;
-  const cell = state.grid[r][c];
+  if (!getActiveItem()) return false;
+  const item = getActiveItem();
+  const cell = getGrid()[r][c];
 
   if (item === 'pickaxe') {
     // Valid target: any wall cell.
     if (cell.type !== 'wall') {
-      state.activeItem = null;
+      setActiveItem(null);
       updateItemBar();
       renderGrid();
       return true;
     }
-    state.items.pickaxe--;
-    state.activeItem = null;
+    consumeItem('pickaxe');
+    setActiveItem(null);
 
     // Convert wall to revealed floor. Walls never participated in adjacency
     // counts, so neighbor numbers are already correct — only the new cell
@@ -1451,7 +1423,7 @@ async function handleItemClick(r, c) {
     cell.goldValue = 0;
     cell.item = null; // defensive: walls shouldn't have items but be safe
     cell.adjacent = countAdjacentGas(r, c);
-    state.revealed[r][c] = true;
+    getRevealed()[r][c] = true;
 
     // Cascade if adjacency is 0 — opens a pocket the way a scanner would.
     if (cell.adjacent === 0) {
@@ -1473,35 +1445,35 @@ async function handleItemClick(r, c) {
 }
 
 async function handleClick(r, c) {
-  if (state.gameOver) return;
-  if (state.busy) return;
+  if (getGameOver()) return;
+  if (getBusy()) return;
 
   // Re-open shop if player clicks their own cell and it's the merchant.
-  if (r === state.playerRow && c === state.playerCol &&
-      state.merchant && r === state.merchant.r && c === state.merchant.c) {
+  if (r === getPlayerRow() && c === getPlayerCol() &&
+      getMerchant() && r === getMerchant().r && c === getMerchant().c) {
     showShopOverlay(true);
     return;
   }
 
-  if (state.activeItem) {
+  if (getActiveItem()) {
     await handleItemClick(r, c);
     return;
   }
 
-  if (state.grid[r][c].type === 'wall') return;
+  if (getGrid()[r][c].type === 'wall') return;
 
-  state.busy = true;
+  setBusy(true);
   try {
     // Clicked a revealed cell: just walk to it.
-    if (state.revealed[r][c]) {
-      const path = findPath(state.playerRow, state.playerCol, r, c);
+    if (getRevealed()[r][c]) {
+      const path = findPath(getPlayerRow(), getPlayerCol(), r, c);
       if (!path || path.length < 2) return;
       await animateWalk(path);
       return;
     }
 
     // Clicked an unrevealed cell.
-    if (state.flagged[r][c]) return;
+    if (getFlagged()[r][c]) return;
 
     // If adjacent, dig directly. Otherwise walk to the nearest revealed
     // cell adjacent to the target, then dig.
@@ -1515,46 +1487,44 @@ async function handleClick(r, c) {
 
     if (!isAdjacentToPlayer(r, c)) return;
 
-    const cell = state.grid[r][c];
+    const cell = getGrid()[r][c];
     if (cell.type === 'gas') {
       playSfx('boom');
-      state.hp--;
+      damagePlayer(1);
       detonateGas(r, c);
-      state.revealed[r][c] = true;
-      state.playerRow = r;
-      state.playerCol = c;
+      getRevealed()[r][c] = true;
+      setPlayerPosition(r, c);
       updatePlayerSprite();
       flashHurtFace();
       updateHud();
       renderGrid();
       autoRecenterOnPlayer();
 
-      if (state.hp <= 0) {
-        state.gameOver = true;
+      if (getHp() <= 0) {
+        setGameOver(true);
         showDeathOverlay();
         return;
       }
     } else {
       playSfx('dig');
       revealCell(r, c);
-      state.playerRow = r;
-      state.playerCol = c;
+      setPlayerPosition(r, c);
       updatePlayerSprite();
       collectAt(r, c);
       updateHud();
       renderGrid();
       autoRecenterOnPlayer();
 
-      if (r === state.exit.r && c === state.exit.c) {
+      if (r === getExit().r && c === getExit().c) {
         playSfx('win');
-        state.gameOver = true;
-        addToLifetimeGold(state.gold);
+        setGameOver(true);
+        addToLifetimeGold(getGold());
         showEscapedOverlay();
         return;
       }
     }
   } finally {
-    state.busy = false;
+    setBusy(false);
   }
 }
 
@@ -1564,8 +1534,8 @@ function ensureSafeStart(r, c) {
     for (let dc = -1; dc <= 1; dc++) {
       const nr = r + dr;
       const nc = c + dc;
-      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-      const cell = state.grid[nr][nc];
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      const cell = getGrid()[nr][nc];
       if (cell.type === 'gas') {
         cell.type = 'empty';
         cell.goldValue = 0;
@@ -1574,11 +1544,11 @@ function ensureSafeStart(r, c) {
         let attempts = 0;
         while (!relocated && attempts < 500) {
           attempts++;
-          const rr = Math.floor(Math.random() * state.rows);
-          const rc = Math.floor(Math.random() * state.cols);
+          const rr = Math.floor(Math.random() * getRows());
+          const rc = Math.floor(Math.random() * getCols());
           const dist = Math.abs(rr - r) + Math.abs(rc - c);
-          if (state.grid[rr][rc].type === 'empty' && dist > 3) {
-            state.grid[rr][rc].type = 'gas';
+          if (getGrid()[rr][rc].type === 'empty' && dist > 3) {
+            getGrid()[rr][rc].type = 'gas';
             relocated = true;
           }
         }
@@ -1589,9 +1559,9 @@ function ensureSafeStart(r, c) {
     }
   }
   // Recalculate adjacency for all non-gas, non-wall cells
-  for (let row = 0; row < state.rows; row++) {
-    for (let col = 0; col < state.cols; col++) {
-      const c2 = state.grid[row][col];
+  for (let row = 0; row < getRows(); row++) {
+    for (let col = 0; col < getCols(); col++) {
+      const c2 = getGrid()[row][col];
       if (c2.type !== 'gas' && c2.type !== 'wall') {
         c2.adjacent = countAdjacentGas(row, col);
       }
@@ -1600,13 +1570,13 @@ function ensureSafeStart(r, c) {
 }
 
 function revealCell(r, c) {
-  if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) return;
-  if (state.revealed[r][c]) return;
-  if (state.grid[r][c].type === 'gas') return;
-  if (state.grid[r][c].type === 'wall') return;
+  if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) return;
+  if (getRevealed()[r][c]) return;
+  if (getGrid()[r][c].type === 'gas') return;
+  if (getGrid()[r][c].type === 'wall') return;
 
-  state.revealed[r][c] = true;
-  const cell = state.grid[r][c];
+  getRevealed()[r][c] = true;
+  const cell = getGrid()[r][c];
 
   if (cell.adjacent === 0) {
     for (let dr = -1; dr <= 1; dr++) {
@@ -1620,11 +1590,11 @@ function revealCell(r, c) {
 
 
 function handleRightClick(r, c) {
-  if (state.gameOver) return;
-  if (state.grid[r][c].type === 'wall') return;  // NEW
-  if (state.revealed[r][c]) return;
-  state.flagged[r][c] = !state.flagged[r][c];
-  playSfx(state.flagged[r][c] ? 'mark' : 'unmark');
+  if (getGameOver()) return;
+  if (getGrid()[r][c].type === 'wall') return;  // NEW
+  if (getRevealed()[r][c]) return;
+  getFlagged()[r][c] = !getFlagged()[r][c];
+  playSfx(getFlagged()[r][c] ? 'mark' : 'unmark');
   renderGrid();
 }
 
@@ -1638,61 +1608,60 @@ function handleRightClick(r, c) {
 
 function initLevel() {
   // Roll ruleset if not already set (retries/resumes preserve it).
-  if (!state.rulesetId) {
-    state.rulesetId = (state.level >= 13 && RULESETS.length > 1)
+  if (!getRulesetId()) {
+    setRulesetId((getLevel() >= 13 && RULESETS.length > 1)
       ? weightedPick(RULESETS).id
-      : 'regular';
+      : 'regular');
   }
   // Clear biome overrides from any previous level before prepare sets them again.
-  state.biomeOverrides = null;
-  const ruleset = resolveRuleset(state.rulesetId);
-  ruleset.prepare?.(state);
+  setBiomeOverrides(null);
+  const ruleset = resolveRuleset(getRulesetId());
+  ruleset.prepare?.(getState());
 
-  state.gameOver = false;
-  state.busy = false;
-  state.activeItem = null;
-  state.merchant = null;
-  state.fountain = null;
-  state.rows = gridSizeForLevel(state.level);
-  state.cols = state.rows;
+  setGameOver(false);
+  setBusy(false);
+  setActiveItem(null);
+  setMerchant(null);
+  setFountain(null);
+  setRows(gridSizeForLevel(getLevel()));
+  setCols(getRows());
 
   // Decide whether a merchant spawns this level.
-  const spawnMerchant = state.biomeOverrides?.suppressMerchant
+  const spawnMerchant = getBiomeOverrides()?.suppressMerchant
     ? false
-    : (state.levelsSinceMerchant >= 2 || Math.random() < 0.50);
+    : (getLevelsSinceMerchant() >= 2 || Math.random() < 0.50);
 
   const maxAttempts = 50;
   let solved = false;
 
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
-    state.revealed = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-    state.flagged = Array.from({ length: state.rows }, () => Array(state.cols).fill(false));
-    const gasDensity = state.biomeOverrides?.gasDensity ?? 0.20;
-    const gasCount = Math.floor(state.rows * state.cols * gasDensity);
+    setRevealed(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
+    setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
+    const gasDensity = getBiomeOverrides()?.gasDensity ?? 0.20;
+    const gasCount = Math.floor(getRows() * getCols() * gasDensity);
     generateGrid(gasCount);
 
     const start = pickPlayerStart();
     if (!start) continue;
-    state.playerRow = start.r;
-    state.playerCol = start.c;
-    ensureSafeStart(state.playerRow, state.playerCol);
+    setPlayerPosition(start.r, start.c);
+    ensureSafeStart(getPlayerRow(), getPlayerCol());
     // Spawn cell auto-reveals; don't grant a free item there.
-    state.grid[state.playerRow][state.playerCol].item = null;
+    getGrid()[getPlayerRow()][getPlayerCol()].item = null;
 
-    const exit = pickExit(state.playerRow, state.playerCol);
+    const exit = pickExit(getPlayerRow(), getPlayerCol());
     if (!exit) continue;
-    state.exit = exit;
+    setExit(exit);
 
     // Exit cell itself must not be gas
-    if (state.grid[exit.r][exit.c].type === 'gas') {
-      state.grid[exit.r][exit.c].type = 'empty';
+    if (getGrid()[exit.r][exit.c].type === 'gas') {
+      getGrid()[exit.r][exit.c].type = 'empty';
       // recompute adjacency for neighbors (a gas was removed)
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           const nr = exit.r + dr;
           const nc = exit.c + dc;
-          if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
-          const c2 = state.grid[nr][nc];
+          if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+          const c2 = getGrid()[nr][nc];
           if (c2.type !== 'gas' && c2.type !== 'wall') {
             c2.adjacent = countAdjacentGas(nr, nc);
           }
@@ -1700,12 +1669,12 @@ function initLevel() {
       }
     }
     // Exit cell stays mechanically clean — no item drop there either.
-    state.grid[exit.r][exit.c].item = null;
+    getGrid()[exit.r][exit.c].item = null;
 
     // Exit cell should not carry gold — keeps the exit cell mechanically clean
-    if (state.grid[exit.r][exit.c].type === 'gold') {
-      state.grid[exit.r][exit.c].type = 'empty';
-      state.grid[exit.r][exit.c].goldValue = 0;
+    if (getGrid()[exit.r][exit.c].type === 'gold') {
+      getGrid()[exit.r][exit.c].type = 'empty';
+      getGrid()[exit.r][exit.c].goldValue = 0;
     }
 
     // Merchant placement (if this level spawns one).
@@ -1713,16 +1682,16 @@ function initLevel() {
     if (spawnMerchant) {
       merchantPos = pickMerchantCorner();
       if (!merchantPos) continue;
-      if (merchantPos.r === state.playerRow && merchantPos.c === state.playerCol) continue;
+      if (merchantPos.r === getPlayerRow() && merchantPos.c === getPlayerCol()) continue;
       if (merchantPos.r === exit.r && merchantPos.c === exit.c) continue;
       cleanMerchantCell(merchantPos.r, merchantPos.c);
     }
 
-    const exitReachable = isReachable(state.playerRow, state.playerCol, exit.r, exit.c);
-    const merchantReachable = !merchantPos || isReachable(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
+    const exitReachable = isReachable(getPlayerRow(), getPlayerCol(), exit.r, exit.c);
+    const merchantReachable = !merchantPos || isReachable(getPlayerRow(), getPlayerCol(), merchantPos.r, merchantPos.c);
     if (exitReachable && merchantReachable) {
       if (merchantPos) {
-        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 };
+        setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
       }
       solved = true;
     }
@@ -1730,14 +1699,14 @@ function initLevel() {
 
   if (!solved) {
     console.warn('initLevel: 50 attempts failed, carving a guaranteed path from player to exit');
-    carvePath(state.playerRow, state.playerCol, state.exit.r, state.exit.c);
+    carvePath(getPlayerRow(), getPlayerCol(), getExit().r, getExit().c);
     if (spawnMerchant) {
       // Place merchant at its corner anchor (may have been unreachable) and carve a path to it.
       const merchantPos = pickMerchantCorner();
       if (merchantPos) {
         cleanMerchantCell(merchantPos.r, merchantPos.c);
-        carvePath(state.playerRow, state.playerCol, merchantPos.r, merchantPos.c);
-        state.merchant = { r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 };
+        carvePath(getPlayerRow(), getPlayerCol(), merchantPos.r, merchantPos.c);
+        setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
       }
     }
   }
@@ -1746,51 +1715,51 @@ function initLevel() {
   // of reachability — a walled-off fountain is acceptable.
   if (Math.random() < 0.50) {
     const candidates = [];
-    for (let r = 0; r < state.rows; r++) {
-      for (let c = 0; c < state.cols; c++) {
-        if (state.grid[r][c].type !== 'empty') continue;
-        if (state.grid[r][c].item) continue;
-        if (r === state.playerRow && c === state.playerCol) continue;
-        if (r === state.exit.r && c === state.exit.c) continue;
-        if (state.merchant && r === state.merchant.r && c === state.merchant.c) continue;
+    for (let r = 0; r < getRows(); r++) {
+      for (let c = 0; c < getCols(); c++) {
+        if (getGrid()[r][c].type !== 'empty') continue;
+        if (getGrid()[r][c].item) continue;
+        if (r === getPlayerRow() && c === getPlayerCol()) continue;
+        if (r === getExit().r && c === getExit().c) continue;
+        if (getMerchant() && r === getMerchant().r && c === getMerchant().c) continue;
         candidates.push({ r, c });
       }
     }
     if (candidates.length > 0) {
       const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      state.grid[pick.r][pick.c].type = 'fountain';
-      state.fountain = { r: pick.r, c: pick.c, used: false };
+      getGrid()[pick.r][pick.c].type = 'fountain';
+      setFountain({ r: pick.r, c: pick.c, used: false });
     }
   }
 
   // Pre-reveal exit, start, and merchant cells; start cell cascades for anchor merge-check.
-  state.revealed[state.exit.r][state.exit.c] = true;
-  state.revealed[state.playerRow][state.playerCol] = true;
-  if (state.merchant) {
-    state.revealed[state.merchant.r][state.merchant.c] = true;
+  getRevealed()[getExit().r][getExit().c] = true;
+  getRevealed()[getPlayerRow()][getPlayerCol()] = true;
+  if (getMerchant()) {
+    getRevealed()[getMerchant().r][getMerchant().c] = true;
   }
-  if (state.fountain) {
-    state.revealed[state.fountain.r][state.fountain.c] = true;
+  if (getFountain()) {
+    getRevealed()[getFountain().r][getFountain().c] = true;
   }
 
   // Reveal the player's start 3×3 so new players see safe ground around them.
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
-      revealCell(state.playerRow + dr, state.playerCol + dc);
+      revealCell(getPlayerRow() + dr, getPlayerCol() + dc);
     }
   }
 
   placeAnchors();
 
-  collectAt(state.playerRow, state.playerCol);
+  collectAt(getPlayerRow(), getPlayerCol());
 
   updateHud();
   renderGrid();
   // Snap pan to center on player at level start (instant, not animated).
   const vp = getViewportSize();
-  const cc = cellCenterPx(state.playerRow, state.playerCol);
+  const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
-  ruleset.apply?.(state);
+  ruleset.apply?.(getState());
   hideOverlay();
 }
 
@@ -1866,15 +1835,7 @@ const SAVE_KEY = 'miningCrawler.runState';
 const LIFETIME_GOLD_KEY = 'miningCrawler.lifetimeGold';
 
 function saveRun() {
-  const data = {
-    level: state.level,
-    stashGold: state.stashGold,
-    items: { ...state.items },
-    levelsSinceMerchant: state.levelsSinceMerchant,
-    rulesetId: state.rulesetId,
-    hp: state.hp,
-  };
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  localStorage.setItem(SAVE_KEY, JSON.stringify(getSavePayload()));
 }
 
 function loadRun() {
@@ -1899,13 +1860,7 @@ function getLifetimeGold() {
 function startGame() {
   document.body.classList.add('in-run');
   clearSave();
-  state.level = 1;
-  state.hp = MAX_HP;
-  state.gold = 0;
-  state.stashGold = 0;
-  state.levelsSinceMerchant = 0;
-  state.items = { potion: 1, scanner: 1, pickaxe: 1, row: 1, column: 1, cross: 1 };
-  state.rulesetId = null;
+  resetForNewRun();
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1915,20 +1870,7 @@ function startGame() {
 
 function resumeGame(save) {
   document.body.classList.add('in-run');
-  state.level = save.level;
-  state.gold = 0;
-  state.stashGold = save.stashGold;
-  state.levelsSinceMerchant = save.levelsSinceMerchant;
-  state.items = { ...save.items };
-  // Back-compat: saves from before line-reveal items lack these keys.
-  state.items.row = state.items.row ?? 0;
-  state.items.column = state.items.column ?? 0;
-  state.items.cross = state.items.cross ?? 0;
-  // Back-compat: saves from before the ruleset framework lack this key.
-  // Leaving it null lets initLevel roll fresh (regular on level <13, uniform on >=13).
-  state.rulesetId = save.rulesetId ?? null;
-  // Back-compat: saves from before persistent HP lack this key; treat as full HP.
-  state.hp = save.hp ?? MAX_HP;
+  applySavePayload(save);
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1937,17 +1879,17 @@ function resumeGame(save) {
 }
 
 function nextLevel() {
-  state.stashGold += state.gold;
-  state.gold = 0;
-  state.level++;
-  if (state.biomeOverrides?.freezePityTick) {
+  moveGoldToStash();
+  incrementLevel();
+  const overrides = getBiomeOverrides();
+  if (overrides?.freezePityTick) {
     // Freeze pity timer: do not increment levelsSinceMerchant across this level.
-  } else if (state.merchant) {
-    state.levelsSinceMerchant = 0;
+  } else if (getMerchant()) {
+    setLevelsSinceMerchant(0);
   } else {
-    state.levelsSinceMerchant++;
+    incrementLevelsSinceMerchant();
   }
-  state.rulesetId = null;
+  setRulesetId(null);
   saveRun();
   initLevel();
   updatePlayerSprite(true);
@@ -1956,8 +1898,8 @@ function nextLevel() {
 }
 
 function retryLevel() {
-  state.gold = 0;
-  state.hp = MAX_HP;
+  resetLevelGold();
+  fullHeal();
   initLevel();
   updatePlayerSprite(true);
   hurtFlashToken++;
@@ -1974,8 +1916,8 @@ function onItemButtonClick(itemKey) {
     btn._suppressNextClick = false;
     return;
   }
-  if (state.gameOver || state.busy) return;
-  if (state.items[itemKey] <= 0) return;
+  if (getGameOver() || getBusy()) return;
+  if (getItemCount(itemKey) <= 0) return;
 
   if (itemKey === 'potion') {
     useItemPotion();
@@ -2003,20 +1945,20 @@ function onItemButtonClick(itemKey) {
   }
 
   // Pickaxe: toggle targeting mode.
-  if (state.activeItem === itemKey) {
-    state.activeItem = null;
+  if (getActiveItem() === itemKey) {
+    setActiveItem(null);
   } else {
-    state.activeItem = itemKey;
+    setActiveItem(itemKey);
   }
   updateItemBar();
   renderGrid();
 }
 
 function useItemPotion() {
-  if (state.hp >= MAX_HP) return;
-  if (state.items.potion <= 0) return;
-  state.items.potion--;
-  state.hp = Math.min(MAX_HP, state.hp + 1);
+  if (getHp() >= MAX_HP) return;
+  if (getItemCount('potion') <= 0) return;
+  consumeItem('potion');
+  healPlayer(1);
   playSfx('drink');
   updateHud();
 }
@@ -2024,15 +1966,15 @@ function useItemPotion() {
 // True if the 3×3 around the player contains at least one unrevealed,
 // non-wall cell — i.e., scanning would actually do something.
 function scannerHasTarget() {
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
       const r = pr + dr;
       const c = pc + dc;
-      if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) continue;
-      if (state.revealed[r][c]) continue;
-      if (state.grid[r][c].type === 'wall') continue;
+      if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) continue;
+      if (getRevealed()[r][c]) continue;
+      if (getGrid()[r][c].type === 'wall') continue;
       return true;
     }
   }
@@ -2042,12 +1984,12 @@ function scannerHasTarget() {
 // True if the player's row contains at least one unrevealed, non-wall cell
 // within wall-bounded range on either side.
 function rowHasTarget() {
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   let found = false;
   const check = (r, c) => {
     if (found) return false;
-    if (!state.revealed[r][c]) {
+    if (!getRevealed()[r][c]) {
       found = true;
       return false;
     }
@@ -2060,12 +2002,12 @@ function rowHasTarget() {
 // True if the player's column contains at least one unrevealed, non-wall
 // cell within wall-bounded range up or down.
 function columnHasTarget() {
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   let found = false;
   const check = (r, c) => {
     if (found) return false;
-    if (!state.revealed[r][c]) {
+    if (!getRevealed()[r][c]) {
       found = true;
       return false;
     }
@@ -2078,12 +2020,12 @@ function columnHasTarget() {
 // True if any of the four diagonal rays from the player contains at least
 // one unrevealed, non-wall cell within wall-bounded range.
 function crossHasTarget() {
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   let found = false;
   const check = (r, c) => {
     if (found) return false;
-    if (!state.revealed[r][c]) {
+    if (!getRevealed()[r][c]) {
       found = true;
       return false;
     }
@@ -2099,23 +2041,23 @@ function crossHasTarget() {
 // harmlessly (red cross, no HP cost); walls stay walls; empty cells reveal
 // and cascade on 0 adjacency via revealCell.
 function useItemScanner() {
-  if (state.items.scanner <= 0) return;
+  if (getItemCount('scanner') <= 0) return;
   if (!scannerHasTarget()) return;
-  state.items.scanner--;
+  consumeItem('scanner');
 
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
       const r = pr + dr;
       const c = pc + dc;
-      if (r < 0 || r >= state.rows || c < 0 || c >= state.cols) continue;
-      if (state.revealed[r][c]) continue;
-      const cell = state.grid[r][c];
+      if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) continue;
+      if (getRevealed()[r][c]) continue;
+      const cell = getGrid()[r][c];
       if (cell.type === 'wall') continue;
       if (cell.type === 'gas') {
         detonateGas(r, c);
-        state.revealed[r][c] = true;
+        getRevealed()[r][c] = true;
       } else {
         revealCell(r, c);
       }
@@ -2134,11 +2076,11 @@ function useItemScanner() {
 // walkRay itself.
 function revealAlongRay(startR, startC, dR, dC) {
   walkRay(startR, startC, dR, dC, (r, c) => {
-    if (state.revealed[r][c]) return true;
-    const cell = state.grid[r][c];
+    if (getRevealed()[r][c]) return true;
+    const cell = getGrid()[r][c];
     if (cell.type === 'gas') {
       detonateGas(r, c);
-      state.revealed[r][c] = true;
+      getRevealed()[r][c] = true;
     } else {
       revealCell(r, c);
     }
@@ -2149,11 +2091,11 @@ function revealAlongRay(startR, startC, dR, dC) {
 // Reveal the player's row — two rays (west, east), stop at walls, gas
 // detonates harmlessly, empty cells may cascade via revealCell.
 function useItemRow() {
-  if (state.items.row <= 0) return;
+  if (getItemCount('row') <= 0) return;
   if (!rowHasTarget()) return;
-  state.items.row--;
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  consumeItem('row');
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   revealAlongRay(pr, pc, 0, -1);
   revealAlongRay(pr, pc, 0, 1);
   playSfx('scan');
@@ -2164,11 +2106,11 @@ function useItemRow() {
 
 // Reveal the player's column — two rays (north, south), stop at walls.
 function useItemColumn() {
-  if (state.items.column <= 0) return;
+  if (getItemCount('column') <= 0) return;
   if (!columnHasTarget()) return;
-  state.items.column--;
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  consumeItem('column');
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   revealAlongRay(pr, pc, -1, 0);
   revealAlongRay(pr, pc, 1, 0);
   playSfx('scan');
@@ -2179,11 +2121,11 @@ function useItemColumn() {
 
 // Reveal the four diagonals from the player — four rays, stop at walls.
 function useItemCross() {
-  if (state.items.cross <= 0) return;
+  if (getItemCount('cross') <= 0) return;
   if (!crossHasTarget()) return;
-  state.items.cross--;
-  const pr = state.playerRow;
-  const pc = state.playerCol;
+  consumeItem('cross');
+  const pr = getPlayerRow();
+  const pc = getPlayerCol();
   revealAlongRay(pr, pc, -1, -1);
   revealAlongRay(pr, pc, -1, 1);
   revealAlongRay(pr, pc, 1, -1);
@@ -2196,8 +2138,8 @@ function useItemCross() {
 
 // Cancel any active targeting mode on Escape.
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && state.activeItem) {
-    state.activeItem = null;
+  if (e.key === 'Escape' && getActiveItem()) {
+    setActiveItem(null);
     updateItemBar();
     renderGrid();
   }

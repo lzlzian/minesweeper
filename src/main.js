@@ -18,6 +18,7 @@ import {
 } from './state.js';
 
 import { resumeAudioCtx, playSfx, startBgm, setMusicOn as setAudioMusicOn, setSfxOn as setSfxOnAudio } from './audio.js';
+import { settings, saveSettings } from './settings.js';
 
 // ============================================================
 // RULESETS
@@ -370,24 +371,6 @@ window.addEventListener('resize', () => {
   setPan(pan.x, pan.y); // re-clamp under new viewport size
   renderMinimap();
 });
-
-// ============================================================
-// SETTINGS
-// ============================================================
-
-const SETTINGS_KEY = 'miningCrawler.settings';
-
-function loadSettings() {
-  try {
-    return { musicOn: true, sfxOn: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
-  } catch { return { musicOn: true, sfxOn: true }; }
-}
-
-function saveSettings() {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-const settings = loadSettings();
 
 // Sync audio module with persisted settings so its internal flags match on startup.
 setAudioMusicOn(settings.musicOn);

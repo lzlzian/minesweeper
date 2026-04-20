@@ -55,6 +55,48 @@ test('resetForNewRun restores defaults', () => {
   assertEq(getStashGold(), 0);
 });
 
+// -- rulesets --
+import { weightedPick, gridSizeForLevel, anchorCountForSize } from '../src/rulesets.js';
+
+test('weightedPick returns first item when random is 0', () => {
+  const orig = Math.random;
+  Math.random = () => 0;
+  const result = weightedPick([
+    { id: 'a', weight: 1 },
+    { id: 'b', weight: 9 },
+  ]);
+  Math.random = orig;
+  assertEq(result.id, 'a');
+});
+
+test('weightedPick returns last item when random is ~1', () => {
+  const orig = Math.random;
+  Math.random = () => 0.9999;
+  const result = weightedPick([
+    { id: 'a', weight: 1 },
+    { id: 'b', weight: 9 },
+  ]);
+  Math.random = orig;
+  assertEq(result.id, 'b');
+});
+
+test('gridSizeForLevel curve', () => {
+  const s1 = gridSizeForLevel(1);
+  const s20 = gridSizeForLevel(20);
+  if (s1 < 10 || s1 > 12) throw new Error(`level 1 size unexpected: ${s1}`);
+  if (s20 < s1) throw new Error(`level 20 should be >= level 1`);
+});
+
+test('anchorCountForSize monotonic non-decreasing', () => {
+  const sizes = [10, 12, 14, 16, 18, 20];
+  let prev = -1;
+  for (const s of sizes) {
+    const n = anchorCountForSize(s);
+    if (n < prev) throw new Error(`anchor count decreased at size ${s}`);
+    prev = n;
+  }
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

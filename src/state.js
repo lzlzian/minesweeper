@@ -30,6 +30,7 @@ const state = {
   fountain: null,
   rulesetId: null,
   biomeOverrides: null,
+  startCornerIdx: 0,
 };
 
 // Escape hatch — returns the singleton. Prefer typed accessors.
@@ -58,6 +59,7 @@ export function getMerchant() { return state.merchant; }
 export function getFountain() { return state.fountain; }
 export function getRulesetId() { return state.rulesetId; }
 export function getBiomeOverrides() { return state.biomeOverrides; }
+export function getStartCornerIdx() { return state.startCornerIdx; }
 
 // ----- Semantic mutators -----
 export function addGold(amount) { state.gold += amount; }
@@ -119,6 +121,7 @@ export function setRows(n) { state.rows = n; }
 export function setCols(n) { state.cols = n; }
 export function setRulesetId(id) { state.rulesetId = id; }
 export function setBiomeOverrides(o) { state.biomeOverrides = o; }
+export function setStartCornerIdx(i) { state.startCornerIdx = i; }
 export function setItems(items) { state.items = items; }
 
 // ----- Lifecycle -----

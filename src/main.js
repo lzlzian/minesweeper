@@ -5,14 +5,14 @@ import {
   getGrid, getRevealed, getFlagged, getGameOver, getBusy,
   getPlayerRow, getPlayerCol, getExit, getItems, getItemCount,
   getActiveItem, getLevelsSinceMerchant, getMerchant, getFountain,
-  getRulesetId, getBiomeOverrides,
+  getRulesetId, getBiomeOverrides, getStartCornerIdx,
   addGold, spendGold, moveGoldToStash, damagePlayer, healPlayer,
   addItem, consumeItem,
   setPlayerPosition, setGrid, setRevealed, setFlagged, setGameOver,
   setBusy, setExit, setActiveItem, setLevelsSinceMerchant,
   incrementLevelsSinceMerchant, setMerchant, setFountain, setLevel,
   incrementLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
-  setItems,
+  setStartCornerIdx, setItems,
   resetForNewRun, resetLevelGold, fullHeal,
   getSavePayload, applySavePayload,
 } from './state.js';
@@ -44,7 +44,7 @@ function prepareTreasureChamber(state) {
 
 function applyTreasureChamber(state) {
   // Compute the two off-diagonal corners (neither player start nor exit).
-  const playerIdx = state._startCornerIdx;
+  const playerIdx = state.startCornerIdx;
   const exitIdx = 3 - playerIdx;
   const offDiagonalIdxs = [0, 1, 2, 3].filter(i => i !== playerIdx && i !== exitIdx);
   const cornerCoords = [
@@ -802,7 +802,7 @@ function pickPlayerStart() {
     { r: getRows() - 1, c: getCols() - 1 },
   ];
   const cornerIdx = Math.floor(Math.random() * 4);
-  state._startCornerIdx = cornerIdx;
+  setStartCornerIdx(cornerIdx);
   const anchor = corners[cornerIdx];
   return findNearCorner(anchor.r, anchor.c);
 }
@@ -815,7 +815,7 @@ function pickExit(playerR, playerC) {
     { r: getRows() - 1, c: 0 },
     { r: getRows() - 1, c: getCols() - 1 },
   ];
-  const oppositeIdx = 3 - state._startCornerIdx;
+  const oppositeIdx = 3 - getStartCornerIdx();
   const anchor = corners[oppositeIdx];
   const found = findNearCorner(anchor.r, anchor.c);
   if (!found) return null;
@@ -826,9 +826,9 @@ function pickExit(playerR, playerC) {
 
 function pickMerchantCorner() {
   // Pick one of the two corners not used by player or exit.
-  // Corner indices: 0=TL, 1=TR, 2=BL, 3=BR. Player = state._startCornerIdx,
-  // exit = 3 - state._startCornerIdx. Off-diagonal corners are the other two.
-  const playerIdx = state._startCornerIdx;
+  // Corner indices: 0=TL, 1=TR, 2=BL, 3=BR. Player = getStartCornerIdx(),
+  // exit = 3 - getStartCornerIdx(). Off-diagonal corners are the other two.
+  const playerIdx = getStartCornerIdx();
   const exitIdx = 3 - playerIdx;
   const offDiagonal = [0, 1, 2, 3].filter(i => i !== playerIdx && i !== exitIdx);
   const pickedIdx = offDiagonal[Math.floor(Math.random() * offDiagonal.length)];

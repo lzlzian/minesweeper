@@ -32,7 +32,7 @@ for (const [name, path] of Object.entries(sfxPaths)) {
     .then(r => r.arrayBuffer())
     .then(buf => audioCtx.decodeAudioData(buf))
     .then(decoded => { sfxBuffers[name] = decoded; })
-    .catch(() => {});
+    .catch(err => console.warn(`SFX load failed: ${name} (${path})`, err));
 }
 
 let sfxEnabled = true;

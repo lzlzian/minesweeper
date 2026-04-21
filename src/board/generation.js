@@ -7,13 +7,13 @@ import {
 } from '../state.js';
 import { anchorCountForSize } from '../rulesets.js';
 
-// Callback injections for functions that still live in main.js.
-// Removed as their owners migrate:
-//   renderGridImpl  — Task 9  (renderGrid moves to ui/render.js)
-//   revealCellImpl  — Task 17 (revealCell moves to gameplay/interaction.js)
-let renderGridImpl = () => {};
-let revealCellImpl = () => {};
-export function setRenderGridImpl(fn) { renderGridImpl = fn; }
+// Callback injection for revealCell, which still lives in main.js.
+// Removed in Task 17 when revealCell moves to gameplay/interaction.js.
+// Throws if placeAnchors runs before the callback is wired — preferable to a
+// silent no-op that would leave anchor cells unrevealed.
+let revealCellImpl = () => {
+  throw new Error('board/generation: revealCell not installed — call setRevealCell at bootstrap');
+};
 export function setRevealCell(fn) { revealCellImpl = fn; }
 
 const ANCHOR_MIN_DIST_START = 4;
@@ -405,6 +405,4 @@ export function applyTreasureChamber(state) {
     // Pre-reveal the chest cell.
     getRevealed()[r][c] = true;
   }
-
-  renderGridImpl();
 }

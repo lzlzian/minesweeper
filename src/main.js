@@ -31,7 +31,7 @@ import {
   placeWallClumps, countAdjacentGas, generateGrid,
   placeGoldVeins, placeItemDrops, placeAnchors,
   cleanMerchantCell, carvePath,
-  setRenderGridImpl, setRevealCell,
+  setRevealCell,
 } from './board/generation.js';
 
 // Cell object shape:
@@ -285,9 +285,8 @@ window.addEventListener('resize', () => {
 setAudioMusicOn(settings.musicOn);
 setSfxOnAudio(settings.sfxOn);
 
-// Callbacks for functions that still live in main.js — removed as owners migrate.
-setRenderGridImpl(renderGrid);    // Task 9 moves renderGrid to ui/render.js
-setRevealCell(revealCell);        // Task 17 moves revealCell to gameplay/interaction.js
+// Callback for revealCell, removed in Task 17 when revealCell moves out of main.js.
+setRevealCell(revealCell);
 
 document.addEventListener('touchstart', resumeAudioCtx, { once: true });
 document.addEventListener('click', resumeAudioCtx, { once: true });
@@ -1128,7 +1127,10 @@ function initLevel() {
   const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
   // Ruleset hooks receive the raw state singleton — see RULESETS contract.
+  // Hooks may mutate the grid (e.g., treasure_chamber overwrites corner cells),
+  // so re-render after they run.
   ruleset.apply?.(getState());
+  renderGrid();
   hideOverlay();
 }
 

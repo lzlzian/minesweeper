@@ -25,6 +25,10 @@ import {
   minimapEl, tooltipEl, pauseBtn, itemButtons, itemCounts,
 } from './ui/dom.js';
 import {
+  renderGrid, updateHud, updateItemBar, updatePlayerSprite,
+  flashHurtFace, spawnPickupFloat, resetHurtFlash, PICKUP_EMOJI,
+} from './ui/render.js';
+import {
   RULESETS, weightedPick, resolveRuleset,
   gridSizeForLevel, anchorCountForSize,
 } from './rulesets.js';
@@ -101,7 +105,7 @@ function clampPan(x, y) {
   return { x: clampedX, y: clampedY };
 }
 
-function applyPan() {
+export function applyPan() {
   board.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
 }
 
@@ -161,7 +165,7 @@ function autoRecenterOnPlayer() {
   }
 }
 
-function renderMinimap() {
+export function renderMinimap() {
   if (!getGrid() || !getGrid().length) return;
   const dpr = window.devicePixelRatio || 1;
   const cssSize = 100;
@@ -279,142 +283,6 @@ function setSfxOn(value) {
 // ============================================================
 // RENDERING
 // ============================================================
-
-function renderGrid() {
-  gridContainer.innerHTML = '';
-  gridContainer.style.gridTemplateColumns = `repeat(${getCols()}, 40px)`;
-
-  for (let r = 0; r < getRows(); r++) {
-    for (let c = 0; c < getCols(); c++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.dataset.row = r;
-      cell.dataset.col = c;
-
-      const isAdjacent = isAdjacentToPlayer(r, c);
-
-      if (getGrid()[r][c].type === 'wall') {
-        cell.classList.add('wall');
-      } else {
-        const isExit = (r === getExit().r && c === getExit().c);
-        if (isExit) cell.classList.add('exit');
-
-        const isMerchant = getMerchant() && r === getMerchant().r && c === getMerchant().c;
-        if (isMerchant) cell.classList.add('merchant');
-
-        if (getRevealed()[r][c]) {
-          const g = getGrid()[r][c];
-          cell.classList.add('revealed');
-
-          if (g.type === 'gas') cell.classList.add('gas');
-          else if (g.type === 'detonated') cell.classList.add('detonated');
-          else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
-
-          if (g.type === 'detonated') {
-            const numSpan = document.createElement('span');
-            numSpan.className = 'num cross';
-            numSpan.textContent = '✖';
-            cell.appendChild(numSpan);
-          } else if (g.adjacent > 0 && g.type !== 'gas') {
-            cell.dataset.adjacent = g.adjacent;
-            const numSpan = document.createElement('span');
-            numSpan.className = 'num';
-            numSpan.textContent = g.adjacent;
-            cell.appendChild(numSpan);
-          }
-
-          let icon = null;
-          if (g.type === 'gas') icon = '💀';
-          else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
-          else if (g.type === 'fountain' && getFountain() && !getFountain().used) icon = '💧';
-          else if (g.item) icon = PICKUP_EMOJI[g.item];
-
-          if (icon) {
-            const iconSpan = document.createElement('span');
-            iconSpan.className = 'icon';
-            iconSpan.textContent = icon;
-            cell.appendChild(iconSpan);
-          }
-        } else if (getFlagged()[r][c]) {
-          cell.classList.add('flagged');
-          if (isAdjacent) cell.classList.add('reachable');
-        } else {
-          if (isAdjacent) cell.classList.add('reachable');
-        }
-      }
-
-      gridContainer.appendChild(cell);
-    }
-  }
-  updatePlayerSprite();
-  applyPan();
-  renderMinimap();
-}
-
-let hurtFlashToken = 0;
-function flashHurtFace() {
-  playerSprite.textContent = '🤕';
-  const token = ++hurtFlashToken;
-  setTimeout(() => {
-    if (token === hurtFlashToken) {
-      playerSprite.textContent = '🙂';
-    }
-  }, 1000);
-}
-
-function updatePlayerSprite(instant = false) {
-  const x = BOARD_PAD + getPlayerCol() * (CELL_SIZE + CELL_GAP);
-  const y = BOARD_PAD + getPlayerRow() * (CELL_SIZE + CELL_GAP);
-  if (instant) {
-    const prev = playerSprite.style.transition;
-    playerSprite.style.transition = 'none';
-    playerSprite.style.transform = `translate(${x}px, ${y}px)`;
-    // Force reflow so the transition reset takes effect before re-enabling
-    playerSprite.offsetHeight;
-    playerSprite.style.transition = prev;
-  } else {
-    playerSprite.style.transform = `translate(${x}px, ${y}px)`;
-  }
-}
-
-const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️', row: '↔️', column: '↕️', cross: '✖️' };
-
-function spawnPickupFloat(r, c, label, extraClass) {
-  const x = BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
-  const y = BOARD_PAD + r * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
-  const el = document.createElement('div');
-  el.className = 'pickup-float' + (extraClass ? ' ' + extraClass : '');
-  el.textContent = label;
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
-  board.appendChild(el);
-  el.addEventListener('animationend', () => el.remove());
-}
-
-function updateHud() {
-  goldDisplay.textContent = `💰 ${getGold()} · Stash: ${getStashGold()}`;
-  hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, MAX_HP - getHp()));
-  levelDisplay.textContent = `Level ${getLevel()}`;
-  updateItemBar();
-}
-
-function updateItemBar() {
-  for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
-    const count = getItemCount(key);
-    itemCounts[key].textContent = count;
-
-    const btn = itemButtons[key];
-    let disabled = count === 0 || getGameOver();
-    if (key === 'potion' && getHp() >= MAX_HP) disabled = true;
-    if (key === 'scanner' && !scannerHasTarget()) disabled = true;
-    if (key === 'row' && !rowHasTarget()) disabled = true;
-    if (key === 'column' && !columnHasTarget()) disabled = true;
-    if (key === 'cross' && !crossHasTarget()) disabled = true;
-    btn.disabled = disabled;
-
-    btn.classList.toggle('active', getActiveItem() === key);
-  }
-}
 
 function showOverlay(html) {
   overlayContent.innerHTML = html;
@@ -609,7 +477,7 @@ function debugRevealAll() {
   renderGrid();
 }
 
-function isAdjacentToPlayer(r, c) {
+export function isAdjacentToPlayer(r, c) {
   const dr = Math.abs(r - getPlayerRow());
   const dc = Math.abs(c - getPlayerCol());
   if (dr === 0 && dc === 0) return false;
@@ -1206,7 +1074,7 @@ function startGame() {
   resetForNewRun();
   initLevel();
   updatePlayerSprite(true);
-  hurtFlashToken++;
+  resetHurtFlash();
   playerSprite.textContent = '🙂';
   startBgm();
 }
@@ -1216,7 +1084,7 @@ function resumeGame(save) {
   applySavePayload(save);
   initLevel();
   updatePlayerSprite(true);
-  hurtFlashToken++;
+  resetHurtFlash();
   playerSprite.textContent = '🙂';
   startBgm();
 }
@@ -1236,7 +1104,7 @@ function nextLevel() {
   saveRun();
   initLevel();
   updatePlayerSprite(true);
-  hurtFlashToken++;
+  resetHurtFlash();
   playerSprite.textContent = '🙂';
 }
 
@@ -1245,7 +1113,7 @@ function retryLevel() {
   fullHeal();
   initLevel();
   updatePlayerSprite(true);
-  hurtFlashToken++;
+  resetHurtFlash();
   playerSprite.textContent = '🙂';
 }
 
@@ -1308,7 +1176,7 @@ function useItemPotion() {
 
 // True if the 3×3 around the player contains at least one unrevealed,
 // non-wall cell — i.e., scanning would actually do something.
-function scannerHasTarget() {
+export function scannerHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   for (let dr = -1; dr <= 1; dr++) {
@@ -1326,7 +1194,7 @@ function scannerHasTarget() {
 
 // True if the player's row contains at least one unrevealed, non-wall cell
 // within wall-bounded range on either side.
-function rowHasTarget() {
+export function rowHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;
@@ -1344,7 +1212,7 @@ function rowHasTarget() {
 
 // True if the player's column contains at least one unrevealed, non-wall
 // cell within wall-bounded range up or down.
-function columnHasTarget() {
+export function columnHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;
@@ -1362,7 +1230,7 @@ function columnHasTarget() {
 
 // True if any of the four diagonal rays from the player contains at least
 // one unrevealed, non-wall cell within wall-bounded range.
-function crossHasTarget() {
+export function crossHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;

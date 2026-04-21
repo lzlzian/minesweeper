@@ -20,6 +20,11 @@ import {
 import { resumeAudioCtx, playSfx, startBgm, setMusicOn as setAudioMusicOn, setSfxOn as setSfxOnAudio } from './audio.js';
 import { settings, saveSettings } from './settings.js';
 import {
+  board, gridContainer, goldDisplay, hpDisplay, levelDisplay,
+  playerSprite, overlay, overlayContent, itemBar, viewportEl,
+  minimapEl, tooltipEl, pauseBtn, itemButtons, itemCounts,
+} from './ui/dom.js';
+import {
   RULESETS, weightedPick, resolveRuleset,
   gridSizeForLevel, anchorCountForSize,
 } from './rulesets.js';
@@ -40,36 +45,6 @@ import {
 // 'item' = if non-null, the item is visible on the revealed cell and gets
 // picked up when the player steps onto the cell (not merely on reveal).
 
-// ============================================================
-// UI REFERENCES
-// ============================================================
-
-const board = document.getElementById('board');
-const gridContainer = document.getElementById('grid-container');
-const goldDisplay = document.getElementById('gold-display');
-const hpDisplay = document.getElementById('hp-display');
-const levelDisplay = document.getElementById('level-display');
-const playerSprite = document.getElementById('player-sprite');
-const overlay = document.getElementById('overlay');
-const overlayContent = document.getElementById('overlay-content');
-const itemBar = document.getElementById('item-bar');
-const itemButtons = {
-  potion: document.getElementById('item-potion'),
-  scanner: document.getElementById('item-scanner'),
-  pickaxe: document.getElementById('item-pickaxe'),
-  row: document.getElementById('item-row'),
-  column: document.getElementById('item-column'),
-  cross: document.getElementById('item-cross'),
-};
-const itemCounts = {
-  potion: document.getElementById('item-potion-count'),
-  scanner: document.getElementById('item-scanner-count'),
-  pickaxe: document.getElementById('item-pickaxe-count'),
-  row: document.getElementById('item-row-count'),
-  column: document.getElementById('item-column-count'),
-  cross: document.getElementById('item-cross-count'),
-};
-
 const ITEM_TOOLTIPS = {
   potion:  { name: 'Potion',      desc: 'Restore 1 ❤️.',                                         howto: 'Tap to use instantly.' },
   scanner: { name: 'Scanner',     desc: 'Reveal the 3×3 around you.',                             howto: 'Tap to use instantly.' },
@@ -82,9 +57,6 @@ const ITEM_TOOLTIPS = {
 // ============================================================
 // VIEWPORT / PAN
 // ============================================================
-
-const viewportEl = document.getElementById('viewport');
-const minimapEl = document.getElementById('minimap');
 
 const pan = {
   x: 0,
@@ -1644,7 +1616,6 @@ viewportEl.addEventListener('contextmenu', (e) => {
 // ITEM TOOLTIPS
 // ============================================================
 
-const tooltipEl = document.getElementById('tooltip');
 const TOOLTIP_HOVER_DELAY_MS = 300;
 const TOOLTIP_LONG_PRESS_MS = 400;
 const TOOLTIP_MOVE_THRESHOLD = 8;
@@ -1779,7 +1750,7 @@ for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
   attachTooltip(itemButtons[key], key);
 }
 
-document.getElementById('pause-btn').addEventListener('click', renderPauseMenu);
+pauseBtn.addEventListener('click', renderPauseMenu);
 
 // Module-scope doesn't expose names to inline onclick= handlers in overlay
 // HTML templates. Bridge the ones used by those templates until overlay

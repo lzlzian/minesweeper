@@ -9,19 +9,11 @@
 // - apply runs AFTER level generation (may mutate the finished board/entities).
 // Both hooks are optional.
 
-// Treasure chamber hooks live in main.js (for now — they depend on
-// countAdjacentGas which extracts in Task 7). Injected via installRulesetHooks.
-let prepareTreasureChamberImpl = () => {};
-let applyTreasureChamberImpl = () => { throw new Error('ruleset apply not installed'); };
-
-export function installRulesetHooks({ prepareTreasureChamber, applyTreasureChamber }) {
-  prepareTreasureChamberImpl = prepareTreasureChamber;
-  applyTreasureChamberImpl = applyTreasureChamber;
-}
+import { prepareTreasureChamber, applyTreasureChamber } from './board/generation.js';
 
 export const RULESETS = [
-  { id: 'regular',          weight: 9, prepare: null,                             apply: null },
-  { id: 'treasure_chamber', weight: 1, prepare: (state) => prepareTreasureChamberImpl(state), apply: (state) => applyTreasureChamberImpl(state) },
+  { id: 'regular',          weight: 9, prepare: null,                   apply: null },
+  { id: 'treasure_chamber', weight: 1, prepare: prepareTreasureChamber, apply: applyTreasureChamber },
 ];
 
 export function weightedPick(list) {

@@ -142,6 +142,29 @@ test('findPath returns a path ending at target', () => {
   if (last.r !== 2 || last.c !== 2) throw new Error('path does not end at target');
 });
 
+// -- board generation --
+import { countAdjacentGas } from '../src/board/generation.js';
+
+test('countAdjacentGas counts gas and detonated neighbors', () => {
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[0][0].type = 'gas';
+  g[0][1].type = 'detonated';
+  g[2][2].type = 'gas';
+  setGrid(g);
+  // Center (1,1) has 3 gas-ish neighbors
+  assertEq(countAdjacentGas(1, 1), 3);
+});
+
+test('countAdjacentGas handles grid edges', () => {
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[0][1].type = 'gas';
+  setGrid(g);
+  // Corner (0,0) has one gas neighbor
+  assertEq(countAdjacentGas(0, 0), 1);
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

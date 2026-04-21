@@ -27,6 +27,7 @@ import {
 import {
   renderGrid, updateHud, updateItemBar, updatePlayerSprite,
   flashHurtFace, spawnPickupFloat, resetHurtFlash, PICKUP_EMOJI,
+  setRenderDeps,
 } from './ui/render.js';
 import {
   RULESETS, weightedPick, resolveRuleset,
@@ -105,7 +106,7 @@ function clampPan(x, y) {
   return { x: clampedX, y: clampedY };
 }
 
-export function applyPan() {
+function applyPan() {
   board.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
 }
 
@@ -165,7 +166,7 @@ function autoRecenterOnPlayer() {
   }
 }
 
-export function renderMinimap() {
+function renderMinimap() {
   if (!getGrid() || !getGrid().length) return;
   const dpr = window.devicePixelRatio || 1;
   const cssSize = 100;
@@ -263,6 +264,18 @@ setSfxOnAudio(settings.sfxOn);
 
 // Callback for revealCell, removed in Task 17 when revealCell moves out of main.js.
 setRevealCell(revealCell);
+
+// Dependencies render.js needs that haven't moved out of main.js yet.
+// Removed as each owner migrates: view (Task 10), items (Task 16), interaction (Task 17).
+setRenderDeps({
+  isAdjacentToPlayer,
+  applyPan,
+  renderMinimap,
+  scannerHasTarget,
+  rowHasTarget,
+  columnHasTarget,
+  crossHasTarget,
+});
 
 document.addEventListener('touchstart', resumeAudioCtx, { once: true });
 document.addEventListener('click', resumeAudioCtx, { once: true });
@@ -477,7 +490,7 @@ function debugRevealAll() {
   renderGrid();
 }
 
-export function isAdjacentToPlayer(r, c) {
+function isAdjacentToPlayer(r, c) {
   const dr = Math.abs(r - getPlayerRow());
   const dc = Math.abs(c - getPlayerCol());
   if (dr === 0 && dc === 0) return false;
@@ -1176,7 +1189,7 @@ function useItemPotion() {
 
 // True if the 3×3 around the player contains at least one unrevealed,
 // non-wall cell — i.e., scanning would actually do something.
-export function scannerHasTarget() {
+function scannerHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   for (let dr = -1; dr <= 1; dr++) {
@@ -1194,7 +1207,7 @@ export function scannerHasTarget() {
 
 // True if the player's row contains at least one unrevealed, non-wall cell
 // within wall-bounded range on either side.
-export function rowHasTarget() {
+function rowHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;
@@ -1212,7 +1225,7 @@ export function rowHasTarget() {
 
 // True if the player's column contains at least one unrevealed, non-wall
 // cell within wall-bounded range up or down.
-export function columnHasTarget() {
+function columnHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;
@@ -1230,7 +1243,7 @@ export function columnHasTarget() {
 
 // True if any of the four diagonal rays from the player contains at least
 // one unrevealed, non-wall cell within wall-bounded range.
-export function crossHasTarget() {
+function crossHasTarget() {
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   let found = false;

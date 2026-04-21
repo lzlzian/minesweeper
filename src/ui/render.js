@@ -9,10 +9,40 @@ import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
   playerSprite, itemButtons, itemCounts, board,
 } from './dom.js';
-import {
-  isAdjacentToPlayer, applyPan, renderMinimap,
-  scannerHasTarget, rowHasTarget, columnHasTarget, crossHasTarget,
-} from '../main.js';
+
+// Callback injections for functions whose owners haven't been extracted yet.
+// Removed as the modules migrate:
+//   isAdjacentToPlayer        — Task 17 (gameplay/interaction.js)
+//   applyPan, renderMinimap   — Task 10 (ui/view.js)
+//   scanner/row/column/crossHasTarget — Task 16 (gameplay/items.js)
+const noop = () => {};
+const alwaysTrue = () => true;
+const falseIfUnset = () => false;
+let isAdjacentToPlayerImpl = falseIfUnset;
+let applyPanImpl = noop;
+let renderMinimapImpl = noop;
+let scannerHasTargetImpl = alwaysTrue;
+let rowHasTargetImpl = alwaysTrue;
+let columnHasTargetImpl = alwaysTrue;
+let crossHasTargetImpl = alwaysTrue;
+
+export function setRenderDeps({
+  isAdjacentToPlayer,
+  applyPan,
+  renderMinimap,
+  scannerHasTarget,
+  rowHasTarget,
+  columnHasTarget,
+  crossHasTarget,
+}) {
+  if (isAdjacentToPlayer) isAdjacentToPlayerImpl = isAdjacentToPlayer;
+  if (applyPan) applyPanImpl = applyPan;
+  if (renderMinimap) renderMinimapImpl = renderMinimap;
+  if (scannerHasTarget) scannerHasTargetImpl = scannerHasTarget;
+  if (rowHasTarget) rowHasTargetImpl = rowHasTarget;
+  if (columnHasTarget) columnHasTargetImpl = columnHasTarget;
+  if (crossHasTarget) crossHasTargetImpl = crossHasTarget;
+}
 
 export const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️', row: '↔️', column: '↕️', cross: '✖️' };
 
@@ -27,7 +57,7 @@ export function renderGrid() {
       cell.dataset.row = r;
       cell.dataset.col = c;
 
-      const isAdjacent = isAdjacentToPlayer(r, c);
+      const isAdjacent = isAdjacentToPlayerImpl(r, c);
 
       if (getGrid()[r][c].type === 'wall') {
         cell.classList.add('wall');
@@ -83,8 +113,8 @@ export function renderGrid() {
     }
   }
   updatePlayerSprite();
-  applyPan();
-  renderMinimap();
+  applyPanImpl();
+  renderMinimapImpl();
 }
 
 let hurtFlashToken = 0;
@@ -144,10 +174,10 @@ export function updateItemBar() {
     const btn = itemButtons[key];
     let disabled = count === 0 || getGameOver();
     if (key === 'potion' && getHp() >= MAX_HP) disabled = true;
-    if (key === 'scanner' && !scannerHasTarget()) disabled = true;
-    if (key === 'row' && !rowHasTarget()) disabled = true;
-    if (key === 'column' && !columnHasTarget()) disabled = true;
-    if (key === 'cross' && !crossHasTarget()) disabled = true;
+    if (key === 'scanner' && !scannerHasTargetImpl()) disabled = true;
+    if (key === 'row' && !rowHasTargetImpl()) disabled = true;
+    if (key === 'column' && !columnHasTargetImpl()) disabled = true;
+    if (key === 'cross' && !crossHasTargetImpl()) disabled = true;
     btn.disabled = disabled;
 
     btn.classList.toggle('active', getActiveItem() === key);

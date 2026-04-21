@@ -1,7 +1,6 @@
 import { overlay, overlayContent } from './dom.js';
 import { hideTooltip } from './tooltip.js';
-import { settings, saveSettings } from '../settings.js';
-import { getLifetimeGold } from '../state.js';
+import { settings } from '../settings.js';
 
 // ============================================================
 // OVERLAY RENDERING

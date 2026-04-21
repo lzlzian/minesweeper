@@ -1,34 +1,38 @@
-# Module Refactor — Handoff (2026-04-19)
+# Module Refactor — Handoff (2026-04-21)
 
-Session paused partway through Task 14. Next session picks up here.
+Session paused after Task 16. Next session picks up at Task 17.
 
 ## Where we are
 
-**Progress: 13 of 19 tasks complete.** Every commit left the game playable; current master works.
+**Progress: 16 of 19 tasks complete.** Every commit left the game playable; current master works.
 
 ```
 src/
-  main.js          (1165 lines — was 2476 at start)
-  state.js         (176)
-  audio.js         (75)
-  settings.js      (17)
-  rulesets.js      (43)
+  main.js            (713 lines — was 2476 at start, then 1165 at last handoff)
+  state.js           (176)
+  audio.js           (75)
+  settings.js        (17)
+  rulesets.js        (43)
   board/
-    generation.js  (408)
-    layout.js      (160)
+    generation.js    (408)
+    layout.js        (160)
   ui/
-    dom.js         (35)
-    overlay.js     (189)
-    render.js      (178)
-    shop.js        (109)
-    tooltip.js     (134)
-    view.js        (205)
+    dom.js           (35)
+    overlay.js       (189)
+    pointer.js       (135)   [NEW — Task 14]
+    render.js        (178)
+    shop.js          (109)
+    tooltip.js       (134)
+    view.js          (205)
+  gameplay/
+    items.js         (286)   [NEW — Task 16]
+    merchant.js      (90)    [NEW — Task 15]
 tests/
-  smoke.html
-  smoke.js         (176 — 11 tests passing)
+  smoke.html         (42)    [expanded with DOM stubs — Task 15]
+  smoke.js           (214 — 16 tests passing)
 ```
 
-**Still in main.js (1165 lines, will shrink to ~50):** revealCell, detonateGas, collectAt, findBestApproach, ensureSafeStart, walkRay, sleep, isAdjacentToPlayer, handleClick, handleRightClick, debugRevealAll, all item-use functions (onItemButtonClick, useItemPotion/Scanner/Pickaxe/Row/Column/Cross, *HasTarget, revealAlongRay), merchant logic (MERCHANT_PRICES, DISCOUNT_TIERS, rollDiscountTier, priceFromTier, rollMerchantStock, buyFromMerchant, rerollMerchant, leaveShop), level lifecycle (saveRun, loadRun, clearSave, initLevel, startGame, resumeGame, nextLevel, retryLevel, setMusicOn/setSfxOn wrappers), pointer arbiter, ITEM_TOOLTIPS, setMusicOn/setSfxOn wrappers, service worker registration, kick-off `renderStartMenu()` call.
+**Still in main.js (713 lines, will shrink to ~50):** revealCell, detonateGas, collectAt, findBestApproach, ensureSafeStart, walkRay, sleep, isAdjacentToPlayer, handleClick, handleItemClick (pickaxe branch), handleRightClick, debugRevealAll, animateWalk, level lifecycle (saveRun, loadRun, clearSave, initLevel, startGame, resumeGame, nextLevel, retryLevel), setMusicOn/setSfxOn wrappers, service worker registration, kick-off `renderStartMenu()` call.
 
 ## What's done (by commit)
 
@@ -57,17 +61,17 @@ tests/
 | 8b2d8ce   | 12   | Extract ui/overlay.js with initOverlay() callback injection          |
 | af68267   | 12.1 | Drop unused saveSettings + getLifetimeGold imports from overlay.js   |
 | d545fb1   | 13   | Extract ui/shop.js and DELETE the window.* bridge (task complete)    |
+| 972f5e7   | 14   | Extract ui/pointer.js with callback injection                        |
+| afa6d19   | 15   | Extract gameplay/merchant.js + 5 tests + smoke.html DOM stubs        |
+| 72863e5   | 16   | Extract gameplay/items.js (owns ITEM_TOOLTIPS + button wiring)       |
 
 ## Still to do
 
 | Task | Module                      | Plan section |
 |------|-----------------------------|--------------|
-| 14   | ui/pointer.js               | Plan lines ~1930-2060 |
-| 15   | gameplay/merchant.js        | Plan lines ~2060-2180 |
-| 16   | gameplay/items.js           | Plan lines ~2180-2280 |
-| 17   | gameplay/interaction.js     | Plan lines ~2280-2395 |
-| 18   | gameplay/level.js           | Plan lines ~2395-2510 |
-| 19   | Enforcement grep + playtest | Plan lines ~2510-end  |
+| 17   | gameplay/interaction.js     | Plan lines ~2360-2510 |
+| 18   | gameplay/level.js           | Plan lines ~2510-2650 |
+| 19   | Enforcement grep + playtest | Plan lines ~2650-end  |
 
 Spec: `docs/superpowers/specs/2026-04-19-module-refactor-design.md`
 Plan: `docs/superpowers/plans/2026-04-19-module-refactor.md`
@@ -80,22 +84,29 @@ Plan: `docs/superpowers/plans/2026-04-19-module-refactor.md`
 - **`data-act="..."` + addEventListener, never inline `onclick=`.** The window bridge is gone; don't re-introduce it.
 - **`attachTooltip(el, dataObj)` takes a resolved `{name, desc, howto}` object**, not an item key. Caller does `ITEM_TOOLTIPS[key]` lookup.
 - **Every commit playable**, every commit a rollback point. Run game at `http://localhost:3000` + smoke harness at `/tests/smoke.html` before committing.
+- **ui/* should NOT import from gameplay/*.** Dependency direction is `main → gameplay → ui/state/audio`. When a ui module needs gameplay data (e.g., shop.js needs `ITEM_TOOLTIPS` for tooltips), use a hook (e.g., `getTooltipData`) wired from main.js at bootstrap.
+- **smoke.html DOM stubs required.** Any smoke test that transitively imports `ui/view.js` (through e.g. `ui/render.js`) needs `<canvas id="minimap">` plus the full set of dom.js-referenced elements — `view.js` attaches a top-level listener on `minimapEl` at module load. See tests/smoke.html for the full set.
 
 ## Active callback injections (to unwind in remaining tasks)
 
 - `setRevealCell(revealCell)` in generation.js — **removed by Task 17** when revealCell moves to gameplay/interaction.js
-- `setRenderDeps({ isAdjacentToPlayer, scannerHasTarget, rowHasTarget, columnHasTarget, crossHasTarget })` in render.js — `isAdjacentToPlayer` drops in Task 17, the four `*HasTarget` helpers drop in Task 16
-- `initShop({ onBuy, onReroll, onLeave, getTooltipData })` in shop.js — `onBuy`/`onReroll`/`onLeave` hooks stay but point at imports after Task 15; `getTooltipData` drops in Task 16 when ITEM_TOOLTIPS moves to gameplay/items.js
-- `initOverlay({ onStartGame, onResumeGame, onNextLevel, onRetryLevel, onSaveRun, onClearSave, onLoadRun, onToggleMusic, onToggleSfx })` in overlay.js — hooks point at imports after Task 18 (but `initOverlay` call itself stays since the overlay module cannot import lifecycle directly without creating a cycle)
+- `setRenderDeps({ isAdjacentToPlayer })` in render.js (called from main.js) — drops in Task 17 when `isAdjacentToPlayer` moves. The four `*HasTarget` deps are already wired by items.js itself (Task 16); main.js no longer touches them.
+- `initItems({ walkRay, detonateGas, revealCell })` in items.js — **removed by Task 17** when interaction.js is extracted; items.js switches to direct imports.
+- `initShop({ onBuy, onReroll, onLeave, getTooltipData })` in shop.js — the four hooks stay post-refactor because shop is in `ui/` and must not reverse-import `gameplay/merchant.js` or `gameplay/items.js`. Main.js is the one place that wires ui to gameplay, per the layering rule. This is a **deliberate deviation from the original plan text** (which had `getTooltipData` dropping in Task 16).
+- `initOverlay({ onStartGame, onResumeGame, onNextLevel, onRetryLevel, onSaveRun, onClearSave, onLoadRun, onToggleMusic, onToggleSfx })` in overlay.js — same layering reason: overlay is ui/, lifecycle is gameplay/. Post-Task-18, these hooks point at imports from `gameplay/level.js` and the `initOverlay` call stays in main.js.
 
 ## Known non-issue to ignore next session
 
 `src/ui/overlay.js` has a cycle with `gameplay/level.js` (Task 18) because `overlay.js` imports functions that the level module will provide via hooks — but the level module will want to call `showDeathOverlay` / `showEscapedOverlay` from inside `initLevel`. Both imports are used inside function bodies only, so the cycle is safe at module load (ES module semantics). Documented in the spec, don't re-litigate.
 
+## Hoisting consideration (applies to Task 17 and Task 18)
+
+main.js bootstrap calls (`setRevealCell(revealCell)`, `initItems({walkRay, detonateGas, revealCell})`, `initShop({onBuy: buyFromMerchant, ...})`, `initOverlay({...})`) run at module top-level **before** the function declarations they reference. This works today because the referenced functions are `function` declarations (hoisted). If Task 17 moves `walkRay`/`detonateGas`/`revealCell` to interaction.js and main.js switches to imports, the order still works — ES module bindings are available throughout the module's top level. But if you restructure into `const fn = () => {}` expressions, ordering breaks. Keep the current `function` style when in doubt.
+
 ## How to resume
 
 1. Read this doc and the two referenced plan/spec files.
-2. Check memory: user is luhy559, solo game dev, master-only workflow.
-3. Playtest briefly to confirm current master works (shouldn't have regressed since session paused mid-Task-14 extraction — nothing uncommitted).
-4. Continue with Task 14 per the plan.
-5. Prefer direct implementation over subagent dispatch for the remaining gameplay tasks (14, 16, 17, 18) — they're mostly mechanical. Dispatch only if a task balloons (>300 lines moved).
+2. Playtest briefly to confirm current master works (smoke harness 16/16, game boots clean).
+3. Continue with Task 17 per the plan (`gameplay/interaction.js`).
+4. After Task 17, `initItems` hook goes away, items.js imports `walkRay`/`detonateGas`/`revealCell` from interaction.js directly.
+5. Prefer direct implementation over subagent dispatch for the remaining tasks — they're mechanical. Dispatch only if a task balloons (>300 lines moved).

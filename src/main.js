@@ -42,6 +42,7 @@ import {
   showDeathOverlay, renderStartMenu, renderPauseMenu, renderRules,
   renderSettings, renderNewRunConfirm,
 } from './ui/overlay.js';
+import { initShop, showShopOverlay } from './ui/shop.js';
 import {
   RULESETS, weightedPick, resolveRuleset,
   gridSizeForLevel, anchorCountForSize,
@@ -89,6 +90,14 @@ setRenderDeps({
   crossHasTarget,
 });
 
+// Wire shop callbacks to main.js merchant functions.
+initShop({
+  onBuy: buyFromMerchant,
+  onReroll: rerollMerchant,
+  onLeave: leaveShop,
+  getTooltipData: (itemKey) => ITEM_TOOLTIPS[itemKey],
+});
+
 // Wire overlay callbacks to main.js lifecycle functions.
 initOverlay({
   onStartGame: startGame,
@@ -116,79 +125,6 @@ function setSfxOn(value) {
   settings.sfxOn = value;
   saveSettings();
   setSfxOnAudio(value);
-}
-
-// ============================================================
-// RENDERING
-// ============================================================
-
-function showShopOverlay(playWelcome = false) {
-  if (!getMerchant()) return;
-  hideTooltip();
-  // Clear any active item targeting before opening the shop.
-  setActiveItem(null);
-  updateItemBar();
-  if (playWelcome) playSfx('welcome');
-
-  const totalGold = getGold() + getStashGold();
-  const itemEmoji = { potion: '🍺', pickaxe: '⛏️', scanner: '🔍', row: '↔️', column: '↕️', cross: '✖️' };
-  const itemName = { potion: 'Potion', pickaxe: 'Pickaxe', scanner: 'Scanner', row: 'Row Scan', column: 'Column Scan', cross: 'Cross Scan' };
-
-  const slotsHtml = getMerchant().stock.map((slot, idx) => {
-    const canAfford = totalGold >= slot.price;
-    const disabled = slot.sold || !canAfford;
-    const label = slot.sold ? 'Sold' : 'Buy';
-
-    let badgeHtml = '';
-    if (slot.discountKey !== 'full') {
-      const badgeText = slot.discountKey === 'free' ? 'FREE'
-                      : slot.discountKey === 'd90' ? '-90%'
-                      : slot.discountKey === 'd75' ? '-75%'
-                      : slot.discountKey === 'd50' ? '-50%'
-                      : '-25%';
-      badgeHtml = `<div class="shop-badge shop-badge-${slot.discountKey}">${badgeText}</div>`;
-    }
-
-    let priceHtml;
-    if (slot.price === 0) {
-      priceHtml = `<div class="shop-slot-price shop-slot-price-free">FREE</div>`;
-    } else if (slot.discountKey !== 'full') {
-      priceHtml = `<div class="shop-slot-price"><s>${slot.basePrice}g</s> ${slot.price}g</div>`;
-    } else {
-      priceHtml = `<div class="shop-slot-price">${slot.price}g</div>`;
-    }
-
-    return `
-      <div class="shop-slot ${slot.sold ? 'sold' : ''}">
-        ${badgeHtml}
-        <div class="shop-slot-icon">${itemEmoji[slot.type]}</div>
-        <div class="shop-slot-name">${itemName[slot.type]}</div>
-        ${priceHtml}
-        <button onclick="buyFromMerchant(${idx})" ${disabled ? 'disabled' : ''}>${label}</button>
-      </div>
-    `;
-  }).join('');
-
-  const rerollCost = 10 * (getMerchant().rerollCount + 1);
-  const canAffordReroll = totalGold >= rerollCost;
-
-  showOverlay(`
-    <h2>🧙 Merchant</h2>
-    <p>💰 Gold: ${getGold()} · Stash: ${getStashGold()}</p>
-    <div class="shop-slots">${slotsHtml}</div>
-    <div class="shop-actions">
-      <button onclick="rerollMerchant()" ${canAffordReroll ? '' : 'disabled'}>🎲 Reroll (${rerollCost}g)</button>
-      <button onclick="leaveShop()">Leave</button>
-    </div>
-  `);
-
-  // Wire tooltips onto each shop slot (slots re-render per buy/reroll).
-  const slotEls = document.querySelectorAll('#overlay-content .shop-slot');
-  getMerchant().stock.forEach((slot, idx) => {
-    const el = slotEls[idx];
-    if (!el) return;
-    attachTooltip(el, ITEM_TOOLTIPS[slot.type]);
-  });
 }
 
 function buyFromMerchant(idx) {
@@ -1218,13 +1154,6 @@ for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
 }
 
 pauseBtn.addEventListener('click', renderPauseMenu);
-
-// Module-scope doesn't expose names to inline onclick= handlers.
-// Shop code (Task 13) still uses inline onclick= for buyFromMerchant,
-// rerollMerchant, leaveShop — bridge only those for now.
-Object.assign(window, {
-  buyFromMerchant, rerollMerchant, leaveShop,
-});
 
 // Register service worker so Android Chrome offers install.
 if ('serviceWorker' in navigator) {

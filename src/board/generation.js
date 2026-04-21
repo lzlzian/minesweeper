@@ -5,10 +5,16 @@ import {
   getBiomeOverrides, setBiomeOverrides,
   getStartCornerIdx,
 } from '../state.js';
+import { anchorCountForSize } from '../rulesets.js';
 
-// Callback injection for renderGrid (temporary until Task 9 moves renderGrid out of main.js)
+// Callback injections for functions that still live in main.js.
+// Removed as their owners migrate:
+//   renderGridImpl  — Task 9  (renderGrid moves to ui/render.js)
+//   revealCellImpl  — Task 17 (revealCell moves to gameplay/interaction.js)
 let renderGridImpl = () => {};
+let revealCellImpl = () => {};
 export function setRenderGridImpl(fn) { renderGridImpl = fn; }
+export function setRevealCell(fn) { revealCellImpl = fn; }
 
 const ANCHOR_MIN_DIST_START = 4;
 const ANCHOR_MIN_DIST_EXIT = 3;
@@ -250,15 +256,8 @@ export function placeItemDrops() {
   }
 }
 
-// Callbacks for circular dependencies (temporary until later refactor tasks)
-let anchorCountForSizeImpl = () => 0;
-let revealCellImpl = () => {};
-
-export function setAnchorCountForSize(fn) { anchorCountForSizeImpl = fn; }
-export function setRevealCell(fn) { revealCellImpl = fn; }
-
 export function placeAnchors() {
-  const target = anchorCountForSizeImpl(getRows());
+  const target = anchorCountForSize(getRows());
   if (target === 0) return;
 
   const startR = getPlayerRow();

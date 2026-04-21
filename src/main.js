@@ -31,7 +31,7 @@ import {
   placeWallClumps, countAdjacentGas, generateGrid,
   placeGoldVeins, placeItemDrops, placeAnchors,
   cleanMerchantCell, carvePath,
-  setRenderGridImpl, setAnchorCountForSize, setRevealCell,
+  setRenderGridImpl, setRevealCell,
 } from './board/generation.js';
 
 // Cell object shape:
@@ -285,10 +285,9 @@ window.addEventListener('resize', () => {
 setAudioMusicOn(settings.musicOn);
 setSfxOnAudio(settings.sfxOn);
 
-// Inject callbacks into board/generation.js (temporary until Task 9 moves renderGrid out).
-setRenderGridImpl(renderGrid);
-setAnchorCountForSize(anchorCountForSize);
-setRevealCell(revealCell);
+// Callbacks for functions that still live in main.js — removed as owners migrate.
+setRenderGridImpl(renderGrid);    // Task 9 moves renderGrid to ui/render.js
+setRevealCell(revealCell);        // Task 17 moves revealCell to gameplay/interaction.js
 
 document.addEventListener('touchstart', resumeAudioCtx, { once: true });
 document.addEventListener('click', resumeAudioCtx, { once: true });

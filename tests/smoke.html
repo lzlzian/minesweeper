@@ -13,6 +13,30 @@
 <body>
   <h1>Smoke Tests</h1>
   <pre id="out">Running…</pre>
+  <!--
+    DOM stubs required by ui/* modules that attach listeners at import time.
+    Without these, importing any module that transitively pulls in view.js /
+    tooltip.js / dom.js throws on `null.addEventListener` at load.
+  -->
+  <div id="board"></div>
+  <div id="grid-container"></div>
+  <div id="gold-display"></div>
+  <div id="hp-display"></div>
+  <div id="level-display"></div>
+  <div id="player-sprite"></div>
+  <div id="overlay"></div>
+  <div id="overlay-content"></div>
+  <div id="item-bar"></div>
+  <div id="viewport"></div>
+  <canvas id="minimap"></canvas>
+  <div id="tooltip"></div>
+  <button id="pause-btn"></button>
+  <button id="item-potion"><span id="item-potion-count"></span></button>
+  <button id="item-scanner"><span id="item-scanner-count"></span></button>
+  <button id="item-pickaxe"><span id="item-pickaxe-count"></span></button>
+  <button id="item-row"><span id="item-row-count"></span></button>
+  <button id="item-column"><span id="item-column-count"></span></button>
+  <button id="item-cross"><span id="item-cross-count"></span></button>
   <script type="module" src="./smoke.js"></script>
 </body>
 </html>

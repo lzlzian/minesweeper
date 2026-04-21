@@ -142,6 +142,44 @@ test('findPath returns a path ending at target', () => {
   if (last.r !== 2 || last.c !== 2) throw new Error('path does not end at target');
 });
 
+// -- merchant --
+import { priceFromTier, rollDiscountTier, DISCOUNT_TIERS } from '../src/gameplay/merchant.js';
+
+test('priceFromTier free', () => {
+  assertEq(priceFromTier(20, { key: 'free', mult: 0 }), 0);
+});
+
+test('priceFromTier full', () => {
+  assertEq(priceFromTier(20, { key: 'full', mult: 1.0 }), 20);
+});
+
+test('priceFromTier d50', () => {
+  assertEq(priceFromTier(20, { key: 'd50', mult: 0.5 }), 10);
+});
+
+test('priceFromTier d90 floors to 1 minimum', () => {
+  // base 5 at mult 0.10 = 0.5 → rounds to 1 (Math.max guard)
+  assertEq(priceFromTier(5, { key: 'd90', mult: 0.10 }), 1);
+});
+
+test('rollDiscountTier distribution within +/-5%', () => {
+  const n = 10000;
+  const counts = {};
+  for (let i = 0; i < n; i++) {
+    const t = rollDiscountTier();
+    counts[t.key] = (counts[t.key] || 0) + 1;
+  }
+  const totalWeight = DISCOUNT_TIERS.reduce((s, t) => s + t.weight, 0);
+  for (const tier of DISCOUNT_TIERS) {
+    const expected = (tier.weight / totalWeight) * n;
+    const actual = counts[tier.key] || 0;
+    const margin = n * 0.05; // +/-5% of total
+    if (Math.abs(actual - expected) > margin) {
+      throw new Error(`${tier.key}: expected ~${expected}, got ${actual}`);
+    }
+  }
+});
+
 // -- board generation --
 import { countAdjacentGas } from '../src/board/generation.js';
 

@@ -15,6 +15,7 @@ import {
   setStartCornerIdx, setItems,
   resetForNewRun, resetLevelGold, fullHeal,
   getSavePayload, applySavePayload,
+  addToLifetimeGold, getLifetimeGold,
 } from './state.js';
 
 import { resumeAudioCtx, playSfx, startBgm, setMusicOn as setAudioMusicOn, setSfxOn as setSfxOnAudio } from './audio.js';
@@ -36,6 +37,11 @@ import {
   applyPan, renderMinimap,
 } from './ui/view.js';
 import { attachTooltip, hideTooltip } from './ui/tooltip.js';
+import {
+  initOverlay, showOverlay, hideOverlay, showEscapedOverlay,
+  showDeathOverlay, renderStartMenu, renderPauseMenu, renderRules,
+  renderSettings, renderNewRunConfirm,
+} from './ui/overlay.js';
 import {
   RULESETS, weightedPick, resolveRuleset,
   gridSizeForLevel, anchorCountForSize,
@@ -83,6 +89,19 @@ setRenderDeps({
   crossHasTarget,
 });
 
+// Wire overlay callbacks to main.js lifecycle functions.
+initOverlay({
+  onStartGame: startGame,
+  onResumeGame: resumeGame,
+  onNextLevel: nextLevel,
+  onRetryLevel: retryLevel,
+  onSaveRun: saveRun,
+  onClearSave: clearSave,
+  onLoadRun: loadRun,
+  onToggleMusic: setMusicOn,
+  onToggleSfx: setSfxOn,
+});
+
 document.addEventListener('touchstart', resumeAudioCtx, { once: true });
 document.addEventListener('click', resumeAudioCtx, { once: true });
 
@@ -102,37 +121,6 @@ function setSfxOn(value) {
 // ============================================================
 // RENDERING
 // ============================================================
-
-function showOverlay(html) {
-  overlayContent.innerHTML = html;
-  overlay.classList.remove('hidden');
-}
-
-function hideOverlay() {
-  hideTooltip();
-  overlay.classList.add('hidden');
-}
-
-function showEscapedOverlay() {
-  const nextSize = gridSizeForLevel(getLevel() + 1);
-  showOverlay(`
-    <h2>Escaped!</h2>
-    <p>Level ${getLevel()} cleared · +💰 ${getGold()}</p>
-    <p>Stash: 💰 ${getStashGold() + getGold()}</p>
-    <p>Next: Level ${getLevel() + 1} (${nextSize}×${nextSize})</p>
-    <button onclick="nextLevel()">Descend</button>
-  `);
-}
-
-function showDeathOverlay() {
-  showOverlay(`
-    <h2>You died.</h2>
-    <p>Level ${getLevel()} · Forfeited 💰 ${getGold()}</p>
-    <p>Stash: 💰 ${getStashGold()}</p>
-    <button onclick="retryLevel()">Retry Level</button>
-    <button onclick="startGame()">New Run</button>
-  `);
-}
 
 function showShopOverlay(playWelcome = false) {
   if (!getMerchant()) return;
@@ -383,7 +371,8 @@ async function animateWalk(path) {
       setGameOver(true);
       renderGrid();
       addToLifetimeGold(getGold());
-      showEscapedOverlay();
+      const nextSize = gridSizeForLevel(getLevel() + 1);
+      showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
       return false;
     }
   }
@@ -526,7 +515,7 @@ async function handleClick(r, c) {
 
       if (getHp() <= 0) {
         setGameOver(true);
-        showDeathOverlay();
+        showDeathOverlay(getLevel(), getGold(), getStashGold());
         return;
       }
     } else {
@@ -543,7 +532,8 @@ async function handleClick(r, c) {
         playSfx('win');
         setGameOver(true);
         addToLifetimeGold(getGold());
-        showEscapedOverlay();
+        const nextSize = gridSizeForLevel(getLevel() + 1);
+        showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
         return;
       }
     }
@@ -793,76 +783,7 @@ function initLevel() {
   hideOverlay();
 }
 
-function renderStartMenu() {
-  document.body.classList.remove('in-run');
-  const save = loadRun();
-  const continueBtn = save
-    ? `<button class="menu-btn-primary" onclick="resumeGame(loadRun())">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
-    : '';
-  const newRunOnClick = save ? 'renderNewRunConfirm()' : 'startGame()';
-  const newRunClass = save ? 'menu-btn-secondary' : 'menu-btn-primary';
-  showOverlay(`
-    <h2>Mining Crawler</h2>
-    ${continueBtn}
-    <button class="${newRunClass}" onclick="${newRunOnClick}">New Run</button>
-    <button class="menu-btn-secondary" onclick="renderRules('start')">Rules</button>
-    <button class="menu-btn-secondary" onclick="renderSettings('start')">Settings</button>
-  `);
-}
-
-function renderNewRunConfirm() {
-  showOverlay(`
-    <h2>New Run?</h2>
-    <p>Starting a new run will erase your saved progress.</p>
-    <button class="menu-btn-primary" onclick="startGame()">Start New Run</button>
-    <button class="menu-btn-secondary" onclick="renderStartMenu()">Cancel</button>
-  `);
-}
-
-function renderPauseMenu() {
-  showOverlay(`
-    <h2>Paused</h2>
-    <button class="menu-btn-primary" onclick="hideOverlay()">Resume</button>
-    <button class="menu-btn-secondary" onclick="renderRules('pause')">Rules</button>
-    <button class="menu-btn-secondary" onclick="renderSettings('pause')">Settings</button>
-    <button class="menu-btn-secondary" onclick="saveRun(); renderStartMenu()">Quit to Menu</button>
-  `);
-}
-
-function renderRules(parent) {
-  const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
-  showOverlay(`
-    <h2>Rules</h2>
-    <p>Reach the exit (🚪) to escape to the next level.</p>
-    <p>Dig adjacent cells to reveal paths. Numbers count gas tiles in the 8 surrounding cells.</p>
-    <p>You have 3 ❤️. Hitting gas damages you for 1 ❤️. HP carries between levels — dying forfeits your current-level gold, but stash and items are safe.</p>
-    <p>Gold (💰) is optional — step onto revealed gold to collect it.</p>
-    <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
-    <p>💧 A <strong>Health Fountain</strong> sometimes appears — step on it to heal to full. Single use.</p>
-    <button class="menu-btn-primary" onclick="${back}">Back</button>
-  `);
-}
-
-function renderSettings(parent) {
-  const back = parent === 'pause' ? 'renderPauseMenu()' : 'renderStartMenu()';
-  const musicLabel = settings.musicOn ? 'On' : 'Off';
-  const sfxLabel = settings.sfxOn ? 'On' : 'Off';
-  showOverlay(`
-    <h2>Settings</h2>
-    <div class="toggle-row">
-      <span>🎵 Music</span>
-      <button class="toggle-btn ${settings.musicOn ? 'toggle-on' : 'toggle-off'}" onclick="setMusicOn(!settings.musicOn); renderSettings('${parent}')">${musicLabel}</button>
-    </div>
-    <div class="toggle-row">
-      <span>🔊 Sound Effects</span>
-      <button class="toggle-btn ${settings.sfxOn ? 'toggle-on' : 'toggle-off'}" onclick="setSfxOn(!settings.sfxOn); renderSettings('${parent}')">${sfxLabel}</button>
-    </div>
-    <button class="menu-btn-primary" onclick="${back}">Back</button>
-  `);
-}
-
 const SAVE_KEY = 'miningCrawler.runState';
-const LIFETIME_GOLD_KEY = 'miningCrawler.lifetimeGold';
 
 function saveRun() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(getSavePayload()));
@@ -876,15 +797,6 @@ function loadRun() {
 
 function clearSave() {
   localStorage.removeItem(SAVE_KEY);
-}
-
-function addToLifetimeGold(amount) {
-  const cur = parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
-  localStorage.setItem(LIFETIME_GOLD_KEY, String(cur + amount));
-}
-
-function getLifetimeGold() {
-  return parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
 }
 
 function startGame() {
@@ -1307,15 +1219,11 @@ for (const key of ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross']) {
 
 pauseBtn.addEventListener('click', renderPauseMenu);
 
-// Module-scope doesn't expose names to inline onclick= handlers in overlay
-// HTML templates. Bridge the ones used by those templates until overlay
-// rendering is refactored in Task 12.
+// Module-scope doesn't expose names to inline onclick= handlers.
+// Shop code (Task 13) still uses inline onclick= for buyFromMerchant,
+// rerollMerchant, leaveShop — bridge only those for now.
 Object.assign(window, {
-  startGame, resumeGame, loadRun, nextLevel, retryLevel,
-  renderNewRunConfirm, renderRules, renderSettings, renderStartMenu, renderPauseMenu,
-  hideOverlay, saveRun,
   buyFromMerchant, rerollMerchant, leaveShop,
-  setMusicOn, setSfxOn, settings,
 });
 
 // Register service worker so Android Chrome offers install.

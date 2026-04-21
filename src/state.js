@@ -162,3 +162,15 @@ export function applySavePayload(save) {
   state.rulesetId = save.rulesetId ?? null;
   state.hp = save.hp ?? MAX_HP;
 }
+
+// ----- Lifetime gold (persistent) -----
+const LIFETIME_GOLD_KEY = 'miningCrawler.lifetimeGold';
+
+export function addToLifetimeGold(amount) {
+  const cur = parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
+  localStorage.setItem(LIFETIME_GOLD_KEY, String(cur + amount));
+}
+
+export function getLifetimeGold() {
+  return parseInt(localStorage.getItem(LIFETIME_GOLD_KEY) || '0', 10);
+}

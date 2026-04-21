@@ -98,6 +98,50 @@ test('anchorCountForSize returns expected counts per size bracket', () => {
   }
 });
 
+// -- board layout --
+import { isReachable, findPath } from '../src/board/layout.js';
+import { setGrid, setRows, setCols, setRevealed } from '../src/state.js';
+
+function makeEmptyGrid(rows, cols) {
+  const g = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      row.push({ type: 'empty', adjacent: 0, goldValue: 0, item: null });
+    }
+    g.push(row);
+  }
+  return g;
+}
+
+test('isReachable finds path in empty grid', () => {
+  setRows(5); setCols(5);
+  setGrid(makeEmptyGrid(5, 5));
+  if (!isReachable(0, 0, 4, 4)) throw new Error('expected reachable');
+});
+
+test('isReachable returns false through wall ring', () => {
+  setRows(5); setCols(5);
+  const g = makeEmptyGrid(5, 5);
+  g[1][1].type = 'wall'; g[1][2].type = 'wall'; g[1][3].type = 'wall';
+  g[2][1].type = 'wall';                         g[2][3].type = 'wall';
+  g[3][1].type = 'wall'; g[3][2].type = 'wall'; g[3][3].type = 'wall';
+  setGrid(g);
+  if (isReachable(0, 0, 2, 2)) throw new Error('expected unreachable');
+});
+
+test('findPath returns a path ending at target', () => {
+  setRows(5); setCols(5);
+  setGrid(makeEmptyGrid(5, 5));
+  // Reveal all cells so findPath can navigate
+  const revealed = Array.from({ length: 5 }, () => Array(5).fill(true));
+  setRevealed(revealed);
+  const path = findPath(0, 0, 2, 2);
+  if (!path || path.length === 0) throw new Error('expected path');
+  const last = path[path.length - 1];
+  if (last.r !== 2 || last.c !== 2) throw new Error('path does not end at target');
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

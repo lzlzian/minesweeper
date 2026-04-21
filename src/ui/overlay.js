@@ -1,26 +1,20 @@
 import { overlay, overlayContent } from './dom.js';
 import { hideTooltip } from './tooltip.js';
-import { settings } from '../settings.js';
+import { settings, setMusicOn, setSfxOn } from '../settings.js';
+import {
+  startGame, resumeGame, nextLevel, retryLevel,
+  saveRun, loadRun,
+} from '../gameplay/level.js';
 
 // ============================================================
 // OVERLAY RENDERING
 // ============================================================
 
-let hooks = {
-  onStartGame: () => {},
-  onResumeGame: () => {},
-  onNextLevel: () => {},
-  onRetryLevel: () => {},
-  onSaveRun: () => {},
-  onClearSave: () => {},
-  onLoadRun: () => null,
-  onToggleMusic: () => {},
-  onToggleSfx: () => {},
-};
-
-export function initOverlay(injected) {
-  hooks = { ...hooks, ...injected };
-}
+// Note on cycles: overlay.js imports from gameplay/level.js, and level.js
+// imports hideOverlay from this module. ES modules allow this because all
+// cross-module identifiers are used inside function bodies — never at
+// top-level module load — so neither side dereferences the other's binding
+// before it's been assigned.
 
 export function showOverlay(html) {
   overlayContent.innerHTML = html;
@@ -44,7 +38,7 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize) {
 }
 
 function wireEscapedOverlay() {
-  overlayContent.querySelector('[data-act="next-level"]').addEventListener('click', () => hooks.onNextLevel());
+  overlayContent.querySelector('[data-act="next-level"]').addEventListener('click', () => nextLevel());
 }
 
 export function showDeathOverlay(level, gold, stashGold) {
@@ -59,13 +53,13 @@ export function showDeathOverlay(level, gold, stashGold) {
 }
 
 function wireDeathOverlay() {
-  overlayContent.querySelector('[data-act="retry-level"]').addEventListener('click', () => hooks.onRetryLevel());
-  overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', () => hooks.onStartGame());
+  overlayContent.querySelector('[data-act="retry-level"]').addEventListener('click', () => retryLevel());
+  overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', () => startGame());
 }
 
 export function renderStartMenu() {
   document.body.classList.remove('in-run');
-  const save = hooks.onLoadRun();
+  const save = loadRun();
   const continueBtn = save
     ? `<button class="menu-btn-primary" data-act="continue">Continue (Level ${save.level} · 💰 ${save.stashGold})</button>`
     : '';
@@ -83,8 +77,8 @@ export function renderStartMenu() {
 
 function wireStartMenu(save) {
   const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
-  q('continue')?.addEventListener('click', () => hooks.onResumeGame(hooks.onLoadRun()));
-  q('start-new-run')?.addEventListener('click', () => hooks.onStartGame());
+  q('continue')?.addEventListener('click', () => resumeGame(loadRun()));
+  q('start-new-run')?.addEventListener('click', () => startGame());
   q('confirm-new-run')?.addEventListener('click', () => renderNewRunConfirm());
   q('rules')?.addEventListener('click', () => renderRules('start'));
   q('settings')?.addEventListener('click', () => renderSettings('start'));
@@ -101,7 +95,7 @@ export function renderNewRunConfirm() {
 }
 
 function wireNewRunConfirm() {
-  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', () => hooks.onStartGame());
+  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', () => startGame());
   overlayContent.querySelector('[data-act="cancel"]').addEventListener('click', () => renderStartMenu());
 }
 
@@ -122,7 +116,7 @@ function wirePauseMenu() {
   q('rules')?.addEventListener('click', () => renderRules('pause'));
   q('settings')?.addEventListener('click', () => renderSettings('pause'));
   q('quit')?.addEventListener('click', () => {
-    hooks.onSaveRun();
+    saveRun();
     renderStartMenu();
   });
 }
@@ -172,11 +166,11 @@ export function renderSettings(parent) {
 function wireSettings(parent) {
   const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
   q('toggle-music')?.addEventListener('click', () => {
-    hooks.onToggleMusic(!settings.musicOn);
+    setMusicOn(!settings.musicOn);
     renderSettings(parent);
   });
   q('toggle-sfx')?.addEventListener('click', () => {
-    hooks.onToggleSfx(!settings.sfxOn);
+    setSfxOn(!settings.sfxOn);
     renderSettings(parent);
   });
   q('back')?.addEventListener('click', () => {

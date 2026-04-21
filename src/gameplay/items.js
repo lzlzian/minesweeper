@@ -10,6 +10,7 @@ import {
 } from '../ui/render.js';
 import { attachTooltip } from '../ui/tooltip.js';
 import { playSfx } from '../audio.js';
+import { walkRay, detonateGas, revealCell } from './interaction.js';
 
 // ============================================================
 // ITEMS
@@ -23,17 +24,6 @@ export const ITEM_TOOLTIPS = {
   column:  { name: 'Column Scan', desc: 'Reveal along your column until walls stop it.',          howto: 'Tap to use instantly.' },
   cross:   { name: 'Cross Scan',  desc: 'Reveal along all four diagonals until walls stop them.', howto: 'Tap to use instantly.' },
 };
-
-// Injected by main.js until interaction.js is extracted (Task 17).
-let hooks = {
-  walkRay: () => {},
-  detonateGas: () => {},
-  revealCell: () => {},
-};
-
-export function initItems(injected) {
-  hooks = { ...hooks, ...injected };
-}
 
 export function onItemButtonClick(itemKey) {
   const btn = itemButtons[itemKey];
@@ -119,8 +109,8 @@ function rowHasTarget() {
       return false;
     }
   };
-  hooks.walkRay(pr, pc, 0, -1, check);
-  hooks.walkRay(pr, pc, 0, 1, check);
+  walkRay(pr, pc, 0, -1, check);
+  walkRay(pr, pc, 0, 1, check);
   return found;
 }
 
@@ -137,8 +127,8 @@ function columnHasTarget() {
       return false;
     }
   };
-  hooks.walkRay(pr, pc, -1, 0, check);
-  hooks.walkRay(pr, pc, 1, 0, check);
+  walkRay(pr, pc, -1, 0, check);
+  walkRay(pr, pc, 1, 0, check);
   return found;
 }
 
@@ -155,10 +145,10 @@ function crossHasTarget() {
       return false;
     }
   };
-  hooks.walkRay(pr, pc, -1, -1, check);
-  hooks.walkRay(pr, pc, -1, 1, check);
-  hooks.walkRay(pr, pc, 1, -1, check);
-  hooks.walkRay(pr, pc, 1, 1, check);
+  walkRay(pr, pc, -1, -1, check);
+  walkRay(pr, pc, -1, 1, check);
+  walkRay(pr, pc, 1, -1, check);
+  walkRay(pr, pc, 1, 1, check);
   return found;
 }
 
@@ -181,10 +171,10 @@ function useItemScanner() {
       const cell = getGrid()[r][c];
       if (cell.type === 'wall') continue;
       if (cell.type === 'gas') {
-        hooks.detonateGas(r, c);
+        detonateGas(r, c);
         getRevealed()[r][c] = true;
       } else {
-        hooks.revealCell(r, c);
+        revealCell(r, c);
       }
     }
   }
@@ -200,14 +190,14 @@ function useItemScanner() {
 // (which handles cascade + pickup logic). Walls were already filtered by
 // walkRay itself.
 function revealAlongRay(startR, startC, dR, dC) {
-  hooks.walkRay(startR, startC, dR, dC, (r, c) => {
+  walkRay(startR, startC, dR, dC, (r, c) => {
     if (getRevealed()[r][c]) return true;
     const cell = getGrid()[r][c];
     if (cell.type === 'gas') {
-      hooks.detonateGas(r, c);
+      detonateGas(r, c);
       getRevealed()[r][c] = true;
     } else {
-      hooks.revealCell(r, c);
+      revealCell(r, c);
     }
     return true;
   });

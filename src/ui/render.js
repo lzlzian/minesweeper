@@ -9,18 +9,15 @@ import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
   playerSprite, itemButtons, itemCounts, board,
 } from './dom.js';
+import { applyPan, renderMinimap } from './view.js';
 
 // Callback injections for functions whose owners haven't been extracted yet.
 // Removed as the modules migrate:
 //   isAdjacentToPlayer        — Task 17 (gameplay/interaction.js)
-//   applyPan, renderMinimap   — Task 10 (ui/view.js)
 //   scanner/row/column/crossHasTarget — Task 16 (gameplay/items.js)
-const noop = () => {};
 const alwaysTrue = () => true;
 const falseIfUnset = () => false;
 let isAdjacentToPlayerImpl = falseIfUnset;
-let applyPanImpl = noop;
-let renderMinimapImpl = noop;
 let scannerHasTargetImpl = alwaysTrue;
 let rowHasTargetImpl = alwaysTrue;
 let columnHasTargetImpl = alwaysTrue;
@@ -28,16 +25,12 @@ let crossHasTargetImpl = alwaysTrue;
 
 export function setRenderDeps({
   isAdjacentToPlayer,
-  applyPan,
-  renderMinimap,
   scannerHasTarget,
   rowHasTarget,
   columnHasTarget,
   crossHasTarget,
 }) {
   if (isAdjacentToPlayer) isAdjacentToPlayerImpl = isAdjacentToPlayer;
-  if (applyPan) applyPanImpl = applyPan;
-  if (renderMinimap) renderMinimapImpl = renderMinimap;
   if (scannerHasTarget) scannerHasTargetImpl = scannerHasTarget;
   if (rowHasTarget) rowHasTargetImpl = rowHasTarget;
   if (columnHasTarget) columnHasTargetImpl = columnHasTarget;
@@ -113,8 +106,8 @@ export function renderGrid() {
     }
   }
   updatePlayerSprite();
-  applyPanImpl();
-  renderMinimapImpl();
+  applyPan();
+  renderMinimap();
 }
 
 let hurtFlashToken = 0;

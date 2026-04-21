@@ -92,6 +92,9 @@ export function hasNonWallNeighbor(r, c) {
   return false;
 }
 
+// Can (fromR, fromC) reach (toR, toC) through non-wall, non-gas cells?
+// Ignores revealed state — answers "is the board theoretically navigable?"
+// Use during level generation to validate solvability.
 export function isReachable(fromR, fromC, toR, toC) {
   const visited = Array.from({ length: getRows() }, () =>
     Array(getCols()).fill(false)
@@ -118,6 +121,9 @@ export function isReachable(fromR, fromC, toR, toC) {
   return false;
 }
 
+// Find a BFS path from (fromR, fromC) to (toR, toC), only crossing
+// cells the player has already revealed — respects fog-of-war.
+// Use during player movement; returns null if no revealed path exists.
 export function findPath(fromR, fromC, toR, toC) {
   if (fromR === toR && fromC === toC) return [{ r: fromR, c: fromC }];
   const visited = Array.from({ length: getRows() }, () =>

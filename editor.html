@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Level Editor · Mining Crawler</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="editor-mode">
+  <div id="editor-topbar">
+    <button id="editor-menu-btn">☰</button>
+    <input id="editor-level-name" type="text" placeholder="Level name">
+    <button id="editor-test-play-btn" class="menu-btn-primary">Test Play</button>
+    <span id="editor-validation-indicator"></span>
+  </div>
+  <div id="editor-main">
+    <div id="editor-palette"></div>
+    <div id="editor-grid-wrap">
+      <div id="editor-grid"></div>
+    </div>
+    <div id="editor-inspector">
+      <div class="inspector-section">
+        <label>Rows <input id="editor-rows" type="number" min="6" max="20" value="8"></label>
+        <label>Cols <input id="editor-cols" type="number" min="6" max="20" value="8"></label>
+      </div>
+      <div class="inspector-section">
+        <label>Notes</label>
+        <textarea id="editor-notes"></textarea>
+      </div>
+      <div class="inspector-section">
+        <div id="editor-summary"></div>
+      </div>
+      <div class="inspector-section">
+        <strong>Validation</strong>
+        <ul id="editor-validation-list"></ul>
+      </div>
+    </div>
+  </div>
+  <div id="editor-menu-dropdown" class="hidden">
+    <button data-menu-act="new">New</button>
+    <button data-menu-act="load-draft">Load Draft</button>
+    <button data-menu-act="load-slot">Load Slot…</button>
+    <button data-menu-act="save-slot">Save to Slot…</button>
+    <button data-menu-act="import">Import JSON</button>
+    <button data-menu-act="export">Export JSON</button>
+  </div>
+  <div id="editor-modal" class="hidden"><div id="editor-modal-content"></div></div>
+  <input id="editor-import-input" type="file" accept=".json" style="display:none">
+  <script type="module" src="src/editor/main.js"></script>
+</body>
+</html>

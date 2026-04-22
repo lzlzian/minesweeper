@@ -3,12 +3,13 @@ import {
   getRows, getCols, getGrid, getRevealed, getFlagged,
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant,
   getGameOver, getBusy, getHp, getGold, getStashGold, getLevel,
-  getActiveItem,
+  getActiveItem, getRulesetId,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setFountain, setActiveItem,
   addGold, addItem, consumeItem, damagePlayer, fullHeal,
   addToLifetimeGold,
 } from '../state.js';
+import { AUTHORED_RULESET_ID } from './authored.js';
 import { playSfx } from '../audio.js';
 import { findPath } from '../board/layout.js';
 import { countAdjacentGas, setRevealCell } from '../board/generation.js';
@@ -19,7 +20,7 @@ import {
 } from '../ui/render.js';
 import { autoRecenterOnPlayer, renderMinimap } from '../ui/view.js';
 import { showShopOverlay } from '../ui/shop.js';
-import { showDeathOverlay, showEscapedOverlay } from '../ui/overlay.js';
+import { showDeathOverlay, showEscapedOverlay, showAuthoredClearedOverlay, showAuthoredDeathOverlay } from '../ui/overlay.js';
 import { gridSizeForLevel } from '../rulesets.js';
 
 // ============================================================
@@ -113,8 +114,12 @@ async function animateWalk(path) {
       setGameOver(true);
       renderGrid();
       addToLifetimeGold(getGold());
-      const nextSize = gridSizeForLevel(getLevel() + 1);
-      showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+      if (getRulesetId() === AUTHORED_RULESET_ID) {
+        showAuthoredClearedOverlay(getGold());
+      } else {
+        const nextSize = gridSizeForLevel(getLevel() + 1);
+        showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+      }
       return false;
     }
   }
@@ -257,7 +262,11 @@ export async function handleClick(r, c) {
 
       if (getHp() <= 0) {
         setGameOver(true);
-        showDeathOverlay(getLevel(), getGold(), getStashGold());
+        if (getRulesetId() === AUTHORED_RULESET_ID) {
+          showAuthoredDeathOverlay(getGold());
+        } else {
+          showDeathOverlay(getLevel(), getGold(), getStashGold());
+        }
         return;
       }
     } else {
@@ -274,8 +283,12 @@ export async function handleClick(r, c) {
         playSfx('win');
         setGameOver(true);
         addToLifetimeGold(getGold());
-        const nextSize = gridSizeForLevel(getLevel() + 1);
-        showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+        if (getRulesetId() === AUTHORED_RULESET_ID) {
+          showAuthoredClearedOverlay(getGold());
+        } else {
+          const nextSize = gridSizeForLevel(getLevel() + 1);
+          showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+        }
         return;
       }
     }

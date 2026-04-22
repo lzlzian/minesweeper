@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "test-authored",
+  "name": "Test",
+  "notes": "",
+  "rows": 8,
+  "cols": 8,
+  "playerStart": { "r": 0, "c": 0 },
+  "exit": { "r": 7, "c": 7 },
+  "merchant": null,
+  "fountain": { "r": 3, "c": 3 },
+  "cells": [
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"wall"},{"type":"wall"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"gas"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"fountain"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"gold","goldValue":10},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}],
+    [{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"},{"type":"empty"}]
+  ],
+  "itemDrops": [
+    { "r": 5, "c": 5, "item": "potion" }
+  ]
+}

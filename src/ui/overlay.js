@@ -6,6 +6,12 @@ import {
   startGame, resumeGame, nextLevel, retryLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
+import { getRulesetId } from '../state.js';
+
+// String literal (not imported from authored.js) to avoid a static cycle:
+// authored.js statically imports renderStartMenu/hideOverlay from this file.
+// Keep authored.js's exported AUTHORED_RULESET_ID in sync with this constant.
+const AUTHORED_RULESET_ID = 'authored';
 
 function menuClick(handler) {
   return () => {
@@ -65,6 +71,54 @@ function wireDeathOverlay() {
   overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', menuClick(() => startGame()));
 }
 
+// Cleared/death overlays add a "Back to Editor" button when the level was
+// launched via the editor's Test Play (hash is #play-authored=draft). The
+// hash is stable across the run (retry doesn't change URL), so a simple
+// string check is sufficient and avoids a static import cycle.
+function cameFromEditor() {
+  return location.hash === '#play-authored=draft';
+}
+
+export function showAuthoredClearedOverlay(gold) {
+  const fromEditor = cameFromEditor();
+  const editorBtn = fromEditor ? `<button data-act="back-to-editor">Back to Editor</button>` : '';
+  showOverlay(`
+    <h2>Level cleared!</h2>
+    <p>Collected 💰 ${gold}</p>
+    ${editorBtn}
+    <button data-act="back-to-menu">Back to Menu</button>
+  `);
+  overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
+    window.location.href = 'index.html';
+  }));
+  overlayContent.querySelector('[data-act="back-to-editor"]')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
+  }));
+}
+
+export function showAuthoredDeathOverlay(gold) {
+  const fromEditor = cameFromEditor();
+  const editorBtn = fromEditor ? `<button data-act="back-to-editor">Back to Editor</button>` : '';
+  showOverlay(`
+    <h2>You died.</h2>
+    <p>Collected before dying: 💰 ${gold}</p>
+    <button data-act="retry-authored">Retry Level</button>
+    ${editorBtn}
+    <button data-act="back-to-menu">Back to Menu</button>
+  `);
+  overlayContent.querySelector('[data-act="retry-authored"]').addEventListener('click', menuClick(async () => {
+    const { getCurrentAuthoredData, startAuthoredLevel } = await import('../gameplay/authored.js');
+    const data = getCurrentAuthoredData();
+    if (data) startAuthoredLevel(data);
+  }));
+  overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
+    window.location.href = 'index.html';
+  }));
+  overlayContent.querySelector('[data-act="back-to-editor"]')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
+  }));
+}
+
 export function renderStartMenu() {
   document.body.classList.remove('in-run');
   const save = loadRun();
@@ -77,6 +131,7 @@ export function renderStartMenu() {
     <h2>Mining Crawler</h2>
     ${continueBtn}
     <button class="${newRunClass}" data-act="${newRunAct}">New Run</button>
+    <button class="menu-btn-secondary" data-act="play-authored">Play Authored</button>
     <button class="menu-btn-secondary" data-act="rules">Rules</button>
     <button class="menu-btn-secondary" data-act="settings">Settings</button>
   `);
@@ -88,6 +143,7 @@ function wireStartMenu(save) {
   q('continue')?.addEventListener('click', menuClick(() => resumeGame(loadRun())));
   q('start-new-run')?.addEventListener('click', menuClick(() => startGame()));
   q('confirm-new-run')?.addEventListener('click', menuClick(() => renderNewRunConfirm()));
+  q('play-authored')?.addEventListener('click', menuClick(() => renderAuthoredList()));
   q('rules')?.addEventListener('click', menuClick(() => renderRules('start')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('start')));
 }
@@ -108,11 +164,15 @@ function wireNewRunConfirm() {
 }
 
 export function renderPauseMenu() {
+  const editorBtn = cameFromEditor()
+    ? `<button class="menu-btn-secondary" data-act="back-to-editor">Back to Editor</button>`
+    : '';
   showOverlay(`
     <h2>Paused</h2>
     <button class="menu-btn-primary" data-act="resume">Resume</button>
     <button class="menu-btn-secondary" data-act="rules">Rules</button>
     <button class="menu-btn-secondary" data-act="settings">Settings</button>
+    ${editorBtn}
     <button class="menu-btn-secondary" data-act="quit">Quit to Menu</button>
   `);
   wirePauseMenu();
@@ -123,8 +183,12 @@ function wirePauseMenu() {
   q('resume')?.addEventListener('click', menuClick(() => hideOverlay()));
   q('rules')?.addEventListener('click', menuClick(() => renderRules('pause')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('pause')));
+  q('back-to-editor')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
+  }));
   q('quit')?.addEventListener('click', menuClick(() => {
-    saveRun();
+    // Never overwrite the procgen save with authored-level state.
+    if (getRulesetId() !== AUTHORED_RULESET_ID) saveRun();
     renderStartMenu();
   }));
 }
@@ -189,3 +253,54 @@ function wireSettings(parent) {
     }
   }));
 }
+
+export async function renderAuthoredList() {
+  let committed = [];
+  try {
+    const res = await fetch('levels/index.json');
+    if (res.ok) committed = await res.json();
+  } catch { /* manifest missing — fine */ }
+
+  const committedRows = committed.map(c =>
+    `<button class="menu-btn-secondary" data-authored-id="${escapeAttr(c.id)}">${escapeHtml(c.name)}</button>`
+  ).join('');
+
+  let slotRows = '';
+  try {
+    const rawSlots = localStorage.getItem('miningCrawler.editor.slots');
+    if (rawSlots) {
+      const slots = JSON.parse(rawSlots);
+      slotRows = slots.map(s =>
+        `<button class="menu-btn-secondary" data-authored-slot="${Number(s.slot)}">Slot ${Number(s.slot)}: ${escapeHtml(s.name)}</button>`
+      ).join('');
+    }
+  } catch { /* ignore */ }
+
+  const body = [];
+  if (committedRows) body.push(`<p><strong>Committed</strong></p>${committedRows}`);
+  if (slotRows)      body.push(`<p><strong>Drafts</strong></p>${slotRows}`);
+  if (!body.length)  body.push(`<p>No authored levels yet. Open the editor at <code>editor.html</code>.</p>`);
+
+  showOverlay(`
+    <h2>Play Authored</h2>
+    ${body.join('')}
+    <button class="menu-btn-primary" data-act="back">Back</button>
+  `);
+  overlayContent.querySelectorAll('[data-authored-id]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      window.location.href = `index.html#play-authored=${encodeURIComponent(btn.dataset.authoredId)}`;
+    }));
+  });
+  overlayContent.querySelectorAll('[data-authored-slot]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      window.location.href = `index.html#play-authored=slot-${btn.dataset.authoredSlot}`;
+    }));
+  });
+  overlayContent.querySelector('[data-act="back"]').addEventListener('click', menuClick(() => renderStartMenu()));
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+// escapeAttr assumes its output is used inside a double-quoted attribute.
+// escapeHtml encodes ", &, <, > which is sufficient there. Single-quoted or
+// unquoted attributes would need additional escaping.
+function escapeAttr(s) { return escapeHtml(s); }

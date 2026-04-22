@@ -164,11 +164,15 @@ function wireNewRunConfirm() {
 }
 
 export function renderPauseMenu() {
+  const editorBtn = cameFromEditor()
+    ? `<button class="menu-btn-secondary" data-act="back-to-editor">Back to Editor</button>`
+    : '';
   showOverlay(`
     <h2>Paused</h2>
     <button class="menu-btn-primary" data-act="resume">Resume</button>
     <button class="menu-btn-secondary" data-act="rules">Rules</button>
     <button class="menu-btn-secondary" data-act="settings">Settings</button>
+    ${editorBtn}
     <button class="menu-btn-secondary" data-act="quit">Quit to Menu</button>
   `);
   wirePauseMenu();
@@ -179,6 +183,9 @@ function wirePauseMenu() {
   q('resume')?.addEventListener('click', menuClick(() => hideOverlay()));
   q('rules')?.addEventListener('click', menuClick(() => renderRules('pause')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('pause')));
+  q('back-to-editor')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
+  }));
   q('quit')?.addEventListener('click', menuClick(() => {
     // Never overwrite the procgen save with authored-level state.
     if (getRulesetId() !== AUTHORED_RULESET_ID) saveRun();

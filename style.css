@@ -929,3 +929,11 @@ body.editor-mode #editor-modal-content button {
   margin-top: 8px;
   font-family: inherit;
 }
+body.editor-mode #editor-modal-content button.slot-has-save {
+  background: #3b5a28;
+  border-color: #5a8f3a;
+  color: #d8f0c4;
+}
+body.editor-mode #editor-modal-content button.slot-has-save:hover {
+  background: #4a7030;
+}

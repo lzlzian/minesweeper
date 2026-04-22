@@ -157,10 +157,16 @@ function onLoadSlot() {
 }
 
 function onSaveSlot() {
-  // Prompt for slot 1..10.
+  // Mark occupied slots so the author can see which slots would be overwritten.
+  const byNum = new Map(listSlots().map(s => [s.slot, s]));
   const buttons = [];
-  for (let n = 1; n <= 10; n++) buttons.push(`<button data-save-slot="${n}">${n}</button>`);
-  showModal(`<h3>Save to Slot</h3><p>Pick a slot (1–10):</p><div>${buttons.join(' ')}</div><button data-close>Cancel</button>`);
+  for (let n = 1; n <= 10; n++) {
+    const occupant = byNum.get(n);
+    const cls = occupant ? 'slot-has-save' : '';
+    const title = occupant ? ` title="${escapeHtml(occupant.name || `Slot ${n}`)}"` : '';
+    buttons.push(`<button data-save-slot="${n}" class="${cls}"${title}>${n}</button>`);
+  }
+  showModal(`<h3>Save to Slot</h3><p>Pick a slot (1–10):</p><div class="slot-row">${buttons.join(' ')}</div><button data-close>Cancel</button>`);
   modalContentEl.querySelectorAll('button[data-save-slot]').forEach(b => {
     b.addEventListener('click', () => {
       const n = parseInt(b.dataset.saveSlot, 10);

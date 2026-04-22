@@ -71,22 +71,39 @@ function wireDeathOverlay() {
   overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', menuClick(() => startGame()));
 }
 
+// Cleared/death overlays add a "Back to Editor" button when the level was
+// launched via the editor's Test Play (hash is #play-authored=draft). The
+// hash is stable across the run (retry doesn't change URL), so a simple
+// string check is sufficient and avoids a static import cycle.
+function cameFromEditor() {
+  return location.hash === '#play-authored=draft';
+}
+
 export function showAuthoredClearedOverlay(gold) {
+  const fromEditor = cameFromEditor();
+  const editorBtn = fromEditor ? `<button data-act="back-to-editor">Back to Editor</button>` : '';
   showOverlay(`
     <h2>Level cleared!</h2>
     <p>Collected 💰 ${gold}</p>
+    ${editorBtn}
     <button data-act="back-to-menu">Back to Menu</button>
   `);
   overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
     window.location.href = 'index.html';
   }));
+  overlayContent.querySelector('[data-act="back-to-editor"]')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
+  }));
 }
 
 export function showAuthoredDeathOverlay(gold) {
+  const fromEditor = cameFromEditor();
+  const editorBtn = fromEditor ? `<button data-act="back-to-editor">Back to Editor</button>` : '';
   showOverlay(`
     <h2>You died.</h2>
     <p>Collected before dying: 💰 ${gold}</p>
     <button data-act="retry-authored">Retry Level</button>
+    ${editorBtn}
     <button data-act="back-to-menu">Back to Menu</button>
   `);
   overlayContent.querySelector('[data-act="retry-authored"]').addEventListener('click', menuClick(async () => {
@@ -96,6 +113,9 @@ export function showAuthoredDeathOverlay(gold) {
   }));
   overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
     window.location.href = 'index.html';
+  }));
+  overlayContent.querySelector('[data-act="back-to-editor"]')?.addEventListener('click', menuClick(() => {
+    window.location.href = 'editor.html';
   }));
 }
 

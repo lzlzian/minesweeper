@@ -105,6 +105,7 @@ export function renderStartMenu() {
     <h2>Mining Crawler</h2>
     ${continueBtn}
     <button class="${newRunClass}" data-act="${newRunAct}">New Run</button>
+    <button class="menu-btn-secondary" data-act="play-authored">Play Authored</button>
     <button class="menu-btn-secondary" data-act="rules">Rules</button>
     <button class="menu-btn-secondary" data-act="settings">Settings</button>
   `);
@@ -116,6 +117,7 @@ function wireStartMenu(save) {
   q('continue')?.addEventListener('click', menuClick(() => resumeGame(loadRun())));
   q('start-new-run')?.addEventListener('click', menuClick(() => startGame()));
   q('confirm-new-run')?.addEventListener('click', menuClick(() => renderNewRunConfirm()));
+  q('play-authored')?.addEventListener('click', menuClick(() => renderAuthoredList()));
   q('rules')?.addEventListener('click', menuClick(() => renderRules('start')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('start')));
 }
@@ -217,3 +219,51 @@ function wireSettings(parent) {
     }
   }));
 }
+
+export async function renderAuthoredList() {
+  let committed = [];
+  try {
+    const res = await fetch('levels/index.json');
+    if (res.ok) committed = await res.json();
+  } catch { /* manifest missing — fine */ }
+
+  const committedRows = committed.map(c =>
+    `<button class="menu-btn-secondary" data-authored-id="${escapeAttr(c.id)}">${escapeHtml(c.name)}</button>`
+  ).join('');
+
+  let slotRows = '';
+  try {
+    const rawSlots = localStorage.getItem('miningCrawler.editor.slots');
+    if (rawSlots) {
+      const slots = JSON.parse(rawSlots);
+      slotRows = slots.map(s =>
+        `<button class="menu-btn-secondary" data-authored-slot="${s.slot}">Slot ${s.slot}: ${escapeHtml(s.name)}</button>`
+      ).join('');
+    }
+  } catch { /* ignore */ }
+
+  const body = [];
+  if (committedRows) body.push(`<p><strong>Committed</strong></p>${committedRows}`);
+  if (slotRows)      body.push(`<p><strong>Drafts</strong></p>${slotRows}`);
+  if (!body.length)  body.push(`<p>No authored levels yet. Open the editor at <code>editor.html</code>.</p>`);
+
+  showOverlay(`
+    <h2>Play Authored</h2>
+    ${body.join('')}
+    <button class="menu-btn-primary" data-act="back">Back</button>
+  `);
+  overlayContent.querySelectorAll('[data-authored-id]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      window.location.href = `index.html#play-authored=${encodeURIComponent(btn.dataset.authoredId)}`;
+    }));
+  });
+  overlayContent.querySelectorAll('[data-authored-slot]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      window.location.href = `index.html#play-authored=slot-${btn.dataset.authoredSlot}`;
+    }));
+  });
+  overlayContent.querySelector('[data-act="back"]').addEventListener('click', menuClick(() => renderStartMenu()));
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function escapeAttr(s) { return escapeHtml(s); }

@@ -203,6 +203,119 @@ test('countAdjacentGas handles grid edges', () => {
   assertEq(countAdjacentGas(0, 0), 1);
 });
 
+// -- editor: schema --
+import {
+  SCHEMA_VERSION, levelToJson, jsonToLevel,
+} from '../src/editor/schema.js';
+
+function makeMinimalLevel() {
+  const rows = 6, cols = 6;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push({ type: 'empty' });
+    cells.push(row);
+  }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: 'test',
+    name: 'Test',
+    notes: '',
+    rows, cols,
+    playerStart: { r: 0, c: 0 },
+    exit:        { r: 5, c: 5 },
+    merchant: null,
+    fountain: null,
+    cells,
+    itemDrops: [],
+  };
+}
+
+test('schema: round-trip preserves a minimal level', () => {
+  const lvl = makeMinimalLevel();
+  const json = levelToJson(lvl);
+  const parsed = jsonToLevel(json);
+  if (!parsed.ok) throw new Error('expected ok, got: ' + JSON.stringify(parsed.errors));
+  assertEq(parsed.level.rows, 6);
+  assertEq(parsed.level.cols, 6);
+  assertEq(parsed.level.playerStart.r, 0);
+  assertEq(parsed.level.exit.c, 5);
+  assertEq(parsed.level.cells.length, 6);
+  assertEq(parsed.level.cells[0].length, 6);
+  assertEq(parsed.level.cells[0][0].type, 'empty');
+});
+
+test('schema: round-trip preserves gold cells with goldValue', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[1][1] = { type: 'gold', goldValue: 10 };
+  lvl.cells[2][2] = { type: 'gold', goldValue: 25 };
+  const json = levelToJson(lvl);
+  const parsed = jsonToLevel(json);
+  if (!parsed.ok) throw new Error('expected ok');
+  assertEq(parsed.level.cells[1][1].type, 'gold');
+  assertEq(parsed.level.cells[1][1].goldValue, 10);
+  assertEq(parsed.level.cells[2][2].goldValue, 25);
+});
+
+test('schema: round-trip preserves merchant / fountain / drops', () => {
+  const lvl = makeMinimalLevel();
+  lvl.merchant = { r: 2, c: 3 };
+  lvl.fountain = { r: 4, c: 1 };
+  lvl.itemDrops = [
+    { r: 1, c: 2, item: 'potion' },
+    { r: 3, c: 4, item: 'pickaxe' },
+  ];
+  const json = levelToJson(lvl);
+  const parsed = jsonToLevel(json);
+  if (!parsed.ok) throw new Error('expected ok');
+  assertEq(parsed.level.merchant.r, 2);
+  assertEq(parsed.level.fountain.c, 1);
+  assertEq(parsed.level.itemDrops.length, 2);
+  assertEq(parsed.level.itemDrops[0].item, 'potion');
+});
+
+test('schema: rejects unknown schemaVersion', () => {
+  const lvl = makeMinimalLevel();
+  const bad = JSON.stringify({ ...lvl, schemaVersion: 999 });
+  const parsed = jsonToLevel(bad);
+  if (parsed.ok) throw new Error('expected !ok');
+  if (!parsed.errors.some(e => e.includes('schemaVersion'))) {
+    throw new Error('expected schemaVersion error, got: ' + parsed.errors.join(', '));
+  }
+});
+
+test('schema: rejects malformed JSON', () => {
+  const parsed = jsonToLevel('not-json');
+  if (parsed.ok) throw new Error('expected !ok');
+});
+
+test('schema: rejects missing required top-level fields', () => {
+  const parsed = jsonToLevel(JSON.stringify({ schemaVersion: 1 }));
+  if (parsed.ok) throw new Error('expected !ok');
+  if (parsed.errors.length === 0) throw new Error('expected errors');
+});
+
+test('schema: rejects cells grid size mismatch', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cols = 7;
+  const parsed = jsonToLevel(JSON.stringify(lvl));
+  if (parsed.ok) throw new Error('expected !ok');
+});
+
+test('schema: rejects unknown cell type', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[0][1] = { type: 'lava' };
+  const parsed = jsonToLevel(JSON.stringify(lvl));
+  if (parsed.ok) throw new Error('expected !ok');
+});
+
+test('schema: rejects gold without goldValue', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[0][1] = { type: 'gold' };
+  const parsed = jsonToLevel(JSON.stringify(lvl));
+  if (parsed.ok) throw new Error('expected !ok');
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

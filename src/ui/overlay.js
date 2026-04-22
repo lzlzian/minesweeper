@@ -6,6 +6,12 @@ import {
   startGame, resumeGame, nextLevel, retryLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
+import { getRulesetId } from '../state.js';
+
+// String literal (not imported from authored.js) to avoid a static cycle:
+// authored.js statically imports renderStartMenu/hideOverlay from this file.
+// Keep authored.js's exported AUTHORED_RULESET_ID in sync with this constant.
+const AUTHORED_RULESET_ID = 'authored';
 
 function menuClick(handler) {
   return () => {
@@ -154,7 +160,8 @@ function wirePauseMenu() {
   q('rules')?.addEventListener('click', menuClick(() => renderRules('pause')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('pause')));
   q('quit')?.addEventListener('click', menuClick(() => {
-    saveRun();
+    // Never overwrite the procgen save with authored-level state.
+    if (getRulesetId() !== AUTHORED_RULESET_ID) saveRun();
     renderStartMenu();
   }));
 }

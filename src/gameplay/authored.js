@@ -16,7 +16,6 @@ import { renderStartMenu, hideOverlay } from '../ui/overlay.js';
 import { countAdjacentGas, cleanMerchantCell } from '../board/generation.js';
 import { rollMerchantStock } from './merchant.js';
 import { revealCell } from './interaction.js';
-import { clearSave } from './level.js';
 import { jsonToLevel } from '../editor/schema.js';
 import { validateLevel } from '../editor/validation.js';
 import {
@@ -33,7 +32,8 @@ export function getCurrentAuthoredData() { return currentAuthoredData; }
 
 export function startAuthoredLevel(level) {
   document.body.classList.add('in-run');
-  clearSave();
+  // Do NOT touch the procgen save — authored mode is a side-trip that
+  // must leave the player's procgen run intact.
   resetForNewRun();
   currentAuthoredData = level;
   applyAuthoredLevel(level);

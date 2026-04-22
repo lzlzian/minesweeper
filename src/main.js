@@ -44,4 +44,12 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-renderStartMenu();
+(async () => {
+  const authoredMatch = location.hash.match(/^#play-authored=(.+)$/);
+  if (authoredMatch) {
+    const { loadAuthoredAndStart } = await import('./gameplay/authored.js');
+    await loadAuthoredAndStart(decodeURIComponent(authoredMatch[1]));
+  } else {
+    renderStartMenu();
+  }
+})();

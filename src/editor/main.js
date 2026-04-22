@@ -1,7 +1,7 @@
 import { resetDraft, getEditorState, setBrushKey, loadLevel, toLevel, setLoadedSlot, getLoadedSlot } from './editorState.js';
 import {
   levelNameInput, rowsInput, colsInput, notesTextarea, paletteEl,
-  menuBtn, menuDropdown, modalEl, modalContentEl, importInput,
+  menuBtn, menuDropdown, modalEl, modalContentEl, importInput, testPlayBtn,
 } from './editorDom.js';
 import { renderAll } from './editorRender.js';
 import { initEditorPointer } from './editorPointer.js';
@@ -10,6 +10,7 @@ import {
   saveDraft, loadDraft, listSlots, saveToSlot, loadFromSlot,
   isLocalStorageWorking,
 } from './slotStore.js';
+import { testPlayCurrentDraft } from './testPlay.js';
 
 // Boot: load draft if present, else blank 8x8.
 const saved = loadDraft();
@@ -72,6 +73,8 @@ paletteEl.addEventListener('click', (e) => {
   setBrushKey(el.dataset.brushKey);
   renderAll();
 });
+
+testPlayBtn.addEventListener('click', testPlayCurrentDraft);
 
 // -- Autosave --
 

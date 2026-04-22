@@ -1,5 +1,5 @@
 import { getEditorState, getBrushKey } from './editorState.js';
-import { BRUSHES, findBrush } from './palette.js';
+import { findBrush } from './palette.js';
 import {
   gridEl, paletteEl, summaryEl, validationListEl, validationIndicator,
   notesTextarea, rowsInput, colsInput, levelNameInput,
@@ -85,10 +85,10 @@ export function renderPalette() {
 
 export function renderInspector() {
   const state = getEditorState();
-  levelNameInput.value = state.name;
-  rowsInput.value = state.rows;
-  colsInput.value = state.cols;
-  notesTextarea.value = state.notes;
+  if (document.activeElement !== levelNameInput) levelNameInput.value = state.name;
+  if (document.activeElement !== rowsInput)      rowsInput.value = state.rows;
+  if (document.activeElement !== colsInput)      colsInput.value = state.cols;
+  if (document.activeElement !== notesTextarea)  notesTextarea.value = state.notes;
 
   // Summary counters.
   let walls = 0, gas = 0, gold = 0;

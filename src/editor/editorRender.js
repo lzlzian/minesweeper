@@ -48,10 +48,39 @@ export function renderGrid() {
       else if (isAt(state.merchant, r, c)) icon = '🧙';
       // fountain already shown via cell.type === 'fountain' above
 
-      if (icon) el.textContent = icon;
+      if (icon) {
+        el.textContent = icon;
+      } else if (cell.type === 'empty') {
+        // Preview the in-game adjacency number on empty/untouched cells so the
+        // author sees the same information the player will see. Wall, gas, and
+        // gold cells never show a number in-game either.
+        const n = countAdjacentGas(state, r, c);
+        if (n > 0) {
+          el.dataset.adjacent = n;
+          const span = document.createElement('span');
+          span.className = 'num';
+          span.textContent = n;
+          el.appendChild(span);
+        }
+      }
       gridEl.appendChild(el);
     }
   }
+}
+
+// 8-neighbor gas count, mirroring board/generation.js countAdjacentGas but
+// operating on the editor's draft cells. Gas counts itself for any neighbor.
+function countAdjacentGas(state, r, c) {
+  let n = 0;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+      if (state.cells[nr][nc].type === 'gas') n++;
+    }
+  }
+  return n;
 }
 
 export function renderPalette() {

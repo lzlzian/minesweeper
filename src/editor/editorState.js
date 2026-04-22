@@ -82,3 +82,55 @@ export function resetDraft(rows = 8, cols = 8) {
   state.id    = '';
   state.loadedSlot = null;
 }
+
+// Undo/redo — ring buffer of deep-clones of { rows, cols, cells, playerStart,
+// exit, merchant, fountain, itemDrops }. One entry per terminal paint action.
+
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
+
+function snapshot() {
+  return {
+    rows: state.rows, cols: state.cols,
+    cells: state.cells.map(row => row.map(cell =>
+      cell.type === 'gold' ? { type: 'gold', goldValue: cell.goldValue } : { type: cell.type })),
+    playerStart: state.playerStart ? { ...state.playerStart } : null,
+    exit:        state.exit        ? { ...state.exit }        : null,
+    merchant:    state.merchant    ? { ...state.merchant }    : null,
+    fountain:    state.fountain    ? { ...state.fountain }    : null,
+    itemDrops:   state.itemDrops.map(d => ({ ...d })),
+  };
+}
+
+function restore(snap) {
+  state.rows = snap.rows;
+  state.cols = snap.cols;
+  state.cells = snap.cells.map(row => row.map(cell =>
+    cell.type === 'gold' ? { type: 'gold', goldValue: cell.goldValue } : { type: cell.type }));
+  state.playerStart = snap.playerStart ? { ...snap.playerStart } : null;
+  state.exit        = snap.exit        ? { ...snap.exit }        : null;
+  state.merchant    = snap.merchant    ? { ...snap.merchant }    : null;
+  state.fountain    = snap.fountain    ? { ...snap.fountain }    : null;
+  state.itemDrops   = snap.itemDrops.map(d => ({ ...d }));
+}
+
+export function pushUndo() {
+  undoStack.push(snapshot());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+export function undo() {
+  if (!undoStack.length) return false;
+  redoStack.push(snapshot());
+  restore(undoStack.pop());
+  return true;
+}
+
+export function redo() {
+  if (!redoStack.length) return false;
+  undoStack.push(snapshot());
+  restore(redoStack.pop());
+  return true;
+}

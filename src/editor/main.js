@@ -1,4 +1,4 @@
-import { resetDraft, getEditorState, setBrushKey, loadLevel, toLevel, setLoadedSlot, getLoadedSlot } from './editorState.js';
+import { resetDraft, getEditorState, setBrushKey, loadLevel, toLevel, setLoadedSlot, getLoadedSlot, undo, redo } from './editorState.js';
 import {
   levelNameInput, rowsInput, colsInput, notesTextarea, paletteEl,
   menuBtn, menuDropdown, modalEl, modalContentEl, importInput, testPlayBtn,
@@ -11,6 +11,7 @@ import {
   isLocalStorageWorking,
 } from './slotStore.js';
 import { testPlayCurrentDraft } from './testPlay.js';
+import { BRUSHES } from './palette.js';
 
 // Boot: load draft if present, else blank 8x8.
 const saved = loadDraft();
@@ -228,3 +229,36 @@ if (!isLocalStorageWorking()) {
   banner.textContent = 'Drafts will not be saved — localStorage unavailable. Use Export to download.';
   document.body.insertBefore(banner, document.body.firstChild);
 }
+
+document.addEventListener('keydown', (e) => {
+  // Don't hijack inputs.
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    const slot = getLoadedSlot();
+    if (slot !== null) {
+      saveToSlot(slot, toLevel());
+      console.log('Saved to slot', slot);
+    } else {
+      onSaveSlot();
+    }
+    return;
+  }
+
+  if (e.key === 'z' || e.key === 'Z') {
+    if (undo()) renderAll();
+    return;
+  }
+  if (e.key === 'y' || e.key === 'Y') {
+    if (redo()) renderAll();
+    return;
+  }
+
+  // Number keys 1-9 select first 9 brushes (in palette order).
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 9 && BRUSHES[n - 1]) {
+    setBrushKey(BRUSHES[n - 1].key);
+    renderAll();
+  }
+});

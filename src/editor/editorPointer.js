@@ -1,4 +1,4 @@
-import { getEditorState, getBrushKey } from './editorState.js';
+import { getEditorState, getBrushKey, pushUndo } from './editorState.js';
 import { findBrush } from './palette.js';
 import { gridEl } from './editorDom.js';
 import { renderAll } from './editorRender.js';
@@ -114,6 +114,8 @@ export function initEditorPointer() {
     if (!cellEl) return;
     const r = parseInt(cellEl.dataset.row, 10);
     const c = parseInt(cellEl.dataset.col, 10);
+
+    pushUndo();  // snapshot before any mutation (paint or erase)
 
     if (e.button === 2) {
       // Right-click = erase.

@@ -3,9 +3,11 @@ import {
   levelNameInput, rowsInput, colsInput, notesTextarea, paletteEl,
 } from './editorDom.js';
 import { renderAll } from './editorRender.js';
+import { initEditorPointer } from './editorPointer.js';
 
 resetDraft(8, 8);
 renderAll();
+initEditorPointer();
 
 const state = getEditorState();
 
@@ -29,7 +31,6 @@ function resizeDraft(rows, cols) {
   state.cells = newCells;
   state.rows = rows;
   state.cols = cols;
-  // Clear any placements / drops now outside bounds.
   if (state.playerStart && (state.playerStart.r >= rows || state.playerStart.c >= cols)) state.playerStart = null;
   if (state.exit        && (state.exit.r        >= rows || state.exit.c        >= cols)) state.exit = null;
   if (state.merchant    && (state.merchant.r    >= rows || state.merchant.c    >= cols)) state.merchant = null;
@@ -38,17 +39,9 @@ function resizeDraft(rows, cols) {
   renderAll();
 }
 
-rowsInput.addEventListener('change', () => {
-  const n = parseInt(rowsInput.value, 10) || 8;
-  resizeDraft(n, state.cols);
-});
+rowsInput.addEventListener('change', () => resizeDraft(parseInt(rowsInput.value, 10) || 8, state.cols));
+colsInput.addEventListener('change', () => resizeDraft(state.rows, parseInt(colsInput.value, 10) || 8));
 
-colsInput.addEventListener('change', () => {
-  const n = parseInt(colsInput.value, 10) || 8;
-  resizeDraft(state.rows, n);
-});
-
-// Palette clicks set the active brush.
 paletteEl.addEventListener('click', (e) => {
   const el = e.target.closest('.palette-swatch');
   if (!el) return;

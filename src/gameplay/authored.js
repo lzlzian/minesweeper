@@ -23,6 +23,10 @@ import {
   readAndClearPendingTestPlay, loadFromSlot,
 } from '../editor/slotStore.js';
 
+// Sentinel rulesetId used only for authored-mode levels. Gates end-of-level
+// / death / retry routing in interaction.js and overlay.js.
+export const AUTHORED_RULESET_ID = 'authored';
+
 let currentAuthoredData = null;
 
 export function getCurrentAuthoredData() { return currentAuthoredData; }
@@ -47,7 +51,7 @@ function applyAuthoredLevel(level) {
   setActiveItem(null);
   setMerchant(null);
   setFountain(null);
-  setRulesetId('authored');  // sentinel — gates end-of-level / retry routing
+  setRulesetId(AUTHORED_RULESET_ID);  // sentinel — gates end-of-level / retry routing
   setBiomeOverrides(null);
 
   // Build grid. Authored cells only carry .type and (for gold) .goldValue.

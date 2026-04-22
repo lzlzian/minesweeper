@@ -237,7 +237,7 @@ export async function renderAuthoredList() {
     if (rawSlots) {
       const slots = JSON.parse(rawSlots);
       slotRows = slots.map(s =>
-        `<button class="menu-btn-secondary" data-authored-slot="${s.slot}">Slot ${s.slot}: ${escapeHtml(s.name)}</button>`
+        `<button class="menu-btn-secondary" data-authored-slot="${Number(s.slot)}">Slot ${Number(s.slot)}: ${escapeHtml(s.name)}</button>`
       ).join('');
     }
   } catch { /* ignore */ }
@@ -266,4 +266,7 @@ export async function renderAuthoredList() {
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+// escapeAttr assumes its output is used inside a double-quoted attribute.
+// escapeHtml encodes ", &, <, > which is sufficient there. Single-quoted or
+// unquoted attributes would need additional escaping.
 function escapeAttr(s) { return escapeHtml(s); }

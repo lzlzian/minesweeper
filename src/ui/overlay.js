@@ -65,6 +65,34 @@ function wireDeathOverlay() {
   overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', menuClick(() => startGame()));
 }
 
+export function showAuthoredClearedOverlay(gold) {
+  showOverlay(`
+    <h2>Level cleared!</h2>
+    <p>Collected 💰 ${gold}</p>
+    <button data-act="back-to-menu">Back to Menu</button>
+  `);
+  overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
+    window.location.href = 'index.html';
+  }));
+}
+
+export function showAuthoredDeathOverlay(gold) {
+  showOverlay(`
+    <h2>You died.</h2>
+    <p>Collected before dying: 💰 ${gold}</p>
+    <button data-act="retry-authored">Retry Level</button>
+    <button data-act="back-to-menu">Back to Menu</button>
+  `);
+  overlayContent.querySelector('[data-act="retry-authored"]').addEventListener('click', menuClick(async () => {
+    const { getCurrentAuthoredData, startAuthoredLevel } = await import('../gameplay/authored.js');
+    const data = getCurrentAuthoredData();
+    if (data) startAuthoredLevel(data);
+  }));
+  overlayContent.querySelector('[data-act="back-to-menu"]').addEventListener('click', menuClick(() => {
+    window.location.href = 'index.html';
+  }));
+}
+
 export function renderStartMenu() {
   document.body.classList.remove('in-run');
   const save = loadRun();

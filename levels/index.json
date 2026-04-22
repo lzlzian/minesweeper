@@ -1,3 +1,4 @@
 [
-  { "id": "test-authored", "name": "Test Authored", "file": "test-authored.json" }
+  { "id": "test-authored", "name": "Test Authored", "file": "test-authored.json" },
+  { "id": "1", "name": "Level 1", "file": "1.json" }
 ]

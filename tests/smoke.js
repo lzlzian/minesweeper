@@ -207,6 +207,7 @@ test('countAdjacentGas handles grid edges', () => {
 import {
   SCHEMA_VERSION, levelToJson, jsonToLevel,
 } from '../src/editor/schema.js';
+import { validateLevel } from '../src/editor/validation.js';
 
 function makeMinimalLevel() {
   const rows = 6, cols = 6;
@@ -314,6 +315,95 @@ test('schema: rejects gold without goldValue', () => {
   lvl.cells[0][1] = { type: 'gold' };
   const parsed = jsonToLevel(JSON.stringify(lvl));
   if (parsed.ok) throw new Error('expected !ok');
+});
+
+// -- editor: validation --
+
+test('validation: minimal valid level passes', () => {
+  const lvl = makeMinimalLevel();
+  const res = validateLevel(lvl);
+  if (!res.ok) throw new Error('expected ok, got: ' + res.errors.join(', '));
+});
+
+test('validation: rejects out-of-bounds positions', () => {
+  const lvl = makeMinimalLevel();
+  lvl.exit = { r: 99, c: 99 };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects player == exit', () => {
+  const lvl = makeMinimalLevel();
+  lvl.exit = { r: 0, c: 0 };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects shared positions among unique placements', () => {
+  const lvl = makeMinimalLevel();
+  lvl.merchant = { r: 0, c: 0 }; // collides with playerStart
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects drops on unique placements', () => {
+  const lvl = makeMinimalLevel();
+  lvl.itemDrops = [{ r: 5, c: 5, item: 'potion' }]; // on exit
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects player-start on non-empty cell', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[0][0] = { type: 'wall' };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects exit on non-empty cell', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[5][5] = { type: 'gold', goldValue: 10 };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects drop on non-empty cell', () => {
+  const lvl = makeMinimalLevel();
+  lvl.cells[1][1] = { type: 'gas' };
+  lvl.itemDrops = [{ r: 1, c: 1, item: 'potion' }];
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects exit unreachable via walls', () => {
+  const lvl = makeMinimalLevel();
+  // Ring player in with walls so exit is unreachable.
+  lvl.cells[0][1] = { type: 'wall' };
+  lvl.cells[1][0] = { type: 'wall' };
+  lvl.cells[1][1] = { type: 'wall' };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rejects exit reachable only through gas', () => {
+  const lvl = makeMinimalLevel();
+  // Gas walls the player in except one gas tile.
+  for (let c = 0; c < 6; c++) {
+    if (c !== 3) lvl.cells[1][c] = { type: 'wall' };
+  }
+  lvl.cells[1][3] = { type: 'gas' };
+  // Gas under validation is not a valid path — same rule as engine isReachable.
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
+});
+
+test('validation: rows/cols out of range', () => {
+  const lvl = makeMinimalLevel();
+  lvl.rows = 3; lvl.cols = 3;
+  lvl.cells = lvl.cells.slice(0, 3).map(row => row.slice(0, 3));
+  lvl.exit = { r: 2, c: 2 };
+  const res = validateLevel(lvl);
+  if (res.ok) throw new Error('expected !ok');
 });
 
 // Render

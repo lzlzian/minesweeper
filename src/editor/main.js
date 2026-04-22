@@ -83,11 +83,7 @@ export function scheduleAutosave() {
   }, 500);
 }
 
-// Autosave after every paint stroke too. Easiest hookup: poll renders (called
-// by pointer handlers after every stroke). Expose a global hook.
-window._editorAutosave = scheduleAutosave;
-// And wire it by patching renderAll — every paint calls renderAll().
-// Simpler: autosave on pointerup directly.
+// Autosave after every paint stroke (pointerup fires on every stroke).
 window.addEventListener('pointerup', scheduleAutosave);
 
 // -- Menu wiring --

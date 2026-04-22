@@ -1,10 +1,18 @@
 import { overlay, overlayContent } from './dom.js';
 import { hideTooltip } from './tooltip.js';
 import { settings, setMusicOn, setSfxOn } from '../settings.js';
+import { playSfx } from '../audio.js';
 import {
   startGame, resumeGame, nextLevel, retryLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
+
+function menuClick(handler) {
+  return () => {
+    playSfx('click');
+    handler();
+  };
+}
 
 // ============================================================
 // OVERLAY RENDERING
@@ -38,7 +46,7 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize) {
 }
 
 function wireEscapedOverlay() {
-  overlayContent.querySelector('[data-act="next-level"]').addEventListener('click', () => nextLevel());
+  overlayContent.querySelector('[data-act="next-level"]').addEventListener('click', menuClick(() => nextLevel()));
 }
 
 export function showDeathOverlay(level, gold, stashGold) {
@@ -53,8 +61,8 @@ export function showDeathOverlay(level, gold, stashGold) {
 }
 
 function wireDeathOverlay() {
-  overlayContent.querySelector('[data-act="retry-level"]').addEventListener('click', () => retryLevel());
-  overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', () => startGame());
+  overlayContent.querySelector('[data-act="retry-level"]').addEventListener('click', menuClick(() => retryLevel()));
+  overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', menuClick(() => startGame()));
 }
 
 export function renderStartMenu() {
@@ -77,11 +85,11 @@ export function renderStartMenu() {
 
 function wireStartMenu(save) {
   const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
-  q('continue')?.addEventListener('click', () => resumeGame(loadRun()));
-  q('start-new-run')?.addEventListener('click', () => startGame());
-  q('confirm-new-run')?.addEventListener('click', () => renderNewRunConfirm());
-  q('rules')?.addEventListener('click', () => renderRules('start'));
-  q('settings')?.addEventListener('click', () => renderSettings('start'));
+  q('continue')?.addEventListener('click', menuClick(() => resumeGame(loadRun())));
+  q('start-new-run')?.addEventListener('click', menuClick(() => startGame()));
+  q('confirm-new-run')?.addEventListener('click', menuClick(() => renderNewRunConfirm()));
+  q('rules')?.addEventListener('click', menuClick(() => renderRules('start')));
+  q('settings')?.addEventListener('click', menuClick(() => renderSettings('start')));
 }
 
 export function renderNewRunConfirm() {
@@ -95,8 +103,8 @@ export function renderNewRunConfirm() {
 }
 
 function wireNewRunConfirm() {
-  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', () => startGame());
-  overlayContent.querySelector('[data-act="cancel"]').addEventListener('click', () => renderStartMenu());
+  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', menuClick(() => startGame()));
+  overlayContent.querySelector('[data-act="cancel"]').addEventListener('click', menuClick(() => renderStartMenu()));
 }
 
 export function renderPauseMenu() {
@@ -112,13 +120,13 @@ export function renderPauseMenu() {
 
 function wirePauseMenu() {
   const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
-  q('resume')?.addEventListener('click', () => hideOverlay());
-  q('rules')?.addEventListener('click', () => renderRules('pause'));
-  q('settings')?.addEventListener('click', () => renderSettings('pause'));
-  q('quit')?.addEventListener('click', () => {
+  q('resume')?.addEventListener('click', menuClick(() => hideOverlay()));
+  q('rules')?.addEventListener('click', menuClick(() => renderRules('pause')));
+  q('settings')?.addEventListener('click', menuClick(() => renderSettings('pause')));
+  q('quit')?.addEventListener('click', menuClick(() => {
     saveRun();
     renderStartMenu();
-  });
+  }));
 }
 
 export function renderRules(parent) {
@@ -136,13 +144,13 @@ export function renderRules(parent) {
 }
 
 function wireRules(parent) {
-  overlayContent.querySelector('[data-act="back"]').addEventListener('click', () => {
+  overlayContent.querySelector('[data-act="back"]').addEventListener('click', menuClick(() => {
     if (parent === 'pause') {
       renderPauseMenu();
     } else {
       renderStartMenu();
     }
-  });
+  }));
 }
 
 export function renderSettings(parent) {
@@ -165,19 +173,19 @@ export function renderSettings(parent) {
 
 function wireSettings(parent) {
   const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
-  q('toggle-music')?.addEventListener('click', () => {
+  q('toggle-music')?.addEventListener('click', menuClick(() => {
     setMusicOn(!settings.musicOn);
     renderSettings(parent);
-  });
-  q('toggle-sfx')?.addEventListener('click', () => {
+  }));
+  q('toggle-sfx')?.addEventListener('click', menuClick(() => {
     setSfxOn(!settings.sfxOn);
     renderSettings(parent);
-  });
-  q('back')?.addEventListener('click', () => {
+  }));
+  q('back')?.addEventListener('click', menuClick(() => {
     if (parent === 'pause') {
       renderPauseMenu();
     } else {
       renderStartMenu();
     }
-  });
+  }));
 }

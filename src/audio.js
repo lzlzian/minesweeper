@@ -25,6 +25,7 @@ const sfxPaths = {
   drink: 'assets/sounds/drink.mp3',
   pickaxe: 'assets/sounds/pickaxe.mp3',
   pickup: 'assets/sounds/pickup.mp3',
+  click: 'assets/sounds/click.mp3',
 };
 
 for (const [name, path] of Object.entries(sfxPaths)) {

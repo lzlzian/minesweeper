@@ -2,10 +2,10 @@
 // rules. Used by the editor (on save/test-play) and the game (on authored
 // level load). Does NOT re-check structural shape — that's schema.js.
 
+import { VALID_ITEM_KEYS } from './schema.js';
+
 const MIN_SIZE = 6;
 const MAX_SIZE = 20;
-
-const VALID_ITEM_KEYS = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
 
 export function validateLevel(level) {
   const errors = [];

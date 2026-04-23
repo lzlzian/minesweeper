@@ -1,7 +1,8 @@
 // Pure logical solver. Given a board snapshot + revealed/flagged state,
 // determines whether the exit cell becomes reachable via deduction using
-// Rule 1 (safe-neighbor elimination). No DOM, no game-state imports.
-// Inputs are cloned — the caller's arrays are never mutated.
+// Rule 1 (safe-neighbor elimination) and Rule 2 (gas identification).
+// No DOM, no game-state imports. Inputs are cloned — the caller's arrays
+// are never mutated.
 
 const DIRS = [
   [-1,-1], [-1, 0], [-1, 1],
@@ -54,7 +55,7 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
     }
   }
 
-  // Deduction loop, fixed-point on Rule 1.
+  // Deduction loop, fixed-point on Rules 1 and 2.
   let changed = true;
   while (changed) {
     changed = false;
@@ -82,6 +83,16 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
           for (const u of unrevealed) {
             if (!revealed[u.r][u.c]) {
               cascadeReveal(u.r, u.c, grid, rows, cols, revealed);
+              changed = true;
+            }
+          }
+        }
+
+        // Rule 2: remaining gas == unrevealed count → all unrevealed are gas.
+        if (remaining > 0 && remaining === unrevealed.length) {
+          for (const u of unrevealed) {
+            if (!flagged[u.r][u.c]) {
+              flagged[u.r][u.c] = true;
               changed = true;
             }
           }

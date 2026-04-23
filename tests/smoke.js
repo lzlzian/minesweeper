@@ -465,6 +465,34 @@ test('solver Rule 1: flagged gas lets cascade reach exit', () => {
   assertEq(res.solved, true);
 });
 
+test('solver Rule 2: pins gas when count == unrevealed', () => {
+  // Walls (0,1) & (2,1) constrain the player-cell's unrevealed set to the
+  // single gas at (1,0). Rule 2 flags it; then Rule 1 on (1,1) cascades to exit.
+  const b = buildBoard([
+    'P#..',
+    '*...',
+    '.#..',
+    '...E',
+  ]);
+  const res = solve(b.grid, b.rows, b.cols, emptyGrid(4, 4), emptyGrid(4, 4), b.player, b.exit);
+  assertEq(res.solved, true);
+});
+
+test('solver returns unsolved on a genuine 50/50', () => {
+  // Walls isolate the gas+exit pair so only (4,4) can observe them, and that
+  // observation is ambiguous (1 gas in 2 cells). Rule 1 and Rule 2 both stall.
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+  const res = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(res.solved, false);
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

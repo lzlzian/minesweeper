@@ -143,6 +143,18 @@ export function initLevel() {
     const exitReachable = isReachable(getPlayerRow(), getPlayerCol(), exit.r, exit.c);
     const merchantReachable = !merchantPos || isReachable(getPlayerRow(), getPlayerCol(), merchantPos.r, merchantPos.c);
     if (exitReachable && merchantReachable) {
+      if (!isOldGenMode()) {
+        const probeRevealed = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
+        const probeFlagged  = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
+        const noGuessRes = makeSolvable(
+          getGrid(), getRows(), getCols(),
+          probeRevealed, probeFlagged,
+          { r: getPlayerRow(), c: getPlayerCol() },
+          exit,
+          { maxFixAttempts: 30 },
+        );
+        if (!noGuessRes.solved) continue;
+      }
       if (merchantPos) {
         setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
       }

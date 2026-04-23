@@ -2,6 +2,7 @@ import { resetDraft, getEditorState, setBrushKey, loadLevel, toLevel, setLoadedS
 import {
   levelNameInput, rowsInput, colsInput, notesTextarea, paletteEl,
   menuBtn, menuDropdown, modalEl, modalContentEl, importInput, testPlayBtn,
+  solvabilityBtn,
 } from './editorDom.js';
 import { renderAll } from './editorRender.js';
 import { initEditorPointer } from './editorPointer.js';
@@ -11,6 +12,7 @@ import {
   isLocalStorageWorking,
 } from './slotStore.js';
 import { testPlayCurrentDraft } from './testPlay.js';
+import { checkSolvability } from './solvabilityCheck.js';
 import { BRUSHES } from './palette.js';
 
 // Boot: load draft if present, else blank 8x8.
@@ -76,6 +78,20 @@ paletteEl.addEventListener('click', (e) => {
 });
 
 testPlayBtn.addEventListener('click', testPlayCurrentDraft);
+
+solvabilityBtn.addEventListener('click', () => {
+  const level = toLevel();
+  if (!level.playerStart || !level.exit) {
+    alert('Set playerStart and exit first.');
+    return;
+  }
+  const res = checkSolvability(level);
+  if (res.solved) {
+    alert('✓ Solvable — exit is deducible from the player start.');
+  } else {
+    alert('✗ Not solvable via Rules 1+2. The player will need to guess at least once.');
+  }
+});
 
 // -- Autosave --
 

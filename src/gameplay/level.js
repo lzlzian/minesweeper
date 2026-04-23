@@ -146,6 +146,7 @@ export function initLevel() {
       if (!isOldGenMode()) {
         const probeRevealed = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
         const probeFlagged  = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
+        const t0 = performance.now();
         const noGuessRes = makeSolvable(
           getGrid(), getRows(), getCols(),
           probeRevealed, probeFlagged,
@@ -153,6 +154,8 @@ export function initLevel() {
           exit,
           { maxFixAttempts: 30 },
         );
+        const tMs = Math.round(performance.now() - t0);
+        console.info(`[no-guess] attempt=${attempt} fixups=${noGuessRes.fixups} solved=${noGuessRes.solved} t=${tMs}ms`);
         if (!noGuessRes.solved) continue;
       }
       if (merchantPos) {
@@ -163,7 +166,7 @@ export function initLevel() {
   }
 
   if (!solved) {
-    console.warn('initLevel: 50 attempts failed, carving a guaranteed path from player to exit');
+    console.warn(`initLevel: 50 attempts failed (noGuess=${!isOldGenMode()}), carving a guaranteed path from player to exit`);
     carvePath(getPlayerRow(), getPlayerCol(), getExit().r, getExit().c);
     if (spawnMerchant) {
       // Place merchant at its corner anchor (may have been unreachable) and carve a path to it.

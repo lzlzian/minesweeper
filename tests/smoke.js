@@ -406,6 +406,65 @@ test('validation: rows/cols out of range', () => {
   if (res.ok) throw new Error('expected !ok');
 });
 
+// -- solver --
+import { solve } from '../src/solver.js';
+
+// Build a solver input from an ASCII spec.
+// '.' empty, '#' wall, '*' gas, 'P' player start (empty), 'E' exit (empty).
+function buildBoard(rowsStr) {
+  const rows = rowsStr.length;
+  const cols = rowsStr[0].length;
+  const grid = [];
+  let player = null, exit = null;
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      const ch = rowsStr[r][c];
+      if (ch === '#') row.push({ type: 'wall' });
+      else if (ch === '*') row.push({ type: 'gas' });
+      else {
+        row.push({ type: 'empty' });
+        if (ch === 'P') player = { r, c };
+        if (ch === 'E') exit = { r, c };
+      }
+    }
+    grid.push(row);
+  }
+  // Adjacency for empty cells.
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c].type !== 'empty') continue;
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          if (grid[nr][nc].type === 'gas') n++;
+        }
+      }
+      grid[r][c].adjacent = n;
+    }
+  }
+  return { grid, rows, cols, player, exit };
+}
+
+function emptyGrid(rows, cols) {
+  return Array.from({ length: rows }, () => Array(cols).fill(false));
+}
+
+test('solver Rule 1: flagged gas lets cascade reach exit', () => {
+  // Player at (1,1). NW corner is gas. Pre-flagging NW means Rule 1 fires
+  // on the player cell (adj=1, knownGas=1 → remaining unrev are safe), which
+  // triggers a cascade reaching the exit (2,2) via 0-adjacency spread.
+  const b = buildBoard(['*..', '.P.', '..E']);
+  const revealed = emptyGrid(3, 3);
+  const flagged  = emptyGrid(3, 3);
+  flagged[0][0] = true; // pre-flagged gas
+  const res = solve(b.grid, b.rows, b.cols, revealed, flagged, b.player, b.exit);
+  assertEq(res.solved, true);
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

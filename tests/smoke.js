@@ -561,6 +561,46 @@ test('makeSolvable returns solved=true with zero fixups on already-solvable boar
   assertEq(res.fixups, 0);
 });
 
+// -- editor: solvability --
+import { checkSolvability } from '../src/editor/solvabilityCheck.js';
+
+test('checkSolvability accepts a solvable editor level', () => {
+  const rows = 5, cols = 5;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push({ type: 'empty' });
+    cells.push(row);
+  }
+  const res = checkSolvability({
+    rows, cols, cells,
+    playerStart: { r: 0, c: 0 },
+    exit: { r: 4, c: 4 },
+  });
+  // All-empty board → cascade reveals everything → exit reachable.
+  assertEq(res.solved, true);
+});
+
+test('checkSolvability rejects a walled-off editor level', () => {
+  const rows = 5, cols = 5;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push({ type: 'empty' });
+    cells.push(row);
+  }
+  cells[3][3] = { type: 'wall' };
+  cells[3][4] = { type: 'wall' };
+  cells[4][3] = { type: 'wall' };
+  const res = checkSolvability({
+    rows, cols, cells,
+    playerStart: { r: 0, c: 0 },
+    exit: { r: 4, c: 4 },
+  });
+  // Exit is fully walled in — no path exists at all.
+  assertEq(res.solved, false);
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

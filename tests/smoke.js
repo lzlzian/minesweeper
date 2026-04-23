@@ -407,7 +407,7 @@ test('validation: rows/cols out of range', () => {
 });
 
 // -- solver --
-import { solve } from '../src/solver.js';
+import { solve, relocateFrontierGas } from '../src/solver.js';
 
 // Build a solver input from an ASCII spec.
 // '.' empty, '#' wall, '*' gas, 'P' player start (empty), 'E' exit (empty).
@@ -491,6 +491,39 @@ test('solver returns unsolved on a genuine 50/50', () => {
   ]);
   const res = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
   assertEq(res.solved, false);
+});
+
+test('relocateFrontierGas moves frontier gas and preserves gas count', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+
+  // First solve: confirms we start from the stuck state.
+  const r1 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(r1.solved, false);
+
+  let gasBefore = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+    if (b.grid[r][c].type === 'gas') gasBefore++;
+
+  const moved = relocateFrontierGas(
+    b.grid, b.rows, b.cols, r1.revealed, r1.flagged, b.player, b.exit,
+  );
+  assertEq(moved, true);
+
+  let gasAfter = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+    if (b.grid[r][c].type === 'gas') gasAfter++;
+  assertEq(gasAfter, gasBefore);
+
+  // The old gas location is empty now and exit is reachable via cascade.
+  const r2 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(r2.solved, true);
 });
 
 // Render

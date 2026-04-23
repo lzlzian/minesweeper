@@ -103,3 +103,87 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
 
   return { solved: !!revealed[exit.r][exit.c], revealed, flagged };
 }
+
+export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {
+  const FAR = opts.far ?? 4;
+
+  const sources = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c].type !== 'gas') continue;
+      if (flagged[r][c]) continue;
+      let onFrontier = false;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+        if (revealed[nr][nc]) { onFrontier = true; break; }
+      }
+      if (onFrontier) sources.push({ r, c });
+    }
+  }
+  if (sources.length === 0) return false;
+
+  const all = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c].type !== 'empty') continue;
+      if (r === player.r && c === player.c) continue;
+      if (r === exit.r && c === exit.c) continue;
+
+      let minDist = Infinity;
+      outer: for (let rr = 0; rr < rows; rr++) {
+        for (let cc = 0; cc < cols; cc++) {
+          if (!revealed[rr][cc]) continue;
+          const d = Math.max(Math.abs(r - rr), Math.abs(c - cc));
+          if (d < minDist) minDist = d;
+          if (minDist === 0) break outer;
+        }
+      }
+
+      let score = 0;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+        if (grid[nr][nc].type === 'gas') score++;
+      }
+
+      all.push({ r, c, score, minDist });
+    }
+  }
+  if (all.length === 0) return false;
+
+  const farCells = all.filter(d => d.minDist >= FAR);
+  const pool = farCells.length > 0 ? farCells : all;
+  pool.sort((a, b) => b.score - a.score);
+  const topScore = pool[0].score;
+  const tops = pool.filter(d => d.score === topScore);
+  const dest = tops[Math.floor(Math.random() * tops.length)];
+  const src  = sources[Math.floor(Math.random() * sources.length)];
+
+  grid[src.r][src.c].type = 'empty';
+  grid[src.r][src.c].adjacent = 0;
+  grid[dest.r][dest.c].type = 'gas';
+
+  recomputeAdjacencyAround(grid, rows, cols, src.r, src.c);
+  recomputeAdjacencyAround(grid, rows, cols, dest.r, dest.c);
+
+  return true;
+}
+
+function recomputeAdjacencyAround(grid, rows, cols, r, c) {
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      const cell = grid[nr][nc];
+      if (cell.type === 'wall' || cell.type === 'gas') continue;
+      let n = 0;
+      for (const [ddr, ddc] of DIRS) {
+        const nnr = nr + ddr, nnc = nc + ddc;
+        if (nnr < 0 || nnr >= rows || nnc < 0 || nnc >= cols) continue;
+        if (grid[nnr][nnc].type === 'gas') n++;
+      }
+      cell.adjacent = n;
+    }
+  }
+}

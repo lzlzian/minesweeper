@@ -187,3 +187,18 @@ function recomputeAdjacencyAround(grid, rows, cols, r, c) {
     }
   }
 }
+
+export function makeSolvable(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {
+  const maxFixAttempts = opts.maxFixAttempts ?? 30;
+  let fixups = 0;
+  for (let attempt = 0; attempt <= maxFixAttempts; attempt++) {
+    const res = solve(grid, rows, cols, revealed, flagged, player, exit);
+    if (res.solved) return { solved: true, fixups };
+    const moved = relocateFrontierGas(
+      grid, rows, cols, res.revealed, res.flagged, player, exit, opts,
+    );
+    if (!moved) return { solved: false, fixups };
+    fixups++;
+  }
+  return { solved: false, fixups };
+}

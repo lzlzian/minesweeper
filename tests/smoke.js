@@ -407,7 +407,7 @@ test('validation: rows/cols out of range', () => {
 });
 
 // -- solver --
-import { solve, relocateFrontierGas } from '../src/solver.js';
+import { solve, relocateFrontierGas, makeSolvable } from '../src/solver.js';
 
 // Build a solver input from an ASCII spec.
 // '.' empty, '#' wall, '*' gas, 'P' player start (empty), 'E' exit (empty).
@@ -524,6 +524,41 @@ test('relocateFrontierGas moves frontier gas and preserves gas count', () => {
   // The old gas location is empty now and exit is reachable via cascade.
   const r2 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
   assertEq(r2.solved, true);
+});
+
+test('makeSolvable converges on a board that starts unsolvable', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+  const res = makeSolvable(
+    b.grid, b.rows, b.cols,
+    emptyGrid(6, 6), emptyGrid(6, 6),
+    b.player, b.exit,
+    { maxFixAttempts: 30 },
+  );
+  assertEq(res.solved, true);
+  if (res.fixups < 1) throw new Error(`expected at least one fixup, got ${res.fixups}`);
+});
+
+test('makeSolvable returns solved=true with zero fixups on already-solvable board', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '.....E',
+  ]);
+  const res = makeSolvable(
+    b.grid, b.rows, b.cols,
+    emptyGrid(3, 6), emptyGrid(3, 6),
+    b.player, b.exit,
+    { maxFixAttempts: 30 },
+  );
+  assertEq(res.solved, true);
+  assertEq(res.fixups, 0);
 });
 
 // Render

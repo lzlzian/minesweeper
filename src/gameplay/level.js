@@ -26,10 +26,20 @@ import {
 } from '../board/generation.js';
 import { rollMerchantStock } from './merchant.js';
 import { collectAt, ensureSafeStart, revealCell } from './interaction.js';
+import { makeSolvable } from '../solver.js';
 
 // ============================================================
 // LEVEL LIFECYCLE
 // ============================================================
+
+// A/B toggle: ?oldgen=1 skips the no-guess solver entirely to compare feel.
+function isOldGenMode() {
+  try {
+    return new URLSearchParams(window.location.search).get('oldgen') === '1';
+  } catch {
+    return false;
+  }
+}
 
 const SAVE_KEY = 'miningCrawler.runState';
 

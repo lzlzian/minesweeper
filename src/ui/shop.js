@@ -76,7 +76,7 @@ export function showShopOverlay(playWelcome = false) {
     `;
   }).join('');
 
-  const rerollCost = 100 * (getMerchant().rerollCount + 1);
+  const rerollCost = 10 * (getMerchant().rerollCount + 1);
   const canAffordReroll = totalGold >= rerollCost;
 
   showOverlay(`

@@ -74,7 +74,7 @@ export function buyFromMerchant(idx) {
 
 export function rerollMerchant() {
   if (!getMerchant()) return;
-  const cost = 100 * (getMerchant().rerollCount + 1);
+  const cost = 10 * (getMerchant().rerollCount + 1);
   const totalGold = getGold() + getStashGold();
   if (totalGold < cost) return;
   spendGold(cost);

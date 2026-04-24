@@ -225,6 +225,10 @@ export function initLevel() {
 
   if (!solved) {
     console.warn(`initLevel: 50 attempts failed (noGuess=${!isOldGenMode()}), carving a guaranteed path from player to exit`);
+    setRevealed(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
+    setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
+    setMerchant(null);
+    setFountain(null);
     carvePath(getPlayerRow(), getPlayerCol(), getExit().r, getExit().c);
     if (spawnMerchant) {
       const merchantPos = pickMerchantCorner();
@@ -232,6 +236,17 @@ export function initLevel() {
         cleanMerchantCell(merchantPos.r, merchantPos.c);
         carvePath(getPlayerRow(), getPlayerCol(), merchantPos.r, merchantPos.c);
         setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
+      }
+    }
+    // Pre-reveal and 3×3 cascade for the fallback board.
+    getRevealed()[getExit().r][getExit().c] = true;
+    getRevealed()[getPlayerRow()][getPlayerCol()] = true;
+    if (getMerchant()) {
+      getRevealed()[getMerchant().r][getMerchant().c] = true;
+    }
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        revealCell(getPlayerRow() + dr, getPlayerCol() + dc);
       }
     }
   }

@@ -44,6 +44,28 @@ function cascadeReveal(r, c, grid, rows, cols, revealed) {
   }
 }
 
+// BFS: can player walk to exit through revealed, non-wall, non-gas cells?
+function pathConnected(revealed, grid, rows, cols, player, exit) {
+  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const queue = [player];
+  visited[player.r][player.c] = true;
+  while (queue.length) {
+    const { r, c } = queue.shift();
+    if (r === exit.r && c === exit.c) return true;
+    for (const [dr, dc] of DIRS) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (visited[nr][nc]) continue;
+      if (!revealed[nr][nc]) continue;
+      const t = grid[nr][nc].type;
+      if (t === 'wall' || t === 'gas') continue;
+      visited[nr][nc] = true;
+      queue.push({ r: nr, c: nc });
+    }
+  }
+  return false;
+}
+
 export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
   const revealed = cloneMatrix(revealedIn);
   const flagged  = cloneMatrix(flaggedIn);
@@ -55,9 +77,13 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
     }
   }
 
+  // If exit is already walkable from spawn, zero steps needed.
+  if (pathConnected(revealed, grid, rows, cols, player, exit)) {
+    return { solved: true, revealed, flagged, steps: 0 };
+  }
+
   // Deduction loop, fixed-point on Rules 1 and 2.
-  // `steps` counts the number of passes where at least one deduction fired —
-  // this is the number of reasoning rounds a player would need.
+  // `steps` counts deduction rounds needed before exit becomes walkable.
   let steps = 0;
   let changed = true;
   while (changed) {
@@ -102,10 +128,15 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
         }
       }
     }
-    if (changed) steps++;
+    if (changed) {
+      steps++;
+      if (pathConnected(revealed, grid, rows, cols, player, exit)) {
+        return { solved: true, revealed, flagged, steps };
+      }
+    }
   }
 
-  return { solved: !!revealed[exit.r][exit.c], revealed, flagged, steps };
+  return { solved: false, revealed, flagged, steps };
 }
 
 export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {

@@ -166,9 +166,15 @@ export function initLevel() {
         );
         const tMs = Math.round(performance.now() - t0);
         const { min, max } = stepRange(getLevel());
-        console.info(`[no-guess] attempt=${attempt} fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} need=[${min},${max}] solved=${noGuessRes.solved} t=${tMs}ms`);
-        if (!noGuessRes.solved) continue;
-        if (noGuessRes.steps < min || noGuessRes.steps > max) continue;
+        if (!noGuessRes.solved) {
+          console.info(`[no-guess] attempt=${attempt} REJECT reason=unsolvable fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} t=${tMs}ms`);
+          continue;
+        }
+        if (noGuessRes.steps < min || noGuessRes.steps > max) {
+          console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
+          continue;
+        }
+        console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
       }
       if (merchantPos) {
         setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });

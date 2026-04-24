@@ -44,9 +44,9 @@ function isOldGenMode() {
 // Minimum deduction steps required per level bracket.
 // Boards solved in fewer steps than minSteps are rejected (too trivial).
 function stepRange(level) {
-  if (level <= 4)  return { min: 1, max: 3 };
-  if (level <= 12) return { min: 3, max: 6 };
-  return { min: 5, max: Infinity };
+  if (level <= 4)  return { min: 3, max: 5 };
+  if (level <= 12) return { min: 5, max: 10 };
+  return { min: 8, max: Infinity };
 }
 
 const SAVE_KEY = 'miningCrawler.runState';

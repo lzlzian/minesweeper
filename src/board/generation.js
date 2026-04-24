@@ -155,11 +155,9 @@ export function generateGrid(gasCount) {
     }
   }
 
-  // Place gold veins — bias high values toward high-adjacency cells
-  placeGoldVeins();
-
-  // Place 1-2 item drops on plain empty cells
-  placeItemDrops();
+  // TEMP: disabled for no-guess playtesting
+  // placeGoldVeins();
+  // placeItemDrops();
 }
 
 export function placeGoldVeins() {

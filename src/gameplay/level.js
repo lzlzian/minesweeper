@@ -219,6 +219,21 @@ export function initLevel() {
         continue;
       }
       console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
+
+      // Gas relocation may have turned previously-numbered cells into adj=0.
+      // Re-cascade from all revealed 0-cells so the player doesn't see
+      // blank revealed cells surrounded by fog.
+      if (noGuessRes.fixups > 0) {
+        for (let r = 0; r < getRows(); r++) {
+          for (let c = 0; c < getCols(); c++) {
+            if (!getRevealed()[r][c]) continue;
+            const cell = getGrid()[r][c];
+            if (cell.type === 'empty' && cell.adjacent === 0) {
+              revealCell(r, c);
+            }
+          }
+        }
+      }
     }
     solved = true;
   }

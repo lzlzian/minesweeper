@@ -92,7 +92,7 @@ export function initLevel() {
     ? false
     : (getLevelsSinceMerchant() >= 2 || Math.random() < 0.50);
 
-  const maxAttempts = 50;
+  const maxAttempts = 500;
   let solved = false;
 
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
@@ -224,7 +224,7 @@ export function initLevel() {
   }
 
   if (!solved) {
-    console.warn(`initLevel: 50 attempts failed (noGuess=${!isOldGenMode()}), carving a guaranteed path from player to exit`);
+    console.warn(`initLevel: ${maxAttempts} attempts failed (noGuess=${!isOldGenMode()}), carving a guaranteed path from player to exit`);
     setRevealed(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setMerchant(null);

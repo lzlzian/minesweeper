@@ -229,7 +229,12 @@ export function initLevel() {
             if (!getRevealed()[r][c]) continue;
             const cell = getGrid()[r][c];
             if (cell.type === 'empty' && cell.adjacent === 0) {
-              revealCell(r, c);
+              for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                  if (dr === 0 && dc === 0) continue;
+                  revealCell(r + dr, c + dc);
+                }
+              }
             }
           }
         }

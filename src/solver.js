@@ -106,6 +106,7 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
 
 export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {
   const FAR = opts.far ?? 4;
+  const exclude = opts.exclude ?? [];
 
   const sources = [];
   for (let r = 0; r < rows; r++) {
@@ -129,6 +130,7 @@ export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player,
       if (grid[r][c].type !== 'empty') continue;
       if (r === player.r && c === player.c) continue;
       if (r === exit.r && c === exit.c) continue;
+      if (exclude.some(p => p.r === r && p.c === c)) continue;
 
       let minDist = Infinity;
       outer: for (let rr = 0; rr < rows; rr++) {

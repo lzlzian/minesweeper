@@ -146,13 +146,15 @@ export function initLevel() {
       if (!isOldGenMode()) {
         const probeRevealed = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
         const probeFlagged  = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
+        const excludeCells = [];
+        if (merchantPos) excludeCells.push(merchantPos);
         const t0 = performance.now();
         const noGuessRes = makeSolvable(
           getGrid(), getRows(), getCols(),
           probeRevealed, probeFlagged,
           { r: getPlayerRow(), c: getPlayerCol() },
           exit,
-          { maxFixAttempts: 30 },
+          { maxFixAttempts: 30, exclude: excludeCells },
         );
         const tMs = Math.round(performance.now() - t0);
         console.info(`[no-guess] attempt=${attempt} fixups=${noGuessRes.fixups} solved=${noGuessRes.solved} t=${tMs}ms`);

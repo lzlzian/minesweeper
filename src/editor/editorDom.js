@@ -5,6 +5,7 @@ export const menuBtn       = document.getElementById('editor-menu-btn');
 export const menuDropdown  = document.getElementById('editor-menu-dropdown');
 export const levelNameInput = document.getElementById('editor-level-name');
 export const testPlayBtn   = document.getElementById('editor-test-play-btn');
+export const solvabilityBtn = document.getElementById('editor-solvability-btn');
 export const validationIndicator = document.getElementById('editor-validation-indicator');
 
 export const paletteEl     = document.getElementById('editor-palette');

@@ -406,6 +406,201 @@ test('validation: rows/cols out of range', () => {
   if (res.ok) throw new Error('expected !ok');
 });
 
+// -- solver --
+import { solve, relocateFrontierGas, makeSolvable } from '../src/solver.js';
+
+// Build a solver input from an ASCII spec.
+// '.' empty, '#' wall, '*' gas, 'P' player start (empty), 'E' exit (empty).
+function buildBoard(rowsStr) {
+  const rows = rowsStr.length;
+  const cols = rowsStr[0].length;
+  const grid = [];
+  let player = null, exit = null;
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      const ch = rowsStr[r][c];
+      if (ch === '#') row.push({ type: 'wall' });
+      else if (ch === '*') row.push({ type: 'gas' });
+      else {
+        row.push({ type: 'empty' });
+        if (ch === 'P') player = { r, c };
+        if (ch === 'E') exit = { r, c };
+      }
+    }
+    grid.push(row);
+  }
+  // Adjacency for empty cells.
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c].type !== 'empty') continue;
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          if (grid[nr][nc].type === 'gas') n++;
+        }
+      }
+      grid[r][c].adjacent = n;
+    }
+  }
+  return { grid, rows, cols, player, exit };
+}
+
+function emptyGrid(rows, cols) {
+  return Array.from({ length: rows }, () => Array(cols).fill(false));
+}
+
+test('solver Rule 1: flagged gas lets cascade reach exit', () => {
+  // Player at (1,1). NW corner is gas. Pre-flagging NW means Rule 1 fires
+  // on the player cell (adj=1, knownGas=1 → remaining unrev are safe), which
+  // triggers a cascade reaching the exit (2,2) via 0-adjacency spread.
+  const b = buildBoard(['*..', '.P.', '..E']);
+  const revealed = emptyGrid(3, 3);
+  const flagged  = emptyGrid(3, 3);
+  flagged[0][0] = true; // pre-flagged gas
+  const res = solve(b.grid, b.rows, b.cols, revealed, flagged, b.player, b.exit);
+  assertEq(res.solved, true);
+});
+
+test('solver Rule 2: pins gas when count == unrevealed', () => {
+  // Walls (0,1) & (2,1) constrain the player-cell's unrevealed set to the
+  // single gas at (1,0). Rule 2 flags it; then Rule 1 on (1,1) cascades to exit.
+  const b = buildBoard([
+    'P#..',
+    '*...',
+    '.#..',
+    '...E',
+  ]);
+  const res = solve(b.grid, b.rows, b.cols, emptyGrid(4, 4), emptyGrid(4, 4), b.player, b.exit);
+  assertEq(res.solved, true);
+});
+
+test('solver returns unsolved on a genuine 50/50', () => {
+  // Walls isolate the gas+exit pair so only (4,4) can observe them, and that
+  // observation is ambiguous (1 gas in 2 cells). Rule 1 and Rule 2 both stall.
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+  const res = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(res.solved, false);
+});
+
+test('relocateFrontierGas moves frontier gas and preserves gas count', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+
+  // First solve: confirms we start from the stuck state.
+  const r1 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(r1.solved, false);
+
+  let gasBefore = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+    if (b.grid[r][c].type === 'gas') gasBefore++;
+
+  const moved = relocateFrontierGas(
+    b.grid, b.rows, b.cols, r1.revealed, r1.flagged, b.player, b.exit,
+  );
+  assertEq(moved, true);
+
+  let gasAfter = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+    if (b.grid[r][c].type === 'gas') gasAfter++;
+  assertEq(gasAfter, gasBefore);
+
+  // The old gas location is empty now and exit is reachable via cascade.
+  const r2 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  assertEq(r2.solved, true);
+});
+
+test('makeSolvable converges on a board that starts unsolvable', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '......',
+    '......',
+    '...#.#',
+    '...#*E',
+  ]);
+  const res = makeSolvable(
+    b.grid, b.rows, b.cols,
+    emptyGrid(6, 6), emptyGrid(6, 6),
+    b.player, b.exit,
+    { maxFixAttempts: 30 },
+  );
+  assertEq(res.solved, true);
+  if (res.fixups < 1) throw new Error(`expected at least one fixup, got ${res.fixups}`);
+});
+
+test('makeSolvable returns solved=true with zero fixups on already-solvable board', () => {
+  const b = buildBoard([
+    'P.....',
+    '......',
+    '.....E',
+  ]);
+  const res = makeSolvable(
+    b.grid, b.rows, b.cols,
+    emptyGrid(3, 6), emptyGrid(3, 6),
+    b.player, b.exit,
+    { maxFixAttempts: 30 },
+  );
+  assertEq(res.solved, true);
+  assertEq(res.fixups, 0);
+});
+
+// -- editor: solvability --
+import { checkSolvability } from '../src/editor/solvabilityCheck.js';
+
+test('checkSolvability accepts a solvable editor level', () => {
+  const rows = 5, cols = 5;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push({ type: 'empty' });
+    cells.push(row);
+  }
+  const res = checkSolvability({
+    rows, cols, cells,
+    playerStart: { r: 0, c: 0 },
+    exit: { r: 4, c: 4 },
+  });
+  // All-empty board → cascade reveals everything → exit reachable.
+  assertEq(res.solved, true);
+});
+
+test('checkSolvability rejects a walled-off editor level', () => {
+  const rows = 5, cols = 5;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push({ type: 'empty' });
+    cells.push(row);
+  }
+  cells[3][3] = { type: 'wall' };
+  cells[3][4] = { type: 'wall' };
+  cells[4][3] = { type: 'wall' };
+  const res = checkSolvability({
+    rows, cols, cells,
+    playerStart: { r: 0, c: 0 },
+    exit: { r: 4, c: 4 },
+  });
+  // Exit is fully walled in — no path exists at all.
+  assertEq(res.solved, false);
+});
+
 // Render
 const out = document.getElementById('out');
 const lines = results.map(r => {

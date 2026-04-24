@@ -56,6 +56,9 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
   }
 
   // Deduction loop, fixed-point on Rules 1 and 2.
+  // `steps` counts the number of passes where at least one deduction fired —
+  // this is the number of reasoning rounds a player would need.
+  let steps = 0;
   let changed = true;
   while (changed) {
     changed = false;
@@ -99,9 +102,10 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
         }
       }
     }
+    if (changed) steps++;
   }
 
-  return { solved: !!revealed[exit.r][exit.c], revealed, flagged };
+  return { solved: !!revealed[exit.r][exit.c], revealed, flagged, steps };
 }
 
 export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {
@@ -195,12 +199,12 @@ export function makeSolvable(grid, rows, cols, revealed, flagged, player, exit, 
   let fixups = 0;
   for (let attempt = 0; attempt <= maxFixAttempts; attempt++) {
     const res = solve(grid, rows, cols, revealed, flagged, player, exit);
-    if (res.solved) return { solved: true, fixups };
+    if (res.solved) return { solved: true, fixups, steps: res.steps };
     const moved = relocateFrontierGas(
       grid, rows, cols, res.revealed, res.flagged, player, exit, opts,
     );
-    if (!moved) return { solved: false, fixups };
+    if (!moved) return { solved: false, fixups, steps: res.steps };
     fixups++;
   }
-  return { solved: false, fixups };
+  return { solved: false, fixups, steps: 0 };
 }

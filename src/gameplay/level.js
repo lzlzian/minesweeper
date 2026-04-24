@@ -41,6 +41,14 @@ function isOldGenMode() {
   }
 }
 
+// Minimum deduction steps required per level bracket.
+// Boards solved in fewer steps than minSteps are rejected (too trivial).
+function stepRange(level) {
+  if (level <= 4)  return { min: 1, max: 3 };
+  if (level <= 12) return { min: 3, max: 6 };
+  return { min: 5, max: Infinity };
+}
+
 const SAVE_KEY = 'miningCrawler.runState';
 
 export function saveRun() {
@@ -157,8 +165,10 @@ export function initLevel() {
           { maxFixAttempts: 30, exclude: excludeCells },
         );
         const tMs = Math.round(performance.now() - t0);
-        console.info(`[no-guess] attempt=${attempt} fixups=${noGuessRes.fixups} solved=${noGuessRes.solved} t=${tMs}ms`);
+        const { min, max } = stepRange(getLevel());
+        console.info(`[no-guess] attempt=${attempt} fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} need=[${min},${max}] solved=${noGuessRes.solved} t=${tMs}ms`);
         if (!noGuessRes.solved) continue;
+        if (noGuessRes.steps < min || noGuessRes.steps > max) continue;
       }
       if (merchantPos) {
         setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });

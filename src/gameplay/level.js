@@ -79,13 +79,10 @@ export function initLevel() {
   setRows(gridSizeForLevel(getLevel()));
   setCols(getRows());
 
-  // TEMP: suppress merchant/gold/items/fountain for no-guess playtesting.
-  const PLAYTEST_STRIP = true;
-
   // Decide whether a merchant spawns this level.
-  const spawnMerchant = PLAYTEST_STRIP ? false : (getBiomeOverrides()?.suppressMerchant
+  const spawnMerchant = getBiomeOverrides()?.suppressMerchant
     ? false
-    : (getLevelsSinceMerchant() >= 2 || Math.random() < 0.50));
+    : (getLevelsSinceMerchant() >= 2 || Math.random() < 0.50);
 
   const maxAttempts = 50;
   let solved = false;
@@ -186,7 +183,7 @@ export function initLevel() {
 
   // Roll fountain (50%, no pity, ruleset-agnostic). Placement is independent
   // of reachability — a walled-off fountain is acceptable.
-  if (!PLAYTEST_STRIP && Math.random() < 0.50) {
+  if (Math.random() < 0.50) {
     const candidates = [];
     for (let r = 0; r < getRows(); r++) {
       for (let c = 0; c < getCols(); c++) {

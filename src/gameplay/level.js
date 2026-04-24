@@ -21,7 +21,7 @@ import {
   pickPlayerStart, pickExit, pickMerchantCorner, isReachable,
 } from '../board/layout.js';
 import {
-  countAdjacentGas, generateGrid, placeAnchors,
+  countAdjacentGas, generateGrid,
   cleanMerchantCell, carvePath,
 } from '../board/generation.js';
 import { rollMerchantStock } from './merchant.js';
@@ -98,6 +98,8 @@ export function initLevel() {
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
     setRevealed(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
+    setMerchant(null);
+    setFountain(null);
     const gasDensity = getBiomeOverrides()?.gasDensity ?? 0.20;
     const gasCount = Math.floor(getRows() * getCols() * gasDensity);
     generateGrid(gasCount);
@@ -150,44 +152,81 @@ export function initLevel() {
 
     const exitReachable = isReachable(getPlayerRow(), getPlayerCol(), exit.r, exit.c);
     const merchantReachable = !merchantPos || isReachable(getPlayerRow(), getPlayerCol(), merchantPos.r, merchantPos.c);
-    if (exitReachable && merchantReachable) {
-      if (!isOldGenMode()) {
-        const probeRevealed = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
-        const probeFlagged  = Array.from({ length: getRows() }, () => Array(getCols()).fill(false));
-        const excludeCells = [];
-        if (merchantPos) excludeCells.push(merchantPos);
-        const t0 = performance.now();
-        const noGuessRes = makeSolvable(
-          getGrid(), getRows(), getCols(),
-          probeRevealed, probeFlagged,
-          { r: getPlayerRow(), c: getPlayerCol() },
-          exit,
-          { maxFixAttempts: 30, exclude: excludeCells },
-        );
-        const tMs = Math.round(performance.now() - t0);
-        const { min, max } = stepRange(getLevel());
-        if (!noGuessRes.solved) {
-          console.info(`[no-guess] attempt=${attempt} REJECT reason=unsolvable fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} t=${tMs}ms`);
-          continue;
-        }
-        if (noGuessRes.steps < min || noGuessRes.steps > max) {
-          console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
-          continue;
-        }
-        console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
-      }
-      if (merchantPos) {
-        setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
-      }
-      solved = true;
+    if (!exitReachable || !merchantReachable) continue;
+
+    // Set up merchant state before pre-reveals so fountain placement can see it.
+    if (merchantPos) {
+      setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
     }
+
+    // Roll fountain (50%, no pity, ruleset-agnostic).
+    if (Math.random() < 0.50) {
+      const candidates = [];
+      for (let r = 0; r < getRows(); r++) {
+        for (let c = 0; c < getCols(); c++) {
+          if (getGrid()[r][c].type !== 'empty') continue;
+          if (getGrid()[r][c].item) continue;
+          if (r === getPlayerRow() && c === getPlayerCol()) continue;
+          if (r === exit.r && c === exit.c) continue;
+          if (getMerchant() && r === getMerchant().r && c === getMerchant().c) continue;
+          candidates.push({ r, c });
+        }
+      }
+      if (candidates.length > 0) {
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        getGrid()[pick.r][pick.c].type = 'fountain';
+        setFountain({ r: pick.r, c: pick.c, used: false });
+      }
+    }
+
+    // Pre-reveal exit, start, merchant, and fountain cells.
+    getRevealed()[exit.r][exit.c] = true;
+    getRevealed()[getPlayerRow()][getPlayerCol()] = true;
+    if (getMerchant()) {
+      getRevealed()[getMerchant().r][getMerchant().c] = true;
+    }
+    if (getFountain()) {
+      getRevealed()[getFountain().r][getFountain().c] = true;
+    }
+
+    // Reveal the player's start 3×3 so new players see safe ground around them.
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        revealCell(getPlayerRow() + dr, getPlayerCol() + dc);
+      }
+    }
+
+    // No-guess solver: feed the real revealed state so step count is accurate.
+    if (!isOldGenMode()) {
+      const excludeCells = [];
+      if (merchantPos) excludeCells.push(merchantPos);
+      const t0 = performance.now();
+      const noGuessRes = makeSolvable(
+        getGrid(), getRows(), getCols(),
+        getRevealed(), getFlagged(),
+        { r: getPlayerRow(), c: getPlayerCol() },
+        exit,
+        { maxFixAttempts: 30, exclude: excludeCells },
+      );
+      const tMs = Math.round(performance.now() - t0);
+      const { min, max } = stepRange(getLevel());
+      if (!noGuessRes.solved) {
+        console.info(`[no-guess] attempt=${attempt} REJECT reason=unsolvable fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} t=${tMs}ms`);
+        continue;
+      }
+      if (noGuessRes.steps < min || noGuessRes.steps > max) {
+        console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
+        continue;
+      }
+      console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
+    }
+    solved = true;
   }
 
   if (!solved) {
     console.warn(`initLevel: 50 attempts failed (noGuess=${!isOldGenMode()}), carving a guaranteed path from player to exit`);
     carvePath(getPlayerRow(), getPlayerCol(), getExit().r, getExit().c);
     if (spawnMerchant) {
-      // Place merchant at its corner anchor (may have been unreachable) and carve a path to it.
       const merchantPos = pickMerchantCorner();
       if (merchantPos) {
         cleanMerchantCell(merchantPos.r, merchantPos.c);
@@ -196,46 +235,6 @@ export function initLevel() {
       }
     }
   }
-
-  // Roll fountain (50%, no pity, ruleset-agnostic). Placement is independent
-  // of reachability — a walled-off fountain is acceptable.
-  if (Math.random() < 0.50) {
-    const candidates = [];
-    for (let r = 0; r < getRows(); r++) {
-      for (let c = 0; c < getCols(); c++) {
-        if (getGrid()[r][c].type !== 'empty') continue;
-        if (getGrid()[r][c].item) continue;
-        if (r === getPlayerRow() && c === getPlayerCol()) continue;
-        if (r === getExit().r && c === getExit().c) continue;
-        if (getMerchant() && r === getMerchant().r && c === getMerchant().c) continue;
-        candidates.push({ r, c });
-      }
-    }
-    if (candidates.length > 0) {
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      getGrid()[pick.r][pick.c].type = 'fountain';
-      setFountain({ r: pick.r, c: pick.c, used: false });
-    }
-  }
-
-  // Pre-reveal exit, start, and merchant cells; start cell cascades for anchor merge-check.
-  getRevealed()[getExit().r][getExit().c] = true;
-  getRevealed()[getPlayerRow()][getPlayerCol()] = true;
-  if (getMerchant()) {
-    getRevealed()[getMerchant().r][getMerchant().c] = true;
-  }
-  if (getFountain()) {
-    getRevealed()[getFountain().r][getFountain().c] = true;
-  }
-
-  // Reveal the player's start 3×3 so new players see safe ground around them.
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      revealCell(getPlayerRow() + dr, getPlayerCol() + dc);
-    }
-  }
-
-  placeAnchors();
 
   collectAt(getPlayerRow(), getPlayerCol());
 

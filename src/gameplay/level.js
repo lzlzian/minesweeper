@@ -1,6 +1,6 @@
 import {
   getState,
-  getLevel, getRows, getCols, getGrid, getRevealed,
+  getLevel, getRows, getCols, getGrid, getRevealed, getFlagged,
   getLevelsSinceMerchant, getMerchant, getFountain,
   getRulesetId, getBiomeOverrides, getPlayerRow, getPlayerCol, getExit,
   moveGoldToStash,

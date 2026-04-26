@@ -341,17 +341,23 @@ export function ensureSafeStart(r, c) {
 export function revealCell(r, c) {
   if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) return;
   if (getRevealed()[r][c]) return;
-  if (getGrid()[r][c].type === 'gas') return;
-  if (getGrid()[r][c].type === 'wall') return;
+  const start = getGrid()[r][c];
+  if (start.type === 'gas' || start.type === 'wall') return;
 
-  getRevealed()[r][c] = true;
-  const cell = getGrid()[r][c];
-
-  if (cell.adjacent === 0) {
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (dr === 0 && dc === 0) continue;
-        revealCell(r + dr, c + dc);
+  const stack = [{ r, c }];
+  while (stack.length) {
+    const { r: cr, c: cc } = stack.pop();
+    if (cr < 0 || cr >= getRows() || cc < 0 || cc >= getCols()) continue;
+    if (getRevealed()[cr][cc]) continue;
+    const cell = getGrid()[cr][cc];
+    if (cell.type === 'gas' || cell.type === 'wall') continue;
+    getRevealed()[cr][cc] = true;
+    if (cell.adjacent === 0) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          stack.push({ r: cr + dr, c: cc + dc });
+        }
       }
     }
   }

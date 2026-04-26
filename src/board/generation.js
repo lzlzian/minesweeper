@@ -137,7 +137,9 @@ export function generateGrid(gasCount) {
 
   // Place gas pockets randomly (skip walls — 'empty' check below handles this)
   let placed = 0;
-  while (placed < gasCount) {
+  let gasAttempts = 0;
+  while (placed < gasCount && gasAttempts < getRows() * getCols() * 4) {
+    gasAttempts++;
     const r = Math.floor(Math.random() * getRows());
     const c = Math.floor(Math.random() * getCols());
     if (getGrid()[r][c].type === 'empty') {

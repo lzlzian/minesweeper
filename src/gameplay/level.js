@@ -65,7 +65,7 @@ export function clearSave() {
   localStorage.removeItem(SAVE_KEY);
 }
 
-export function initLevel() {
+export async function initLevel() {
   // Roll ruleset if not already set (retries/resumes preserve it).
   if (!getRulesetId()) {
     setRulesetId((getLevel() >= 13 && RULESETS.length > 1)
@@ -96,6 +96,11 @@ export function initLevel() {
   let solved = false;
 
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
+    // Yield to the event loop periodically so the browser stays responsive.
+    if (attempt > 0 && attempt % 10 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
+
     setRevealed(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setMerchant(null);
@@ -287,28 +292,28 @@ export function initLevel() {
   hideOverlay();
 }
 
-export function startGame() {
+export async function startGame() {
   document.body.classList.add('in-run');
   clearSave();
   resetForNewRun();
-  initLevel();
+  await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
   startBgm();
 }
 
-export function resumeGame(save) {
+export async function resumeGame(save) {
   document.body.classList.add('in-run');
   applySavePayload(save);
-  initLevel();
+  await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
   startBgm();
 }
 
-export function nextLevel() {
+export async function nextLevel() {
   moveGoldToStash();
   incrementLevel();
   const overrides = getBiomeOverrides();
@@ -321,16 +326,16 @@ export function nextLevel() {
   }
   setRulesetId(null);
   saveRun();
-  initLevel();
+  await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
 }
 
-export function retryLevel() {
+export async function retryLevel() {
   resetLevelGold();
   fullHeal();
-  initLevel();
+  await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';

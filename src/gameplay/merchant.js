@@ -12,6 +12,8 @@ import { hideOverlay } from '../ui/overlay.js';
 // ============================================================
 
 export const MERCHANT_PRICES = { potion: 100, pickaxe: 150, scanner: 200, row: 250, column: 250, cross: 300 };
+export const MERCHANT_REROLL_BASE_COST = 80;
+export const MERCHANT_REROLL_STEP_COST = 40;
 
 // Discount distribution: weights sum to 100.
 // Each slot's discount is rolled independently.
@@ -38,6 +40,10 @@ export function priceFromTier(basePrice, tier) {
   if (tier.key === 'free') return 0;
   if (tier.key === 'full') return basePrice;
   return Math.max(1, Math.round(basePrice * tier.mult));
+}
+
+export function merchantRerollCost(rerollCount) {
+  return MERCHANT_REROLL_BASE_COST + MERCHANT_REROLL_STEP_COST * rerollCount;
 }
 
 export function rollMerchantStock() {
@@ -74,7 +80,7 @@ export function buyFromMerchant(idx) {
 
 export function rerollMerchant() {
   if (!getMerchant()) return;
-  const cost = 10 * (getMerchant().rerollCount + 1);
+  const cost = merchantRerollCost(getMerchant().rerollCount);
   const totalGold = getGold() + getStashGold();
   if (totalGold < cost) return;
   spendGold(cost);

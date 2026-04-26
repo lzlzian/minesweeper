@@ -16,6 +16,7 @@ let hooks = {
   onReroll: () => {},
   onLeave: () => {},
   getTooltipData: () => null,
+  getRerollCost: (rerollCount) => 80 + 40 * rerollCount,
 };
 
 export function initShop(injected) {
@@ -76,7 +77,7 @@ export function showShopOverlay(playWelcome = false) {
     `;
   }).join('');
 
-  const rerollCost = 10 * (getMerchant().rerollCount + 1);
+  const rerollCost = hooks.getRerollCost(getMerchant().rerollCount);
   const canAffordReroll = totalGold >= rerollCost;
 
   showOverlay(`

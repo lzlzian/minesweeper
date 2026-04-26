@@ -160,7 +160,7 @@ export function generateGrid(gasCount) {
   // Place gold veins — bias high values toward high-adjacency cells
   placeGoldVeins();
 
-  // Place 1-2 item drops on plain empty cells
+  // Place occasional item drops on plain empty cells.
   placeItemDrops();
 }
 
@@ -243,12 +243,12 @@ export function placeItemDrops() {
   }
   if (candidates.length === 0) return;
 
-  // Fisher-Yates shuffle, then take 1 or 2.
+  // Fisher-Yates shuffle, then take the tuned drop count.
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
-  const requestedDrops = getBiomeOverrides()?.guaranteedItemDrops ?? (1 + Math.floor(Math.random() * 2));
+  const requestedDrops = getBiomeOverrides()?.guaranteedItemDrops ?? (Math.random() < 0.5 ? 1 : 0);
   const dropCount = Math.min(candidates.length, requestedDrops);
   const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   for (let i = 0; i < dropCount; i++) {
@@ -351,7 +351,7 @@ export function prepareTreasureChamber(state) {
     wallDensity:         0.15,
     gasDensity:          0.12,
     goldScatterDensity:  0.30,
-    guaranteedItemDrops: 2,
+    guaranteedItemDrops: 1,
     suppressMerchant:    true,
     freezePityTick:      true,
   };

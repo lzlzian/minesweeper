@@ -100,7 +100,7 @@ test('anchorCountForSize returns expected counts per size bracket', () => {
 
 // -- board layout --
 import { isReachable, findPath } from '../src/board/layout.js';
-import { setGrid, setRows, setCols, setRevealed } from '../src/state.js';
+import { setGrid, setRows, setCols, setRevealed, setBiomeOverrides } from '../src/state.js';
 
 function makeEmptyGrid(rows, cols) {
   const g = [];
@@ -143,7 +143,7 @@ test('findPath returns a path ending at target', () => {
 });
 
 // -- merchant --
-import { priceFromTier, rollDiscountTier, DISCOUNT_TIERS } from '../src/gameplay/merchant.js';
+import { priceFromTier, rollDiscountTier, DISCOUNT_TIERS, merchantRerollCost } from '../src/gameplay/merchant.js';
 
 test('priceFromTier free', () => {
   assertEq(priceFromTier(20, { key: 'free', mult: 0 }), 0);
@@ -160,6 +160,13 @@ test('priceFromTier d50', () => {
 test('priceFromTier d90 floors to 1 minimum', () => {
   // base 5 at mult 0.10 = 0.5 → rounds to 1 (Math.max guard)
   assertEq(priceFromTier(5, { key: 'd90', mult: 0.10 }), 1);
+});
+
+test('merchantRerollCost scales as a serious gold sink', () => {
+  assertEq(merchantRerollCost(0), 80);
+  assertEq(merchantRerollCost(1), 120);
+  assertEq(merchantRerollCost(2), 160);
+  assertEq(merchantRerollCost(3), 200);
 });
 
 test('rollDiscountTier distribution within +/-5%', () => {
@@ -181,7 +188,17 @@ test('rollDiscountTier distribution within +/-5%', () => {
 });
 
 // -- board generation --
-import { countAdjacentGas } from '../src/board/generation.js';
+import { countAdjacentGas, placeItemDrops } from '../src/board/generation.js';
+
+function countItemDrops(grid) {
+  let count = 0;
+  for (const row of grid) {
+    for (const cell of row) {
+      if (cell.item) count++;
+    }
+  }
+  return count;
+}
 
 test('countAdjacentGas counts gas and detonated neighbors', () => {
   setRows(3); setCols(3);
@@ -201,6 +218,38 @@ test('countAdjacentGas handles grid edges', () => {
   setGrid(g);
   // Corner (0,0) has one gas neighbor
   assertEq(countAdjacentGas(0, 0), 1);
+});
+
+test('placeItemDrops defaults to zero drops when the chance misses', () => {
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  setGrid(g);
+  setBiomeOverrides(null);
+  const orig = Math.random;
+  Math.random = () => 0.99;
+  try {
+    placeItemDrops();
+  } finally {
+    Math.random = orig;
+    setBiomeOverrides(null);
+  }
+  assertEq(countItemDrops(g), 0);
+});
+
+test('placeItemDrops honors guaranteed drop overrides', () => {
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  setGrid(g);
+  setBiomeOverrides({ guaranteedItemDrops: 2 });
+  const orig = Math.random;
+  Math.random = () => 0;
+  try {
+    placeItemDrops();
+  } finally {
+    Math.random = orig;
+    setBiomeOverrides(null);
+  }
+  assertEq(countItemDrops(g), 2);
 });
 
 // -- editor: schema --

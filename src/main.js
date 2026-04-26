@@ -4,7 +4,7 @@ import { pauseBtn } from './ui/dom.js';
 import { renderStartMenu, renderPauseMenu } from './ui/overlay.js';
 import { initShop } from './ui/shop.js';
 import { initPointer } from './ui/pointer.js';
-import { buyFromMerchant, rerollMerchant, leaveShop } from './gameplay/merchant.js';
+import { buyFromMerchant, rerollMerchant, leaveShop, merchantRerollCost } from './gameplay/merchant.js';
 import { ITEM_TOOLTIPS } from './gameplay/items.js';
 import { handleClick, handleRightClick } from './gameplay/interaction.js';
 
@@ -27,6 +27,7 @@ initShop({
   onReroll: rerollMerchant,
   onLeave: leaveShop,
   getTooltipData: (itemKey) => ITEM_TOOLTIPS[itemKey],
+  getRerollCost: merchantRerollCost,
 });
 
 // Wire pointer arbiter to the interaction module.

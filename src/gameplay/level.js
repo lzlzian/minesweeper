@@ -50,6 +50,7 @@ function stepRange(level) {
 }
 
 const SAVE_KEY = 'miningCrawler.runState';
+const MERCHANT_SPAWN_CHANCE = 0.33;
 
 export function saveRun() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(getSavePayload()));
@@ -90,7 +91,7 @@ export async function initLevel() {
   // Decide whether a merchant spawns this level.
   const spawnMerchant = getBiomeOverrides()?.suppressMerchant
     ? false
-    : (getLevelsSinceMerchant() >= 2 || Math.random() < 0.50);
+    : (getLevelsSinceMerchant() >= 2 || Math.random() < MERCHANT_SPAWN_CHANCE);
 
   const maxAttempts = 500;
   let solved = false;

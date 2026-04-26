@@ -44,6 +44,41 @@ function cascadeReveal(r, c, grid, rows, cols, revealed) {
   }
 }
 
+// After gas relocation, a cell that was already revealed as a number can become
+// a zero. Gameplay resyncs those already-visible empty zeroes by cascading from
+// them, so generation must validate against that expanded revealed state.
+export function syncRevealedZeroCascades(grid, rows, cols, revealed) {
+  const seenZero = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const stack = [];
+  let changed = false;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = grid[r][c];
+      if (revealed[r][c] && cell.type === 'empty' && (cell.adjacent ?? 0) === 0) {
+        stack.push({ r, c });
+      }
+    }
+  }
+
+  while (stack.length) {
+    const { r, c } = stack.pop();
+    if (r < 0 || r >= rows || c < 0 || c >= cols) continue;
+    const cell = grid[r][c];
+    if (cell.type === 'wall' || cell.type === 'gas') continue;
+    if (!revealed[r][c]) {
+      revealed[r][c] = true;
+      changed = true;
+    }
+    if ((cell.adjacent ?? 0) !== 0) continue;
+    if (seenZero[r][c]) continue;
+    seenZero[r][c] = true;
+    for (const n of neighbors(r, c, rows, cols)) stack.push(n);
+  }
+
+  return changed;
+}
+
 // BFS: can player walk to exit through revealed, non-wall, non-gas cells?
 function pathConnected(revealed, grid, rows, cols, player, exit) {
   const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
@@ -163,6 +198,8 @@ export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player,
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (grid[r][c].type !== 'empty') continue;
+      if (revealed[r][c]) continue;
+      if (flagged[r][c]) continue;
       if (r === player.r && c === player.c) continue;
       if (r === exit.r && c === exit.c) continue;
       if (exclude.some(p => p.r === r && p.c === c)) continue;

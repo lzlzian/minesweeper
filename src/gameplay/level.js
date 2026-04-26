@@ -26,7 +26,7 @@ import {
 } from '../board/generation.js';
 import { rollMerchantStock } from './merchant.js';
 import { collectAt, ensureSafeStart, revealCell } from './interaction.js';
-import { makeSolvable } from '../solver.js';
+import { makeSolvable, solve, syncRevealedZeroCascades } from '../solver.js';
 
 // ============================================================
 // LEVEL LIFECYCLE
@@ -213,37 +213,42 @@ export async function initLevel() {
         exit,
         { maxFixAttempts: 30, exclude: excludeCells },
       );
-      const tMs = Math.round(performance.now() - t0);
       const { min, max } = stepRange(getLevel());
       if (!noGuessRes.solved) {
+        const tMs = Math.round(performance.now() - t0);
         console.info(`[no-guess] attempt=${attempt} REJECT reason=unsolvable fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} t=${tMs}ms`);
         continue;
       }
-      if (noGuessRes.steps < min || noGuessRes.steps > max) {
-        console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
-        continue;
-      }
-      console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${noGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups} t=${tMs}ms`);
 
       // Gas relocation may have turned previously-numbered cells into adj=0.
       // Re-cascade from all revealed 0-cells so the player doesn't see
       // blank revealed cells surrounded by fog.
       if (noGuessRes.fixups > 0) {
-        for (let r = 0; r < getRows(); r++) {
-          for (let c = 0; c < getCols(); c++) {
-            if (!getRevealed()[r][c]) continue;
-            const cell = getGrid()[r][c];
-            if (cell.type === 'empty' && cell.adjacent === 0) {
-              for (let dr = -1; dr <= 1; dr++) {
-                for (let dc = -1; dc <= 1; dc++) {
-                  if (dr === 0 && dc === 0) continue;
-                  revealCell(r + dr, c + dc);
-                }
-              }
-            }
-          }
-        }
+        syncRevealedZeroCascades(getGrid(), getRows(), getCols(), getRevealed());
       }
+
+      // Re-check the exact board state the player will see after the fixup
+      // cascade. The original solve may require deductions, while this final
+      // revealed graph may already connect to the exit.
+      const finalNoGuessRes = solve(
+        getGrid(), getRows(), getCols(),
+        getRevealed(), getFlagged(),
+        { r: getPlayerRow(), c: getPlayerCol() },
+        exit,
+      );
+      const tMs = Math.round(performance.now() - t0);
+      const stepNote = finalNoGuessRes.steps === noGuessRes.steps
+        ? ''
+        : ` preSyncSteps=${noGuessRes.steps}`;
+      if (!finalNoGuessRes.solved) {
+        console.info(`[no-guess] attempt=${attempt} REJECT reason=post-sync-unsolvable fixups=${noGuessRes.fixups} steps=${finalNoGuessRes.steps}${stepNote} t=${tMs}ms`);
+        continue;
+      }
+      if (finalNoGuessRes.steps < min || finalNoGuessRes.steps > max) {
+        console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${finalNoGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups}${stepNote} t=${tMs}ms`);
+        continue;
+      }
+      console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${finalNoGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups}${stepNote} t=${tMs}ms`);
     }
     solved = true;
   }

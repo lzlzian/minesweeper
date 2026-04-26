@@ -407,7 +407,9 @@ test('validation: rows/cols out of range', () => {
 });
 
 // -- solver --
-import { solve, relocateFrontierGas, makeSolvable } from '../src/solver.js';
+import {
+  solve, relocateFrontierGas, makeSolvable, syncRevealedZeroCascades,
+} from '../src/solver.js';
 
 // Build a solver input from an ASCII spec.
 // '.' empty, '#' wall, '*' gas, 'P' player start (empty), 'E' exit (empty).
@@ -495,49 +497,62 @@ test('solver returns unsolved on a genuine 50/50', () => {
 
 test('relocateFrontierGas moves frontier gas and preserves gas count', () => {
   const b = buildBoard([
-    'P.....',
-    '......',
-    '......',
-    '......',
-    '...#.#',
-    '...#*E',
+    'P.......',
+    '........',
+    '........',
+    '........',
+    '...#.###',
+    '...#*E##',
+    '########',
+    '........',
   ]);
 
   // First solve: confirms we start from the stuck state.
-  const r1 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  const r1 = solve(b.grid, b.rows, b.cols, emptyGrid(b.rows, b.cols), emptyGrid(b.rows, b.cols), b.player, b.exit);
   assertEq(r1.solved, false);
 
   let gasBefore = 0;
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+  for (let r = 0; r < b.rows; r++) for (let c = 0; c < b.cols; c++)
     if (b.grid[r][c].type === 'gas') gasBefore++;
 
   const moved = relocateFrontierGas(
     b.grid, b.rows, b.cols, r1.revealed, r1.flagged, b.player, b.exit,
   );
-  assertEq(moved, true);
+  if (!moved) {
+    const revealedRows = r1.revealed.map(row => row.map(v => v ? '1' : '.').join('')).join('/');
+    const gasCells = [];
+    for (let r = 0; r < b.rows; r++) {
+      for (let c = 0; c < b.cols; c++) {
+        if (b.grid[r][c].type === 'gas') gasCells.push(`${r},${c}`);
+      }
+    }
+    throw new Error(`expected frontier gas move; solved=${r1.solved} steps=${r1.steps} gas=${gasCells.join(';')} revealed=${revealedRows}`);
+  }
 
   let gasAfter = 0;
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
+  for (let r = 0; r < b.rows; r++) for (let c = 0; c < b.cols; c++)
     if (b.grid[r][c].type === 'gas') gasAfter++;
   assertEq(gasAfter, gasBefore);
 
   // The old gas location is empty now and exit is reachable via cascade.
-  const r2 = solve(b.grid, b.rows, b.cols, emptyGrid(6, 6), emptyGrid(6, 6), b.player, b.exit);
+  const r2 = solve(b.grid, b.rows, b.cols, emptyGrid(b.rows, b.cols), emptyGrid(b.rows, b.cols), b.player, b.exit);
   assertEq(r2.solved, true);
 });
 
 test('makeSolvable converges on a board that starts unsolvable', () => {
   const b = buildBoard([
-    'P.....',
-    '......',
-    '......',
-    '......',
-    '...#.#',
-    '...#*E',
+    'P.......',
+    '........',
+    '........',
+    '........',
+    '...#.###',
+    '...#*E##',
+    '########',
+    '........',
   ]);
   const res = makeSolvable(
     b.grid, b.rows, b.cols,
-    emptyGrid(6, 6), emptyGrid(6, 6),
+    emptyGrid(b.rows, b.cols), emptyGrid(b.rows, b.cols),
     b.player, b.exit,
     { maxFixAttempts: 30 },
   );
@@ -559,6 +574,38 @@ test('makeSolvable returns solved=true with zero fixups on already-solvable boar
   );
   assertEq(res.solved, true);
   assertEq(res.fixups, 0);
+});
+
+test('syncRevealedZeroCascades expands stale revealed zeros before step validation', () => {
+  const b = buildBoard([
+    'P.*..',
+    '.....',
+    '....E',
+    '.....',
+    '.....',
+  ]);
+  const revealed = emptyGrid(5, 5);
+  const flagged = emptyGrid(5, 5);
+
+  // Mimic a post-fixup board where cells were already visible as numbers, then
+  // became zeros after gas relocation. Before syncing zero cascades, the exit
+  // is not actually connected through the visible graph.
+  for (let r = 0; r <= 1; r++) {
+    for (let c = 0; c <= 1; c++) {
+      revealed[r][c] = true;
+    }
+  }
+  revealed[2][2] = true;
+
+  const before = solve(b.grid, b.rows, b.cols, revealed, flagged, b.player, b.exit);
+  if (before.solved && before.steps === 0) {
+    throw new Error('expected stale zero state not to be immediately solved before sync');
+  }
+
+  syncRevealedZeroCascades(b.grid, b.rows, b.cols, revealed);
+  const after = solve(b.grid, b.rows, b.cols, revealed, flagged, b.player, b.exit);
+  assertEq(after.solved, true);
+  assertEq(after.steps, 0);
 });
 
 // -- editor: solvability --

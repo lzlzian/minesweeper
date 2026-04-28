@@ -1,8 +1,7 @@
 import {
-  MAX_HP,
   getGameOver, getBusy, getHp, getRows, getCols, getGrid, getRevealed,
   getItemCount, getActiveItem, setActiveItem, getPlayerRow, getPlayerCol,
-  consumeItem, healPlayer,
+  consumeItem, healPlayer, getMaxHp,
 } from '../state.js';
 import { itemButtons } from '../ui/dom.js';
 import {
@@ -10,7 +9,7 @@ import {
 } from '../ui/render.js';
 import { attachTooltip } from '../ui/tooltip.js';
 import { playSfx } from '../audio.js';
-import { walkRay, detonateGas, revealCell } from './interaction.js';
+import { walkRay, detonateGas, revealCell, collectRevealedGold } from './interaction.js';
 
 // ============================================================
 // ITEMS
@@ -70,7 +69,7 @@ export function onItemButtonClick(itemKey) {
 }
 
 function useItemPotion() {
-  if (getHp() >= MAX_HP) return;
+  if (getHp() >= getMaxHp()) return;
   if (getItemCount('potion') <= 0) return;
   consumeItem('potion');
   healPlayer(1);
@@ -179,10 +178,7 @@ function useItemScanner() {
     }
   }
 
-  playSfx('scan');
-  updateHud();
-  updateItemBar();
-  renderGrid();
+  finishRevealItem();
 }
 
 // Shared ray-reveal loop used by row/column/cross. For each cell along the
@@ -203,6 +199,14 @@ function revealAlongRay(startR, startC, dR, dC) {
   });
 }
 
+function finishRevealItem() {
+  playSfx('scan');
+  renderGrid();
+  collectRevealedGold();
+  updateHud();
+  updateItemBar();
+}
+
 // Reveal the player's row — two rays (west, east), stop at walls, gas
 // detonates harmlessly, empty cells may cascade via revealCell.
 function useItemRow() {
@@ -213,10 +217,7 @@ function useItemRow() {
   const pc = getPlayerCol();
   revealAlongRay(pr, pc, 0, -1);
   revealAlongRay(pr, pc, 0, 1);
-  playSfx('scan');
-  updateHud();
-  updateItemBar();
-  renderGrid();
+  finishRevealItem();
 }
 
 // Reveal the player's column — two rays (north, south), stop at walls.
@@ -228,10 +229,7 @@ function useItemColumn() {
   const pc = getPlayerCol();
   revealAlongRay(pr, pc, -1, 0);
   revealAlongRay(pr, pc, 1, 0);
-  playSfx('scan');
-  updateHud();
-  updateItemBar();
-  renderGrid();
+  finishRevealItem();
 }
 
 // Reveal the four diagonals from the player — four rays, stop at walls.
@@ -245,10 +243,7 @@ function useItemCross() {
   revealAlongRay(pr, pc, -1, 1);
   revealAlongRay(pr, pc, 1, -1);
   revealAlongRay(pr, pc, 1, 1);
-  playSfx('scan');
-  updateHud();
-  updateItemBar();
-  renderGrid();
+  finishRevealItem();
 }
 
 // Give render.js the disable-state predicates for the item bar.

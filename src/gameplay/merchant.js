@@ -1,19 +1,21 @@
 import {
-  getMerchant, setMerchant, getGold, getStashGold, spendGold,
+  getMerchant, setMerchant, getGold, getStashGold, hasArtifact, spendGold,
   addItem,
 } from '../state.js';
 import { playSfx } from '../audio.js';
 import { showShopOverlay } from '../ui/shop.js';
 import { updateHud } from '../ui/render.js';
 import { hideOverlay } from '../ui/overlay.js';
+import { merchantArtifactPrice } from './artifacts.js';
 
 // ============================================================
 // MERCHANT
 // ============================================================
 
 export const MERCHANT_PRICES = { potion: 100, pickaxe: 150, scanner: 200, row: 250, column: 250, cross: 300 };
-export const MERCHANT_REROLL_BASE_COST = 80;
+export const MERCHANT_REROLL_BASE_COST = 40;
 export const MERCHANT_REROLL_STEP_COST = 40;
+export const BLACK_MARKET_EXTRA_SLOTS = 2;
 
 // Discount distribution: weights sum to 100.
 // Each slot's discount is rolled independently.
@@ -46,10 +48,18 @@ export function merchantRerollCost(rerollCount) {
   return MERCHANT_REROLL_BASE_COST + MERCHANT_REROLL_STEP_COST * rerollCount;
 }
 
+export function merchantEffectiveRerollCost(rerollCount) {
+  if (hasArtifact('free_reroll') && rerollCount === 0) return 0;
+  return merchantRerollCost(rerollCount);
+}
+
 export function rollMerchantStock() {
   const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   const stock = [];
-  for (let i = 0; i < 10; i++) {
+  const slotCount = hasArtifact('black_market_ledger')
+    ? 10 + BLACK_MARKET_EXTRA_SLOTS
+    : 10;
+  for (let i = 0; i < slotCount; i++) {
     const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
     const basePrice = MERCHANT_PRICES[type];
     const tier = rollDiscountTier();
@@ -68,9 +78,10 @@ export function buyFromMerchant(idx) {
   if (!getMerchant()) return;
   const slot = getMerchant().stock[idx];
   if (!slot || slot.sold) return;
+  const price = merchantArtifactPrice(slot.price);
   const totalGold = getGold() + getStashGold();
-  if (totalGold < slot.price) return;
-  spendGold(slot.price);
+  if (totalGold < price) return;
+  spendGold(price);
   addItem(slot.type, 1);
   slot.sold = true;
   playSfx('payment');
@@ -80,7 +91,7 @@ export function buyFromMerchant(idx) {
 
 export function rerollMerchant() {
   if (!getMerchant()) return;
-  const cost = merchantRerollCost(getMerchant().rerollCount);
+  const cost = merchantEffectiveRerollCost(getMerchant().rerollCount);
   const totalGold = getGold() + getStashGold();
   if (totalGold < cost) return;
   spendGold(cost);

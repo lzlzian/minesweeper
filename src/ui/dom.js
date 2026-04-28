@@ -5,6 +5,8 @@
 export const board = document.getElementById('board');
 export const gridContainer = document.getElementById('grid-container');
 export const goldDisplay = document.getElementById('gold-display');
+export const quotaDisplay = document.getElementById('quota-display');
+export const artifactDisplay = document.getElementById('artifact-display');
 export const hpDisplay = document.getElementById('hp-display');
 export const levelDisplay = document.getElementById('level-display');
 export const playerSprite = document.getElementById('player-sprite');

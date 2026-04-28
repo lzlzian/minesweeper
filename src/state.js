@@ -11,6 +11,8 @@ export const BOARD_PAD = 16;
 const state = {
   gold: 0,
   stashGold: 0,
+  runGoldEarned: 0,
+  maxHp: MAX_HP,
   hp: MAX_HP,
   level: 1,
   rows: 10,
@@ -28,9 +30,14 @@ const state = {
   levelsSinceMerchant: 0,
   merchant: null,
   fountain: null,
+  joker: null,
+  artifacts: [],
+  hazardPayClaimed: false,
+  debtCushionUsed: false,
   rulesetId: null,
   biomeOverrides: null,
   startCornerIdx: 0,
+  genMeta: null,
 };
 
 // Escape hatch — returns the singleton. Prefer typed accessors.
@@ -39,6 +46,8 @@ export function getState() { return state; }
 // ----- Getters -----
 export function getGold() { return state.gold; }
 export function getStashGold() { return state.stashGold; }
+export function getRunGoldEarned() { return state.runGoldEarned; }
+export function getMaxHp() { return state.maxHp; }
 export function getHp() { return state.hp; }
 export function getLevel() { return state.level; }
 export function getRows() { return state.rows; }
@@ -57,12 +66,21 @@ export function getActiveItem() { return state.activeItem; }
 export function getLevelsSinceMerchant() { return state.levelsSinceMerchant; }
 export function getMerchant() { return state.merchant; }
 export function getFountain() { return state.fountain; }
+export function getJoker() { return state.joker; }
+export function getArtifacts() { return state.artifacts; }
+export function hasArtifact(id) { return state.artifacts.includes(id); }
+export function getHazardPayClaimed() { return state.hazardPayClaimed; }
+export function getDebtCushionUsed() { return state.debtCushionUsed; }
 export function getRulesetId() { return state.rulesetId; }
 export function getBiomeOverrides() { return state.biomeOverrides; }
 export function getStartCornerIdx() { return state.startCornerIdx; }
+export function getGenMeta() { return state.genMeta; }
 
 // ----- Semantic mutators -----
-export function addGold(amount) { state.gold += amount; }
+export function addGold(amount) {
+  state.gold += amount;
+  state.runGoldEarned += amount;
+}
 
 export function spendGold(amount) {
   if (state.gold >= amount) {
@@ -85,12 +103,24 @@ export function damagePlayer(amount) {
 }
 
 export function healPlayer(amount) {
-  state.hp = Math.min(MAX_HP, state.hp + amount);
+  state.hp = Math.min(state.maxHp, state.hp + amount);
   return state.hp;
+}
+
+export function increaseMaxHp(amount) {
+  state.maxHp += amount;
+  state.hp = Math.min(state.maxHp, state.hp + amount);
+  return state.maxHp;
 }
 
 export function addItem(key, count = 1) {
   state.items[key] = (state.items[key] ?? 0) + count;
+}
+
+export function addArtifact(id) {
+  if (state.artifacts.includes(id)) return false;
+  state.artifacts.push(id);
+  return true;
 }
 
 export function consumeItem(key) {
@@ -115,6 +145,10 @@ export function setLevelsSinceMerchant(v) { state.levelsSinceMerchant = v; }
 export function incrementLevelsSinceMerchant() { state.levelsSinceMerchant++; }
 export function setMerchant(m) { state.merchant = m; }
 export function setFountain(f) { state.fountain = f; }
+export function setJoker(j) { state.joker = j; }
+export function setStashGold(n) { state.stashGold = n; }
+export function setHazardPayClaimed(v) { state.hazardPayClaimed = v; }
+export function setDebtCushionUsed(v) { state.debtCushionUsed = v; }
 export function setLevel(n) { state.level = n; }
 export function incrementLevel() { state.level++; }
 export function setRows(n) { state.rows = n; }
@@ -123,26 +157,41 @@ export function setRulesetId(id) { state.rulesetId = id; }
 export function setBiomeOverrides(o) { state.biomeOverrides = o; }
 export function setStartCornerIdx(i) { state.startCornerIdx = i; }
 export function setItems(items) { state.items = items; }
+export function setGenMeta(meta) { state.genMeta = meta; }
 
 // ----- Lifecycle -----
 export function resetForNewRun() {
   state.level = 1;
+  state.maxHp = MAX_HP;
   state.hp = MAX_HP;
   state.gold = 0;
   state.stashGold = 0;
+  state.runGoldEarned = 0;
   state.levelsSinceMerchant = 0;
   state.items = { potion: 1, scanner: 1, pickaxe: 1, row: 1, column: 1, cross: 1 };
+  state.merchant = null;
+  state.fountain = null;
+  state.joker = null;
+  state.artifacts = [];
+  state.hazardPayClaimed = false;
+  state.debtCushionUsed = false;
   state.rulesetId = null;
+  state.genMeta = null;
 }
 
 export function resetLevelGold() { state.gold = 0; }
-export function fullHeal() { state.hp = MAX_HP; }
+export function resetLevelArtifactState() { state.hazardPayClaimed = false; }
+export function fullHeal() { state.hp = state.maxHp; }
 
 // ----- Save/load -----
 export function getSavePayload() {
   return {
     level: state.level,
     stashGold: state.stashGold,
+    runGoldEarned: state.runGoldEarned,
+    maxHp: state.maxHp,
+    artifacts: [...state.artifacts],
+    debtCushionUsed: state.debtCushionUsed,
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
     rulesetId: state.rulesetId,
@@ -154,13 +203,18 @@ export function applySavePayload(save) {
   state.level = save.level;
   state.gold = 0;
   state.stashGold = save.stashGold;
+  state.runGoldEarned = save.runGoldEarned ?? save.stashGold ?? 0;
+  state.maxHp = save.maxHp ?? MAX_HP;
   state.levelsSinceMerchant = save.levelsSinceMerchant;
+  state.artifacts = [...(save.artifacts ?? [])];
+  state.hazardPayClaimed = false;
+  state.debtCushionUsed = !!save.debtCushionUsed;
   state.items = { ...save.items };
   state.items.row = state.items.row ?? 0;
   state.items.column = state.items.column ?? 0;
   state.items.cross = state.items.cross ?? 0;
   state.rulesetId = save.rulesetId ?? null;
-  state.hp = save.hp ?? MAX_HP;
+  state.hp = Math.min(save.hp ?? state.maxHp, state.maxHp);
 }
 
 // ----- Lifetime gold (persistent) -----

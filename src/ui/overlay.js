@@ -3,10 +3,13 @@ import { hideTooltip } from './tooltip.js';
 import { settings, setMusicOn, setSfxOn } from '../settings.js';
 import { playSfx } from '../audio.js';
 import {
-  startGame, resumeGame, nextLevel, retryLevel,
+  startGame, resumeGame, nextLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
-import { getRulesetId } from '../state.js';
+import { getDebtCushionUsed, getRulesetId, hasArtifact } from '../state.js';
+import { getLeaderboard, recordRun } from '../gameplay/leaderboard.js';
+import { isFinalRunLevel, paymentAmountForLevel } from '../gameplay/quota.js';
+import { DEBT_CUSHION_GOLD, PAYMENT_DISCOUNT_PERCENT, artifactPaymentAmount } from '../gameplay/artifacts.js';
 
 // String literal (not imported from authored.js) to avoid a static cycle:
 // authored.js statically imports renderStartMenu/hideOverlay from this file.
@@ -20,6 +23,25 @@ function menuClick(handler) {
   };
 }
 
+function runEndLabel(cause) {
+  if (cause === 'payment') return 'Payment';
+  if (cause === 'death') return 'Death';
+  if (cause === 'abandoned') return 'Abandoned';
+  if (cause === 'win') return 'Win';
+  return 'Ended';
+}
+
+function maybeRecordAbandonedSave(save) {
+  if (!save) return;
+  const totalGold = save.runGoldEarned ?? save.stashGold ?? 0;
+  if ((save.level ?? 1) <= 1 && totalGold <= 0) return;
+  recordRun({
+    levelReached: save.level,
+    totalGold,
+    cause: 'abandoned',
+  });
+}
+
 // ============================================================
 // OVERLAY RENDERING
 // ============================================================
@@ -31,6 +53,7 @@ function menuClick(handler) {
 // before it's been assigned.
 
 export function showOverlay(html) {
+  hideTooltip();
   overlayContent.innerHTML = html;
   overlay.classList.remove('hidden');
 }
@@ -40,13 +63,113 @@ export function hideOverlay() {
   overlay.classList.add('hidden');
 }
 
-export function showEscapedOverlay(level, gold, stashGold, nextSize) {
+export function showGenerationOverlay() {
+  showOverlay(`
+    <div class="generation-loading" role="status" aria-live="polite">
+      <div class="generation-spinner" aria-hidden="true"></div>
+      <h2>Preparing mine</h2>
+      <p>Finding a fair route...</p>
+    </div>
+  `);
+}
+
+export function showArtifactFoundOverlay(artifact) {
+  if (!artifact) return;
+  showOverlay(`
+    <div class="artifact-found" role="dialog" aria-labelledby="artifact-found-title">
+      <div class="artifact-found-kicker">Artifact found</div>
+      <div class="artifact-found-icon" aria-hidden="true">${escapeHtml(artifact.icon)}</div>
+      <h2 id="artifact-found-title">${escapeHtml(artifact.name)}</h2>
+      <p class="artifact-found-desc">${escapeHtml(artifact.desc)}</p>
+      <button class="menu-btn-primary" data-act="close-artifact">Continue</button>
+    </div>
+  `);
+  overlayContent.querySelector('[data-act="close-artifact"]')
+    ?.addEventListener('click', menuClick(() => hideOverlay()));
+}
+
+export function showArtifactChoiceOverlay(artifacts, onChoose) {
+  if (!artifacts?.length) return;
+  const optionsHtml = artifacts.map(artifact => `
+    <button class="artifact-choice" data-artifact-id="${escapeAttr(artifact.id)}">
+      <span class="artifact-choice-icon" aria-hidden="true">${escapeHtml(artifact.icon)}</span>
+      <span class="artifact-choice-body">
+        <strong>${escapeHtml(artifact.name)}</strong>
+        <span>${escapeHtml(artifact.desc)}</span>
+      </span>
+    </button>
+  `).join('');
+  showOverlay(`
+    <div class="artifact-choice-modal" role="dialog" aria-labelledby="artifact-choice-title">
+      <div class="artifact-found-kicker">Joker's Choice</div>
+      <h2 id="artifact-choice-title">Choose an artifact</h2>
+      <div class="artifact-choice-list">${optionsHtml}</div>
+    </div>
+  `);
+  overlayContent.querySelectorAll('[data-artifact-id]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      const artifact = artifacts.find(option => option.id === btn.dataset.artifactId);
+      if (artifact) onChoose?.(artifact);
+    }));
+  });
+}
+
+export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {}) {
+  const dividend = effects?.dividend ?? null;
+  const bounty = effects?.bounty ?? null;
+  const heal = effects?.heal ?? null;
+  const basePaymentDue = paymentAmountForLevel(level);
+  const paymentDue = artifactPaymentAmount(basePaymentDue);
+  const afterPayment = stashGold + gold - paymentDue;
+  const debtCushionApplies = paymentDue > 0 &&
+    afterPayment < 0 &&
+    -afterPayment <= DEBT_CUSHION_GOLD &&
+    hasArtifact('debt_cushion') &&
+    !getDebtCushionUsed();
+  const paymentDiscountHtml = basePaymentDue > paymentDue && hasArtifact('payment_discount')
+    ? `<span class="payment-discount">-${PAYMENT_DISCOUNT_PERCENT}% from ${basePaymentDue}g</span>`
+    : '';
+  const afterPaymentHtml = debtCushionApplies
+    ? `<p>After payment: 💰 0</p>
+       <p class="artifact-result artifact-result-positive">🛟 Debt Cushion covers ${-afterPayment}g shortfall</p>`
+    : `<p>After payment: 💰 ${afterPayment}</p>`;
+  const paymentHtml = paymentDue > 0
+    ? `
+      <p class="payment-due">Payment due now: 💰 ${paymentDue}</p>
+      ${paymentDiscountHtml}
+      ${afterPaymentHtml}
+    `
+    : '';
+  const dividendHtml = dividend
+    ? `<p class="artifact-result artifact-result-positive">💵 Exit Dividend: +${dividend.amount}g</p>`
+    : '';
+  const bountyHtml = bounty
+    ? `
+      <p class="artifact-result ${bounty.net < 0 ? 'artifact-result-negative' : 'artifact-result-positive'}">
+        🚩 Flag Bounty: +${bounty.earned}g / -${bounty.penalty}g = ${bounty.net >= 0 ? '+' : ''}${bounty.net}g
+      </p>
+    `
+    : '';
+  const healHtml = heal
+    ? `<p class="artifact-result artifact-result-positive">💗 Safety Dividend: +${heal.amount} HP</p>`
+    : '';
+  const isFinal = isFinalRunLevel(level);
+  const buttonText = isFinal
+    ? (paymentDue > 0 ? 'Pay and Finish' : 'Finish Run')
+    : (paymentDue > 0 ? 'Pay and Descend' : 'Descend');
+  const nextHtml = isFinal
+    ? '<p>Final level cleared.</p>'
+    : `<p>Next: Level ${level + 1} (${nextSize}×${nextSize})</p>`;
   showOverlay(`
     <h2>Escaped!</h2>
     <p>Level ${level} cleared · +💰 ${gold}</p>
+    ${dividendHtml}
+    ${bountyHtml}
+    ${healHtml}
     <p>Stash: 💰 ${stashGold + gold}</p>
-    <p>Next: Level ${level + 1} (${nextSize}×${nextSize})</p>
-    <button data-act="next-level">Descend</button>
+    ${paymentHtml}
+    ${nextHtml}
+    <button data-act="next-level">${buttonText}</button>
   `);
   wireEscapedOverlay();
 }
@@ -57,18 +180,51 @@ function wireEscapedOverlay() {
 
 export function showDeathOverlay(level, gold, stashGold) {
   showOverlay(`
-    <h2>You died.</h2>
-    <p>Level ${level} · Forfeited 💰 ${gold}</p>
-    <p>Stash: 💰 ${stashGold}</p>
-    <button data-act="retry-level">Retry Level</button>
+    <h2>Run ended.</h2>
+    <p>You died on Level ${level}.</p>
+    <p>Lost current-level gold: 💰 ${gold}</p>
+    <p>Final stash: 💰 ${stashGold}</p>
+    <p>Leaderboard updated.</p>
     <button data-act="new-run">New Run</button>
+    <button class="menu-btn-secondary" data-act="leaderboard">Leaderboard</button>
   `);
   wireDeathOverlay();
 }
 
 function wireDeathOverlay() {
-  overlayContent.querySelector('[data-act="retry-level"]').addEventListener('click', menuClick(() => retryLevel()));
-  overlayContent.querySelector('[data-act="new-run"]').addEventListener('click', menuClick(() => startGame()));
+  const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
+  q('new-run').addEventListener('click', menuClick(() => startGame()));
+  q('leaderboard').addEventListener('click', menuClick(() => renderLeaderboard('run-end')));
+}
+
+export function showPaymentFailedOverlay(level, paymentDue, totalGold) {
+  showOverlay(`
+    <h2>Run ended.</h2>
+    <p>Payment required after Level ${level}: 💰 ${paymentDue}</p>
+    <p>You had: 💰 ${totalGold}</p>
+    <p>Shortfall: 💰 ${paymentDue - totalGold}</p>
+    <p>Leaderboard updated.</p>
+    <button data-act="new-run">New Run</button>
+    <button class="menu-btn-secondary" data-act="leaderboard">Leaderboard</button>
+  `);
+  const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
+  q('new-run').addEventListener('click', menuClick(() => startGame()));
+  q('leaderboard').addEventListener('click', menuClick(() => renderLeaderboard('run-end')));
+}
+
+export function showRunWonOverlay(level, totalGold, stashGold) {
+  showOverlay(`
+    <h2>You win!</h2>
+    <p>Level ${level} cleared.</p>
+    <p>Total gold earned: 💰 ${totalGold}</p>
+    <p>Final stash: 💰 ${stashGold}</p>
+    <p>Leaderboard updated.</p>
+    <button data-act="new-run">New Run</button>
+    <button class="menu-btn-secondary" data-act="leaderboard">Leaderboard</button>
+  `);
+  const q = (act) => overlayContent.querySelector(`[data-act="${act}"]`);
+  q('new-run').addEventListener('click', menuClick(() => startGame()));
+  q('leaderboard').addEventListener('click', menuClick(() => renderLeaderboard('run-end')));
 }
 
 // Cleared/death overlays add a "Back to Editor" button when the level was
@@ -131,6 +287,7 @@ export function renderStartMenu() {
     <h2>Mining Crawler</h2>
     ${continueBtn}
     <button class="${newRunClass}" data-act="${newRunAct}">New Run</button>
+    <button class="menu-btn-secondary" data-act="leaderboard">Leaderboard</button>
     <button class="menu-btn-secondary" data-act="play-authored">Play Authored</button>
     <button class="menu-btn-secondary" data-act="rules">Rules</button>
     <button class="menu-btn-secondary" data-act="settings">Settings</button>
@@ -143,6 +300,7 @@ function wireStartMenu(save) {
   q('continue')?.addEventListener('click', menuClick(() => resumeGame(loadRun())));
   q('start-new-run')?.addEventListener('click', menuClick(() => startGame()));
   q('confirm-new-run')?.addEventListener('click', menuClick(() => renderNewRunConfirm()));
+  q('leaderboard')?.addEventListener('click', menuClick(() => renderLeaderboard('start')));
   q('play-authored')?.addEventListener('click', menuClick(() => renderAuthoredList()));
   q('rules')?.addEventListener('click', menuClick(() => renderRules('start')));
   q('settings')?.addEventListener('click', menuClick(() => renderSettings('start')));
@@ -159,8 +317,39 @@ export function renderNewRunConfirm() {
 }
 
 function wireNewRunConfirm() {
-  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', menuClick(() => startGame()));
+  overlayContent.querySelector('[data-act="start-new-run"]').addEventListener('click', menuClick(() => {
+    maybeRecordAbandonedSave(loadRun());
+    startGame();
+  }));
   overlayContent.querySelector('[data-act="cancel"]').addEventListener('click', menuClick(() => renderStartMenu()));
+}
+
+export function renderLeaderboard(parent = 'start') {
+  const entries = getLeaderboard();
+  const body = entries.length
+    ? `<div class="leaderboard-list">
+        ${entries.map((entry, idx) => `
+          <div class="leaderboard-row">
+            <span class="leaderboard-rank">#${idx + 1}</span>
+            <span>Level ${entry.levelReached}</span>
+            <span>💰 ${entry.totalGold}</span>
+            <span>${runEndLabel(entry.cause)}</span>
+          </div>
+        `).join('')}
+      </div>`
+    : '<p>No runs recorded yet.</p>';
+  const newRunButton = parent === 'run-end'
+    ? '<button class="menu-btn-primary" data-act="new-run">New Run</button>'
+    : '';
+  showOverlay(`
+    <h2>Leaderboard</h2>
+    <p>Ranked by deepest level, then total gold earned.</p>
+    ${body}
+    ${newRunButton}
+    <button class="menu-btn-secondary" data-act="back">Back</button>
+  `);
+  overlayContent.querySelector('[data-act="back"]').addEventListener('click', menuClick(() => renderStartMenu()));
+  overlayContent.querySelector('[data-act="new-run"]')?.addEventListener('click', menuClick(() => startGame()));
 }
 
 export function renderPauseMenu() {
@@ -197,9 +386,10 @@ export function renderRules(parent) {
   showOverlay(`
     <h2>Rules</h2>
     <p>Reach the exit (🚪) to escape to the next level.</p>
-    <p>Dig adjacent cells to reveal paths. Numbers count gas tiles in the 8 surrounding cells.</p>
-    <p>You have 3 ❤️. Hitting gas damages you for 1 ❤️. HP carries between levels — dying forfeits your current-level gold, but stash and items are safe.</p>
-    <p>Gold (💰) is optional — step onto revealed gold to collect it.</p>
+    <p>Dig adjacent cells to reveal paths. Numbers count gas tiles in the 8 surrounding cells. Stand on a number and click it to reveal neighbors when marked gas matches.</p>
+    <p>You have 3 ❤️. Hitting gas damages you for 1 ❤️. HP carries between levels — dying ends the run.</p>
+    <p>Payments are due on checkpoint levels. If you cannot pay after clearing a checkpoint level, the run ends.</p>
+    <p>Gold (💰) is optional, but you will need enough to make payments. Revealed loose gold is collected automatically; step onto chests to claim them.</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
     <p>💧 A <strong>Health Fountain</strong> sometimes appears — step on it to heal to full. Single use.</p>
     <button class="menu-btn-primary" data-act="back">Back</button>

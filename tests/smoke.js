@@ -20,9 +20,31 @@ function assertApprox(a, b, epsilon, msg) {
 // -- state round-trip --
 import {
   resetForNewRun, getSavePayload, applySavePayload,
-  getLevel, getHp, getItems, getStashGold, getRulesetId,
-  setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem,
+  getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
+  getDebtCushionUsed, getMaxHp, getArtifacts, getGold,
+  setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
 } from '../src/state.js';
+import {
+  ARTIFACTS,
+  DEBT_CUSHION_GOLD,
+  EXIT_DIVIDEND_GOLD,
+  FLAG_BOUNTY_GOLD, MERCHANT_DISCOUNT_PERCENT,
+  PAYMENT_DISCOUNT_PERCENT,
+  artifactById,
+  artifactPaymentAmount,
+  canUseDebtCushion,
+  grantArtifact,
+  isArtifactCadenceLevel,
+  merchantArtifactPrice,
+  randomArtifactChoices,
+  settleExitDividend,
+  settleEndLevelHeal,
+  settleFlagBounty,
+  settleHazardPay,
+  useDebtCushion,
+} from '../src/gameplay/artifacts.js';
+import { showShopOverlay } from '../src/ui/shop.js';
+import { showArtifactFoundOverlay } from '../src/ui/overlay.js';
 
 test('save/load round-trip preserves run-scoped fields', () => {
   resetForNewRun();
@@ -31,6 +53,7 @@ test('save/load round-trip preserves run-scoped fields', () => {
   addGold(20);
   moveGoldToStash();
   consumeItem('potion');
+  grantArtifact('flag_bounty');
 
   const snap = getSavePayload();
 
@@ -43,6 +66,8 @@ test('save/load round-trip preserves run-scoped fields', () => {
   assertEq(getLevel(), 5);
   assertEq(getHp(), 2);
   assertEq(getStashGold(), 20);
+  assertEq(getRunGoldEarned(), 20);
+  assertEq(getArtifacts().includes('flag_bounty'), true);
   assertEq(getItems().potion, 0);
 });
 
@@ -53,10 +78,247 @@ test('resetForNewRun restores defaults', () => {
   assertEq(getHp(), 3);
   assertEq(getItems().potion, 1);
   assertEq(getStashGold(), 0);
+  assertEq(getRunGoldEarned(), 0);
+  assertEq(getArtifacts().length, 0);
+  assertEq(getMaxHp(), 3);
+});
+
+test('max HP artifact increases current and max HP', () => {
+  resetForNewRun();
+  damagePlayer(1);
+  const artifact = grantArtifact('max_hp');
+  assertEq(artifact.name, 'Spare Heart');
+  assertEq(getMaxHp(), 4);
+  assertEq(getHp(), 3);
+});
+
+test('merchant discount artifact reduces prices by five percent', () => {
+  resetForNewRun();
+  assertEq(merchantArtifactPrice(100), 100);
+  grantArtifact('merchant_discount');
+  assertEq(MERCHANT_DISCOUNT_PERCENT, 5);
+  assertEq(merchantArtifactPrice(100), 95);
+  assertEq(merchantArtifactPrice(1), 1);
+});
+
+test('baseline conveniences are no longer artifact rewards', () => {
+  resetForNewRun();
+  assertEq(grantArtifact('gold_magnet'), null);
+  assertEq(grantArtifact('chord_reveal'), null);
+  assertEq(getArtifacts().length, 0);
+});
+
+test('artifact pool includes the expanded non-baseline rewards', () => {
+  const ids = new Set(ARTIFACTS.map(artifact => artifact.id));
+  assertEq(ARTIFACTS.length, 20);
+  for (const id of [
+    'wide_pockets',
+    'black_market_ledger',
+    'branch_lantern',
+    'pocket_pickaxe',
+    'hazard_pay',
+    'miners_map',
+    'lucky_receipt',
+    'exit_dividend',
+    'debt_cushion',
+    'joker_choice',
+  ]) {
+    if (!ids.has(id)) throw new Error(`missing artifact ${id}`);
+  }
+});
+
+test('Joker choice offers unowned artifact options', () => {
+  resetForNewRun();
+  grantArtifact('flag_bounty');
+  const choices = randomArtifactChoices(2);
+  assertEq(choices.length, 2);
+  if (choices.some(choice => choice.id === 'flag_bounty')) throw new Error('choice included owned artifact');
+});
+
+test('three-level cadence artifacts use levels 1, 4, 7 pattern', () => {
+  assertEq(isArtifactCadenceLevel(1), true);
+  assertEq(isArtifactCadenceLevel(2), false);
+  assertEq(isArtifactCadenceLevel(4), true);
+  assertEq(isArtifactCadenceLevel(7), true);
+});
+
+test('merchant menu shows Counterfeit Coupon discount', () => {
+  resetForNewRun();
+  grantArtifact('merchant_discount');
+  addGold(1000);
+  setMerchant({
+    r: 0,
+    c: 0,
+    rerollCount: 0,
+    stock: [{ type: 'potion', basePrice: 100, discountKey: 'full', price: 100, sold: false }],
+  });
+  showShopOverlay();
+  const text = document.getElementById('overlay-content').textContent;
+  if (!text.includes('Counterfeit Coupon: -5%')) throw new Error('missing coupon note');
+  if (!text.includes('Coupon -5%')) throw new Error('missing per-slot coupon chip');
+  if (!text.includes('95g')) throw new Error('missing discounted price');
+});
+
+test('artifact HUD renders tooltip-enabled icons', () => {
+  resetForNewRun();
+  grantArtifact('flag_bounty');
+  updateHud();
+  const display = document.getElementById('artifact-display');
+  const token = display.querySelector('.artifact-token[data-artifact-id="flag_bounty"]');
+  if (!token) throw new Error('missing artifact icon token');
+  assertEq(token.textContent, '🚩');
+  if (!display.textContent.includes('Artifacts:')) throw new Error('missing artifact label');
+  if (!token.getAttribute('aria-label').includes('Flag Bounty')) throw new Error('missing artifact aria label');
+});
+
+test('artifact found overlay shows gained artifact details', () => {
+  showArtifactFoundOverlay(artifactById('flag_bounty'));
+  const content = document.getElementById('overlay-content');
+  const text = content.textContent;
+  if (!text.includes('Artifact found')) throw new Error('missing artifact found kicker');
+  if (!text.includes('Flag Bounty')) throw new Error('missing artifact name');
+  if (!text.includes('correct gas flags pay 2g')) throw new Error('missing artifact description');
+  if (!content.querySelector('[data-act="close-artifact"]')) throw new Error('missing continue button');
+});
+
+test('Safety Dividend heals one HP after level clear', () => {
+  resetForNewRun();
+  damagePlayer(2);
+  grantArtifact('end_heal');
+  const result = settleEndLevelHeal();
+  assertEq(result.amount, 1);
+  assertEq(getHp(), 2);
+});
+
+test('Hazard Pay pays once per level', () => {
+  resetForNewRun();
+  grantArtifact('hazard_pay');
+  const first = settleHazardPay();
+  const second = settleHazardPay();
+  assertEq(first.amount, 25);
+  assertEq(second, null);
+  assertEq(getGold(), 25);
+});
+
+test('Exit Dividend pays only when clearing at full HP', () => {
+  resetForNewRun();
+  grantArtifact('exit_dividend');
+  const paid = settleExitDividend();
+  assertEq(paid.amount, EXIT_DIVIDEND_GOLD);
+  assertEq(getGold(), EXIT_DIVIDEND_GOLD);
+
+  resetForNewRun();
+  grantArtifact('exit_dividend');
+  damagePlayer(1);
+  assertEq(settleExitDividend(), null);
+});
+
+test('Debt Cushion covers one small payment shortfall', () => {
+  resetForNewRun();
+  grantArtifact('debt_cushion');
+  assertEq(canUseDebtCushion(DEBT_CUSHION_GOLD), true);
+  assertEq(useDebtCushion(DEBT_CUSHION_GOLD), true);
+  assertEq(getDebtCushionUsed(), true);
+  assertEq(getStashGold(), 0);
+  assertEq(useDebtCushion(1), false);
+
+  resetForNewRun();
+  grantArtifact('debt_cushion');
+  assertEq(canUseDebtCushion(DEBT_CUSHION_GOLD + 1), false);
+});
+
+// -- leaderboard --
+import { rankLeaderboard } from '../src/gameplay/leaderboard.js';
+
+test('leaderboard ranks by level reached then total gold', () => {
+  const ranked = rankLeaderboard([
+    { levelReached: 3, totalGold: 900, cause: 'death', endedAt: '2026-01-01T00:00:00.000Z' },
+    { levelReached: 5, totalGold: 100, cause: 'death', endedAt: '2026-01-02T00:00:00.000Z' },
+  ], {
+    levelReached: 5,
+    totalGold: 300,
+    cause: 'payment',
+    endedAt: '2026-01-03T00:00:00.000Z',
+  });
+  assertEq(ranked[0].levelReached, 5);
+  assertEq(ranked[0].totalGold, 300);
+  assertEq(ranked[1].levelReached, 5);
+  assertEq(ranked[1].totalGold, 100);
+  assertEq(ranked[2].levelReached, 3);
+});
+
+test('leaderboard keeps only ten entries', () => {
+  const entries = [];
+  for (let i = 1; i <= 12; i++) {
+    entries.push({ levelReached: i, totalGold: i * 10, cause: 'death', endedAt: `2026-01-${String(i).padStart(2, '0')}T00:00:00.000Z` });
+  }
+  const ranked = rankLeaderboard(entries, { levelReached: 2, totalGold: 999, cause: 'death', endedAt: '2026-02-01T00:00:00.000Z' });
+  assertEq(ranked.length, 10);
+  assertEq(ranked[0].levelReached, 12);
+  assertEq(ranked[9].levelReached, 3);
+});
+
+// -- quota --
+import {
+  isFinalRunLevel,
+  isPostPaymentRewardLevel,
+  MAX_RUN_LEVEL,
+  nextPaymentForLevel,
+  paymentAmountForLevel,
+} from '../src/gameplay/quota.js';
+
+test('payment schedule charges checkpoint deltas', () => {
+  assertEq(paymentAmountForLevel(1), 0);
+  assertEq(paymentAmountForLevel(3), 120);
+  assertEq(paymentAmountForLevel(6), 240);
+  assertEq(paymentAmountForLevel(9), 420);
+  assertEq(paymentAmountForLevel(12), 600);
+  assertEq(paymentAmountForLevel(15), 780);
+  assertEq(paymentAmountForLevel(18), 960);
+  assertEq(paymentAmountForLevel(21), 1140);
+  assertEq(paymentAmountForLevel(24), 1320);
+  assertEq(paymentAmountForLevel(27), 1500);
+  assertEq(paymentAmountForLevel(30), 1680);
+});
+
+test('Exit Clause reduces payments by ten percent', () => {
+  resetForNewRun();
+  assertEq(artifactPaymentAmount(120), 120);
+  grantArtifact('payment_discount');
+  assertEq(PAYMENT_DISCOUNT_PERCENT, 10);
+  assertEq(artifactPaymentAmount(120), 108);
+  assertEq(artifactPaymentAmount(420), 378);
+});
+
+test('next payment display follows the current level bracket', () => {
+  assertEq(nextPaymentForLevel(1).level, 3);
+  assertEq(nextPaymentForLevel(3).amount, 120);
+  assertEq(nextPaymentForLevel(4).level, 6);
+  assertEq(nextPaymentForLevel(7).level, 9);
+  assertEq(nextPaymentForLevel(19).level, 21);
+  assertEq(nextPaymentForLevel(19).amount, 1140);
+  assertEq(nextPaymentForLevel(28).level, 30);
+  assertEq(nextPaymentForLevel(30).amount, 1680);
+});
+
+test('post-payment reward levels line up with guaranteed Joker levels', () => {
+  for (const level of [4, 7, 10, 13, 16, 19, 22, 25, 28]) {
+    assertEq(isPostPaymentRewardLevel(level), true, `expected level ${level} to be post-payment`);
+  }
+  for (const level of [1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 30]) {
+    assertEq(isPostPaymentRewardLevel(level), false, `expected level ${level} not to be post-payment`);
+  }
+});
+
+test('run cap is level 30', () => {
+  assertEq(MAX_RUN_LEVEL, 30);
+  assertEq(isFinalRunLevel(29), false);
+  assertEq(isFinalRunLevel(30), true);
+  assertEq(isFinalRunLevel(31), true);
 });
 
 // -- rulesets --
-import { weightedPick, gridSizeForLevel, anchorCountForSize } from '../src/rulesets.js';
+import { RULESETS, weightedPick, gridSizeForLevel, anchorCountForSize } from '../src/rulesets.js';
 
 test('weightedPick returns first item when random is 0', () => {
   const orig = Math.random;
@@ -80,6 +342,12 @@ test('weightedPick returns last item when random is ~1', () => {
   assertEq(result.id, 'b');
 });
 
+test('rulesets registry excludes legacy treasure chamber map', () => {
+  if (RULESETS.some(r => r.id === 'treasure_chamber')) {
+    throw new Error('legacy treasure_chamber ruleset should not run on regional boards');
+  }
+});
+
 test('gridSizeForLevel curve', () => {
   const s1 = gridSizeForLevel(1);
   const s20 = gridSizeForLevel(20);
@@ -100,7 +368,12 @@ test('anchorCountForSize returns expected counts per size bracket', () => {
 
 // -- board layout --
 import { isReachable, findPath } from '../src/board/layout.js';
-import { setGrid, setRows, setCols, setRevealed, setBiomeOverrides } from '../src/state.js';
+import {
+  getGrid, setGrid, setRows, setCols, setRevealed, setFlagged,
+  setBiomeOverrides, setFountain, setPlayerPosition,
+} from '../src/state.js';
+import { collectAt, collectRevealedGold } from '../src/gameplay/interaction.js';
+import { renderGrid, updateHud } from '../src/ui/render.js';
 
 function makeEmptyGrid(rows, cols) {
   const g = [];
@@ -142,8 +415,118 @@ test('findPath returns a path ending at target', () => {
   if (last.r !== 2 || last.c !== 2) throw new Error('path does not end at target');
 });
 
+test('revealed loose gold flies to player, but revealed chests stay put', () => {
+  resetForNewRun();
+  setRows(2); setCols(3);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(2, 3);
+  g[1][1].type = 'gold';
+  g[1][1].goldValue = 10;
+  g[1][2].type = 'gold';
+  g[1][2].goldValue = 30;
+  g[1][2].chest = true;
+  setGrid(g);
+  setRevealed([
+    [true, false, false],
+    [false, true, true],
+  ]);
+  setFlagged([
+    [false, false, false],
+    [false, false, false],
+  ]);
+  renderGrid();
+  if (!document.querySelector('.cell.gold')) throw new Error('expected revealed gold before magnet pickup');
+  const total = collectRevealedGold();
+  assertEq(total, 10);
+  if (!document.querySelector('.magnet-gold')) throw new Error('expected flying magnet gold element');
+  assertEq(getGold(), 10);
+  assertEq(getGrid()[1][1].goldValue, 0);
+  assertEq(getGrid()[1][2].goldValue, 30);
+  assertEq(getGrid()[1][2].chest, true);
+  document.querySelectorAll('.magnet-gold').forEach(el => el.remove());
+});
+
+test('Mystery Chests can contain an item instead of gold', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].type = 'gold';
+  g[0][0].goldValue = 25;
+  g[0][0].chest = true;
+  setGrid(g);
+  grantArtifact('chest_items');
+  const orig = Math.random;
+  Math.random = () => 0;
+  try {
+    collectAt(0, 0);
+  } finally {
+    Math.random = orig;
+  }
+  assertEq(getGold(), 0);
+  assertEq(getItems().potion, 2);
+  assertEq(getGrid()[0][0].goldValue, 0);
+});
+
+test('Lucky Receipt increases chest gold by twenty-five percent', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].type = 'gold';
+  g[0][0].goldValue = 100;
+  g[0][0].chest = true;
+  setGrid(g);
+  grantArtifact('lucky_receipt');
+  collectAt(0, 0);
+  assertEq(getGold(), 125);
+  assertEq(getGrid()[0][0].goldValue, 0);
+});
+
+test('Overflow Flask makes full-HP fountain grant an item instead', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].type = 'fountain';
+  setGrid(g);
+  setFountain({ r: 0, c: 0, used: false });
+  grantArtifact('fountain_item');
+  const orig = Math.random;
+  Math.random = () => 0;
+  try {
+    collectAt(0, 0);
+  } finally {
+    Math.random = orig;
+  }
+  assertEq(getItems().potion, 2);
+  assertEq(getGrid()[0][0].type, 'fountain');
+});
+
+test('stepping onto a branch merchant opens the shop overlay', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].preview = 'merchant';
+  setGrid(g);
+  setMerchant({
+    r: 0,
+    c: 0,
+    rerollCount: 0,
+    stock: [{ type: 'potion', basePrice: 100, discountKey: 'full', price: 100, sold: false }],
+  });
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'merchant');
+  const text = document.getElementById('overlay-content').textContent;
+  if (!text.includes('Merchant')) throw new Error('expected merchant shop overlay');
+  assertEq(getGrid()[0][0].preview, null);
+});
+
 // -- merchant --
-import { priceFromTier, rollDiscountTier, DISCOUNT_TIERS, merchantRerollCost } from '../src/gameplay/merchant.js';
+import {
+  priceFromTier, rollDiscountTier, DISCOUNT_TIERS,
+  merchantEffectiveRerollCost, merchantRerollCost, rollMerchantStock,
+} from '../src/gameplay/merchant.js';
 
 test('priceFromTier free', () => {
   assertEq(priceFromTier(20, { key: 'free', mult: 0 }), 0);
@@ -163,10 +546,25 @@ test('priceFromTier d90 floors to 1 minimum', () => {
 });
 
 test('merchantRerollCost scales as a serious gold sink', () => {
-  assertEq(merchantRerollCost(0), 80);
-  assertEq(merchantRerollCost(1), 120);
-  assertEq(merchantRerollCost(2), 160);
-  assertEq(merchantRerollCost(3), 200);
+  assertEq(merchantRerollCost(0), 40);
+  assertEq(merchantRerollCost(1), 80);
+  assertEq(merchantRerollCost(2), 120);
+  assertEq(merchantRerollCost(3), 160);
+});
+
+test('House Dice makes the first merchant reroll free', () => {
+  resetForNewRun();
+  assertEq(merchantEffectiveRerollCost(0), 40);
+  grantArtifact('free_reroll');
+  assertEq(merchantEffectiveRerollCost(0), 0);
+  assertEq(merchantEffectiveRerollCost(1), 80);
+});
+
+test('Black Market Ledger adds two merchant stock slots', () => {
+  resetForNewRun();
+  assertEq(rollMerchantStock().length, 10);
+  grantArtifact('black_market_ledger');
+  assertEq(rollMerchantStock().length, 12);
 });
 
 test('rollDiscountTier distribution within +/-5%', () => {
@@ -188,16 +586,66 @@ test('rollDiscountTier distribution within +/-5%', () => {
 });
 
 // -- board generation --
-import { countAdjacentGas, placeItemDrops } from '../src/board/generation.js';
+import {
+  countAdjacentGas,
+  generateRegionalGrid, countBranchEntrances, validateRegionalGeneration,
+  getRegionalMetrics, regionalGoldBudgetsForLevel,
+} from '../src/board/generation.js';
 
-function countItemDrops(grid) {
-  let count = 0;
-  for (const row of grid) {
-    for (const cell of row) {
-      if (cell.item) count++;
+function solveRegionalBoard(meta, start, exit, rows, cols) {
+  const revealed = emptyGrid(rows, cols);
+  const flagged = emptyGrid(rows, cols);
+  revealed[start.r][start.c] = true;
+  syncRevealedZeroCascades(getGrid(), rows, cols, revealed);
+  const exclude = [
+    ...(meta.protectedCells || []),
+    ...(meta.rewardCells || []),
+  ];
+  const repaired = makeSolvable(getGrid(), rows, cols, revealed, flagged, start, exit, {
+    maxFixAttempts: 30,
+    exclude,
+  });
+  if (repaired.fixups > 0) {
+    syncRevealedZeroCascades(getGrid(), rows, cols, revealed);
+  }
+  const solved = solve(getGrid(), rows, cols, revealed, flagged, start, exit);
+  return { repaired, solved };
+}
+
+function branchTargetReachable(branch) {
+  const target = branch.rewardCells[0] ?? branch.featureCell;
+  if (!branch.entrance || !target) return true;
+  const keys = new Set(branch.cells.map(cell => `${cell.r},${cell.c}`));
+  const visited = new Set([`${branch.entrance.r},${branch.entrance.c}`]);
+  const queue = [branch.entrance];
+  while (queue.length) {
+    const current = queue.shift();
+    if (current.r === target.r && current.c === target.c) return true;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = current.r + dr;
+        const nc = current.c + dc;
+        const key = `${nr},${nc}`;
+        if (!keys.has(key) || visited.has(key)) continue;
+        const cell = getGrid()[nr][nc];
+        if (cell.type === 'wall' || cell.type === 'gas') continue;
+        visited.add(key);
+        queue.push({ r: nr, c: nc });
+      }
     }
   }
-  return count;
+  return false;
+}
+
+function branchCellDepth(branch, cell) {
+  if (!branch.root || !branch.entrance || !cell) return 0;
+  const dir = {
+    r: Math.sign(branch.entrance.r - branch.root.r),
+    c: Math.sign(branch.entrance.c - branch.root.c),
+  };
+  if (dir.r !== 0) return (cell.r - branch.root.r) * dir.r;
+  return (cell.c - branch.root.c) * dir.c;
 }
 
 test('countAdjacentGas counts gas and detonated neighbors', () => {
@@ -220,36 +668,402 @@ test('countAdjacentGas handles grid edges', () => {
   assertEq(countAdjacentGas(0, 0), 1);
 });
 
-test('placeItemDrops defaults to zero drops when the chance misses', () => {
-  setRows(3); setCols(3);
-  const g = makeEmptyGrid(3, 3);
-  setGrid(g);
-  setBiomeOverrides(null);
-  const orig = Math.random;
-  Math.random = () => 0.99;
-  try {
-    placeItemDrops();
-  } finally {
-    Math.random = orig;
-    setBiomeOverrides(null);
-  }
-  assertEq(countItemDrops(g), 0);
+test('regional gold budgets scale into late game', () => {
+  assertEq(regionalGoldBudgetsForLevel(1).optional, 52);
+  assertEq(regionalGoldBudgetsForLevel(5).optional, 78);
+  assertEq(regionalGoldBudgetsForLevel(9).optional, 100);
+  assertEq(regionalGoldBudgetsForLevel(12).optional, 135);
+  assertEq(regionalGoldBudgetsForLevel(21).optional, 240);
+  assertEq(regionalGoldBudgetsForLevel(30).optional, 345);
+  assertEq(regionalGoldBudgetsForLevel(30).feature, 106);
 });
 
-test('placeItemDrops honors guaranteed drop overrides', () => {
-  setRows(3); setCols(3);
-  const g = makeEmptyGrid(3, 3);
+test('flag bounty artifact pays correct flags and charges wrong flags', () => {
+  resetForNewRun();
+  setRows(2); setCols(2);
+  const g = makeEmptyGrid(2, 2);
+  g[0][0].type = 'gas';
+  g[1][0].type = 'gas';
   setGrid(g);
-  setBiomeOverrides({ guaranteedItemDrops: 2 });
-  const orig = Math.random;
-  Math.random = () => 0;
+  setFlagged([
+    [true, true],
+    [true, false],
+  ]);
+  grantArtifact('flag_bounty');
+  addGold(20);
+  const result = settleFlagBounty();
+  assertEq(FLAG_BOUNTY_GOLD, 2);
+  assertEq(result.correct, 2);
+  assertEq(result.incorrect, 1);
+  assertEq(result.earned, 4);
+  assertEq(result.penalty, 2);
+  assertEq(result.net, 2);
+  assertEq(getGold(), 22);
+  assertEq(getRunGoldEarned(), 22);
+});
+
+test('regional generator creates connected spine and one branch entrance', () => {
+  setRows(10); setCols(10);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  const start = { r: 0, c: 0 };
+  const exit = { r: 9, c: 9 };
   try {
-    placeItemDrops();
+    let accepted = null;
+    for (let attempt = 0; attempt < 30 && !accepted; attempt++) {
+      const meta = generateRegionalGrid({ level: 1, start, exit });
+      const branch = meta.regions.find(region => region.kind === 'branch');
+      if (!branch) continue;
+      const { repaired, solved } = solveRegionalBoard(meta, start, exit, 10, 10);
+      if (repaired.solved && solved.solved) accepted = { meta, branch };
+    }
+    if (!accepted) throw new Error('expected deducible start-to-exit spine');
+    const { meta, branch } = accepted;
+    assertEq(countBranchEntrances(meta, branch), 1);
+    const entranceCell = getGrid()[branch.entrance.r][branch.entrance.c];
+    if (entranceCell.adjacent <= 0) throw new Error('expected numbered airlock entrance');
   } finally {
-    Math.random = orig;
     setBiomeOverrides(null);
   }
-  assertEq(countItemDrops(g), 2);
+});
+
+test('regional generator caps compact branch pressure by priority', () => {
+  setRows(10); setCols(10);
+  setBiomeOverrides(null);
+  try {
+    const meta = generateRegionalGrid({
+      level: 1,
+      start: { r: 0, c: 0 },
+      exit: { r: 9, c: 9 },
+      features: {
+        merchant: true,
+        fountain: true,
+        joker: true,
+        itemDropCount: 1,
+      },
+    });
+    assertEq(meta.branchCapacity, 2);
+    assertEq(meta.activeFeatures.joker, true);
+    assertEq(meta.activeFeatures.merchant, true);
+    assertEq(meta.activeFeatures.fountain, false);
+    assertEq(meta.activeFeatures.itemDrop, false);
+    assertEq(meta.requestedItemDrops, 0);
+    if (!meta.suppressedBranchPlans.includes('fountain')) throw new Error('expected fountain to be suppressed');
+    if (!meta.suppressedBranchPlans.includes('item')) throw new Error('expected item to be suppressed');
+    if (!meta.regions.some(region => region.purpose === 'gold')) throw new Error('missing gold branch');
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator prioritizes gold and joker under branch pressure', () => {
+  setRows(10); setCols(10);
+  setBiomeOverrides(null);
+  try {
+    let accepted = null;
+    for (let attempt = 0; attempt < 30 && !accepted; attempt++) {
+      const meta = generateRegionalGrid({
+        level: 1,
+        start: { r: 0, c: 0 },
+        exit: { r: 9, c: 9 },
+        features: {
+          merchant: true,
+          fountain: true,
+          joker: true,
+          itemDropCount: 1,
+        },
+      });
+      const purposes = new Set(meta.regions.map(region => region.purpose));
+      if (purposes.has('gold') && purposes.has('joker')) accepted = meta;
+    }
+    if (!accepted) throw new Error('expected gold and joker branches to fit compact board');
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional validation rejects branch reward revealed by spine solve', () => {
+  setRows(10); setCols(10);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    let meta = null;
+    let branch = null;
+    for (let attempt = 0; attempt < 30 && !branch; attempt++) {
+      meta = generateRegionalGrid({
+        level: 1,
+        start: { r: 0, c: 0 },
+        exit: { r: 9, c: 9 },
+      });
+      branch = meta.regions.find(region => region.kind === 'branch');
+    }
+    if (!branch) throw new Error('expected branch region');
+    const revealed = emptyGrid(10, 10);
+    const reward = branch.rewardCells[0];
+    revealed[reward.r][reward.c] = true;
+    const res = validateRegionalGeneration(meta, revealed);
+    if (res.ok) throw new Error('expected reward leak rejection');
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator validates mirrored corners and optional gold bias', () => {
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    for (const size of [10, 14, 20]) {
+      const starts = [
+        { r: 0, c: 0 },
+        { r: 0, c: size - 1 },
+        { r: size - 1, c: 0 },
+        { r: size - 1, c: size - 1 },
+      ];
+      for (const start of starts) {
+        const exit = { r: size - 1 - start.r, c: size - 1 - start.c };
+        let accepted = null;
+        for (let attempt = 0; attempt < 180 && !accepted; attempt++) {
+          setRows(size); setCols(size);
+          const level = size <= 10 ? 1 : (size <= 14 ? 5 : 13);
+          const meta = generateRegionalGrid({ level, start, exit });
+          if (!meta.regions.some(region => region.purpose === 'gold')) continue;
+          const { repaired, solved } = solveRegionalBoard(meta, start, exit, size, size);
+          const check = validateRegionalGeneration(meta, solved.revealed);
+          if (repaired.solved && solved.solved && check.ok) accepted = { meta, solved };
+        }
+        if (!accepted) throw new Error(`expected solved spine for ${size} ${start.r},${start.c}`);
+        const metrics = getRegionalMetrics(accepted.meta, accepted.solved.revealed);
+        if (metrics.optionalGold <= metrics.spineGold) {
+          throw new Error(`expected optional gold > spine gold, got ${metrics.optionalGold} <= ${metrics.spineGold}`);
+        }
+      }
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator expands lone gold branch on large boards', () => {
+  setRows(20); setCols(20);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    let largest = 0;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const meta = generateRegionalGrid({
+        level: 13,
+        start: { r: 0, c: 0 },
+        exit: { r: 19, c: 19 },
+      });
+      const gold = meta.regions.find(region => region.purpose === 'gold');
+      largest = Math.max(largest, gold?.cells.length ?? 0);
+    }
+    if (largest < 40) {
+      throw new Error(`expected expanded large-board gold branch, largest=${largest}`);
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('Prospector Cache adds an extra chest to gold branches', () => {
+  resetForNewRun();
+  grantArtifact('extra_chest');
+  setRows(20); setCols(20);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    let accepted = null;
+    for (let attempt = 0; attempt < 30 && !accepted; attempt++) {
+      const meta = generateRegionalGrid({
+        level: 13,
+        start: { r: 0, c: 0 },
+        exit: { r: 19, c: 19 },
+      });
+      const branch = meta.regions.find(region => region.purpose === 'gold');
+      if (!branch) continue;
+      const chests = branch.cells.filter(cell => getGrid()[cell.r][cell.c].chest).length;
+      if (chests >= 2) accepted = { branch, chests };
+    }
+    if (!accepted) throw new Error('expected gold branch with at least two chests');
+  } finally {
+    setBiomeOverrides(null);
+    resetForNewRun();
+  }
+});
+
+test('regional generator structures large branch interiors', () => {
+  setRows(20); setCols(20);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    let accepted = null;
+    for (let attempt = 0; attempt < 30 && !accepted; attempt++) {
+      const meta = generateRegionalGrid({
+        level: 13,
+        start: { r: 0, c: 0 },
+        exit: { r: 19, c: 19 },
+      });
+      const branch = meta.regions.find(region => region.purpose === 'gold');
+      if (!branch || branch.cells.length < 40) continue;
+      let walls = 0;
+      let gas = 0;
+      for (const cell of branch.cells) {
+        const type = getGrid()[cell.r][cell.c].type;
+        if (type === 'wall') walls++;
+        if (type === 'gas') gas++;
+      }
+      if (walls >= 6 && gas >= 5 && branchTargetReachable(branch)) {
+        accepted = { branch, walls, gas };
+      }
+    }
+    if (!accepted) {
+      throw new Error('expected large branch with internal walls, gas, and reachable reward');
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator keeps branch entry safe and pushes risk deeper', () => {
+  setRows(20); setCols(20);
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    let accepted = null;
+    for (let attempt = 0; attempt < 40 && !accepted; attempt++) {
+      const meta = generateRegionalGrid({
+        level: 13,
+        start: { r: 0, c: 0 },
+        exit: { r: 19, c: 19 },
+      });
+      const branch = meta.regions.find(region => region.purpose === 'gold');
+      if (!branch || branch.cells.length < 40 || (branch.tags?.branch_foyer?.length ?? 0) < 2) continue;
+      const entryDepth = (branch.sizePlan?.corridorLen ?? 1) + 1;
+      const entryClear = branch.cells
+        .filter(cell => branchCellDepth(branch, cell) <= entryDepth)
+        .every(cell => {
+          const type = getGrid()[cell.r][cell.c].type;
+          return type !== 'gas' && type !== 'wall';
+        });
+      const internalGas = branch.internalGasCells ?? [];
+      const deepGas = internalGas.length >= 3 &&
+        internalGas.every(cell => branchCellDepth(branch, cell) > entryDepth);
+      if (entryClear && deepGas) accepted = branch;
+    }
+    if (!accepted) {
+      throw new Error('expected branch with clear entry foyer and deeper internal gas');
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator gives merchant and fountain isolated branches', () => {
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    const size = 14;
+    const start = { r: 0, c: 0 };
+    const exit = { r: size - 1, c: size - 1 };
+    let accepted = null;
+    for (let attempt = 0; attempt < 120 && !accepted; attempt++) {
+      setRows(size); setCols(size);
+      const meta = generateRegionalGrid({
+        level: 5,
+        start,
+        exit,
+        features: { merchant: true, fountain: true },
+      });
+      if (meta.failedBranchPlans.includes('merchant') || meta.failedBranchPlans.includes('fountain')) continue;
+      const { repaired, solved } = solveRegionalBoard(meta, start, exit, size, size);
+      const check = validateRegionalGeneration(meta, solved.revealed);
+      if (repaired.solved && solved.solved && check.ok) accepted = { meta, solved };
+    }
+    if (!accepted) throw new Error('expected merchant/fountain branch layout');
+    for (const purpose of ['merchant', 'fountain']) {
+      const branch = accepted.meta.regions.find(region => region.purpose === purpose);
+      if (!branch) throw new Error(`missing ${purpose} branch`);
+      assertEq(countBranchEntrances(accepted.meta, branch), 1);
+      if (!branch.featureCell) throw new Error(`missing ${purpose} feature cell`);
+      if (accepted.meta.spineCells.has(`${branch.featureCell.r},${branch.featureCell.c}`)) {
+        throw new Error(`${purpose} feature landed on spine`);
+      }
+      if (accepted.solved.revealed[branch.featureCell.r][branch.featureCell.c]) {
+        throw new Error(`${purpose} feature revealed by spine solve`);
+      }
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator gives joker an isolated branch', () => {
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    const size = 14;
+    const start = { r: 0, c: 0 };
+    const exit = { r: size - 1, c: size - 1 };
+    let accepted = null;
+    for (let attempt = 0; attempt < 120 && !accepted; attempt++) {
+      setRows(size); setCols(size);
+      const meta = generateRegionalGrid({
+        level: 5,
+        start,
+        exit,
+        features: { joker: true },
+      });
+      if (meta.failedBranchPlans.includes('joker')) continue;
+      const { repaired, solved } = solveRegionalBoard(meta, start, exit, size, size);
+      const check = validateRegionalGeneration(meta, solved.revealed);
+      if (repaired.solved && solved.solved && check.ok) accepted = { meta, solved };
+    }
+    if (!accepted) throw new Error('expected joker branch layout');
+    const branch = accepted.meta.regions.find(region => region.purpose === 'joker');
+    if (!branch) throw new Error('missing joker branch');
+    assertEq(countBranchEntrances(accepted.meta, branch), 1);
+    if (!branch.featureCell) throw new Error('missing joker feature cell');
+    if (accepted.meta.spineCells.has(`${branch.featureCell.r},${branch.featureCell.c}`)) {
+      throw new Error('joker feature landed on spine');
+    }
+    if (accepted.solved.revealed[branch.featureCell.r][branch.featureCell.c]) {
+      throw new Error('joker feature revealed by spine solve');
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
+});
+
+test('regional generator puts item drops in an isolated branch', () => {
+  setBiomeOverrides({ guaranteedItemDrops: 0 });
+  try {
+    const size = 14;
+    const start = { r: 0, c: 0 };
+    const exit = { r: size - 1, c: size - 1 };
+    let accepted = null;
+    for (let attempt = 0; attempt < 50 && !accepted; attempt++) {
+      setRows(size); setCols(size);
+      const meta = generateRegionalGrid({
+        level: 5,
+        start,
+        exit,
+        features: { itemDropCount: 1 },
+      });
+      if (meta.failedBranchPlans.includes('item')) continue;
+      const { repaired, solved } = solveRegionalBoard(meta, start, exit, size, size);
+      const check = validateRegionalGeneration(meta, solved.revealed);
+      if (repaired.solved && solved.solved && check.ok) accepted = { meta, solved };
+    }
+    if (!accepted) throw new Error('expected item branch layout');
+    const branch = accepted.meta.regions.find(region => region.purpose === 'item');
+    if (!branch) throw new Error('missing item branch');
+    assertEq(countBranchEntrances(accepted.meta, branch), 1);
+    const feature = branch.featureCell;
+    if (!feature) throw new Error('missing item feature cell');
+    const cell = getGrid()[feature.r][feature.c];
+    if (!cell.item) throw new Error('expected item on item branch feature cell');
+    assertEq(cell.preview, 'item');
+    if (accepted.meta.spineCells.has(`${feature.r},${feature.c}`)) {
+      throw new Error('item feature landed on spine');
+    }
+    if (accepted.solved.revealed[feature.r][feature.c]) {
+      throw new Error('item feature revealed by spine solve');
+    }
+  } finally {
+    setBiomeOverrides(null);
+  }
 });
 
 // -- editor: schema --

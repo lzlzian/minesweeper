@@ -1,15 +1,18 @@
 import {
-  MAX_HP, STEP_MS, CELL_SIZE, CELL_GAP, BOARD_PAD,
+  STEP_MS, CELL_SIZE, CELL_GAP, BOARD_PAD,
   getGrid, getRows, getCols, getRevealed, getFlagged,
-  getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant,
+  getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGold, getStashGold, getHp, getLevel, getItems, getActiveItem,
-  getItemCount, getGameOver,
+  getItemCount, getGameOver, getMaxHp, getArtifacts,
 } from '../state.js';
 import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
-  playerSprite, itemButtons, itemCounts, board,
+  quotaDisplay, artifactDisplay, playerSprite, itemButtons, itemCounts, board,
 } from './dom.js';
 import { applyPan, renderMinimap } from './view.js';
+import { attachTooltip } from './tooltip.js';
+import { nextPaymentForLevel } from '../gameplay/quota.js';
+import { PAYMENT_DISCOUNT_PERCENT, artifactById, artifactPaymentAmount } from '../gameplay/artifacts.js';
 
 // Callback injections for functions whose owners haven't been extracted yet.
 // Removed as the modules migrate:
@@ -60,6 +63,7 @@ export function renderGrid() {
 
         const isMerchant = getMerchant() && r === getMerchant().r && c === getMerchant().c;
         if (isMerchant) cell.classList.add('merchant');
+        const isJoker = getJoker() && r === getJoker().r && c === getJoker().c;
 
         if (getRevealed()[r][c]) {
           const g = getGrid()[r][c];
@@ -86,6 +90,7 @@ export function renderGrid() {
           if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
           else if (g.type === 'fountain' && getFountain() && !getFountain().used) icon = '💧';
+          else if (isJoker && !getJoker().used) icon = '🃏';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
 
           if (icon) {
@@ -98,6 +103,15 @@ export function renderGrid() {
           cell.classList.add('flagged');
           if (isAdjacent) cell.classList.add('reachable');
         } else {
+          const preview = getGrid()[r][c].preview;
+          const previewIcons = { chest: '🎁', fountain: '💧', item: '🎒', joker: '🃏' };
+          if (previewIcons[preview]) {
+            cell.classList.add('preview');
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'icon preview-icon';
+            iconSpan.textContent = previewIcons[preview];
+            cell.appendChild(iconSpan);
+          }
           if (isAdjacent) cell.classList.add('reachable');
         }
       }
@@ -152,11 +166,67 @@ export function spawnPickupFloat(r, c, label, extraClass) {
   el.addEventListener('animationend', () => el.remove());
 }
 
+export function spawnGoldMagnetFly(r, c, delayMs = 0) {
+  const startX = BOARD_PAD + c * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const startY = BOARD_PAD + r * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const endX = BOARD_PAD + getPlayerCol() * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const endY = BOARD_PAD + getPlayerRow() * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+  const el = document.createElement('div');
+  el.className = 'magnet-gold';
+  el.textContent = '💰';
+  el.style.left = `${startX}px`;
+  el.style.top = `${startY}px`;
+  el.style.setProperty('--dx', `${endX - startX}px`);
+  el.style.setProperty('--dy', `${endY - startY}px`);
+  el.style.animationDelay = `${delayMs}ms`;
+  board.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
 export function updateHud() {
   goldDisplay.textContent = `💰 ${getGold()} · Stash: ${getStashGold()}`;
-  hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, MAX_HP - getHp()));
+  const payment = nextPaymentForLevel(getLevel());
+  const paymentAmount = artifactPaymentAmount(payment.amount);
+  const paymentDiscount = paymentAmount < payment.amount
+    ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${payment.amount}g)`
+    : '';
+  quotaDisplay.textContent = `Payment due end of Level ${payment.level}: ${paymentAmount}g${paymentDiscount}`;
+  hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, getMaxHp() - getHp()));
   levelDisplay.textContent = `Level ${getLevel()}`;
+  renderArtifactDisplay();
   updateItemBar();
+}
+
+function renderArtifactDisplay() {
+  const artifacts = getArtifacts()
+    .map(id => ({ id, artifact: artifactById(id) }))
+    .filter(entry => entry.artifact);
+  artifactDisplay.replaceChildren();
+
+  const label = document.createElement('span');
+  label.className = 'artifact-label';
+  label.textContent = artifacts.length ? 'Artifacts:' : 'Artifacts: none';
+  artifactDisplay.appendChild(label);
+
+  if (!artifacts.length) return;
+
+  const list = document.createElement('span');
+  list.className = 'artifact-list';
+  artifactDisplay.appendChild(list);
+
+  for (const { id, artifact } of artifacts) {
+    const token = document.createElement('button');
+    token.type = 'button';
+    token.className = 'artifact-token';
+    token.dataset.artifactId = id;
+    token.setAttribute('aria-label', `${artifact.name}: ${artifact.desc}`);
+    token.textContent = artifact.icon;
+    attachTooltip(token, {
+      name: `${artifact.icon} ${artifact.name}`,
+      desc: artifact.desc,
+    });
+    list.appendChild(token);
+  }
 }
 
 export function updateItemBar() {
@@ -166,7 +236,7 @@ export function updateItemBar() {
 
     const btn = itemButtons[key];
     let disabled = count === 0 || getGameOver();
-    if (key === 'potion' && getHp() >= MAX_HP) disabled = true;
+    if (key === 'potion' && getHp() >= getMaxHp()) disabled = true;
     if (key === 'scanner' && !scannerHasTargetImpl()) disabled = true;
     if (key === 'row' && !rowHasTargetImpl()) disabled = true;
     if (key === 'column' && !columnHasTargetImpl()) disabled = true;

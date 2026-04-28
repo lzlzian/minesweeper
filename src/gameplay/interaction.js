@@ -1,26 +1,49 @@
 import {
-  MAX_HP, STEP_MS,
+  STEP_MS,
   getRows, getCols, getGrid, getRevealed, getFlagged,
-  getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant,
+  getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGameOver, getBusy, getHp, getGold, getStashGold, getLevel,
-  getActiveItem, getRulesetId,
+  getActiveItem, getRulesetId, getRunGoldEarned, getMaxHp, hasArtifact,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
-  setFountain, setActiveItem,
+  setFountain, setJoker, setActiveItem,
   addGold, addItem, consumeItem, damagePlayer, fullHeal,
   addToLifetimeGold,
 } from '../state.js';
 import { AUTHORED_RULESET_ID } from './authored.js';
+import {
+  CHEST_ITEM_CHANCE,
+  artifactChestGoldAmount,
+  artifactLabel,
+  grantArtifact,
+  grantRandomArtifact,
+  randomArtifactChoices,
+  randomArtifactItemType,
+  settleEndLevelHeal,
+  settleExitDividend,
+  settleFlagBounty,
+  settleHazardPay,
+} from './artifacts.js';
+import { recordRun } from './leaderboard.js';
+import { clearSavedRun } from './runSave.js';
 import { playSfx } from '../audio.js';
 import { findPath } from '../board/layout.js';
-import { countAdjacentGas, setRevealCell } from '../board/generation.js';
+import { countAdjacentGas } from '../board/generation.js';
 import {
   renderGrid, updateHud, updateItemBar, updatePlayerSprite,
   flashHurtFace, spawnPickupFloat, PICKUP_EMOJI,
+  spawnGoldMagnetFly,
   setRenderDeps,
 } from '../ui/render.js';
 import { autoRecenterOnPlayer, renderMinimap } from '../ui/view.js';
 import { showShopOverlay } from '../ui/shop.js';
-import { showDeathOverlay, showEscapedOverlay, showAuthoredClearedOverlay, showAuthoredDeathOverlay } from '../ui/overlay.js';
+import {
+  showArtifactChoiceOverlay,
+  showArtifactFoundOverlay,
+  showDeathOverlay,
+  showEscapedOverlay,
+  showAuthoredClearedOverlay,
+  showAuthoredDeathOverlay,
+} from '../ui/overlay.js';
 import { gridSizeForLevel } from '../rulesets.js';
 
 // ============================================================
@@ -38,14 +61,63 @@ export function isAdjacentToPlayer(r, c) {
   return dr <= 1 && dc <= 1;
 }
 
+function clearCollectedGoldCell(cell) {
+  cell.goldValue = 0;
+  cell.chest = false;
+  cell.preview = null;
+}
+
+function collectGoldCell(r, c) {
+  const cell = getGrid()[r][c];
+  if (cell.type !== 'gold' || cell.goldValue <= 0) return null;
+  const wasChest = !!cell.chest;
+  if (wasChest && hasArtifact('chest_items') && Math.random() < CHEST_ITEM_CHANCE) {
+    const item = randomArtifactItemType();
+    addItem(item, 1);
+    clearCollectedGoldCell(cell);
+    return { kind: 'item', item, chest: true };
+  }
+  const amount = wasChest ? artifactChestGoldAmount(cell.goldValue) : cell.goldValue;
+  addGold(amount);
+  clearCollectedGoldCell(cell);
+  return { kind: 'gold', amount, chest: wasChest };
+}
+
+function grantJokerArtifact(r, c, artifactId) {
+  const artifact = grantArtifact(artifactId);
+  if (!artifact) return false;
+  spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
+  playSfx('pickup');
+  showArtifactFoundOverlay(artifact);
+  updateHud();
+  return true;
+}
+
+function payOutEmptyJoker(r, c) {
+  addGold(75);
+  spawnPickupFloat(r, c, 'Joker pays +75', 'float-info');
+  playSfx('gold');
+  updateHud();
+}
+
+function openMerchantAt(r, c) {
+  const merchant = getMerchant();
+  if (!merchant || r !== merchant.r || c !== merchant.c) return false;
+  if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
+  getGrid()[r][c].preview = null;
+  showShopOverlay(true);
+  return true;
+}
+
 export function collectAt(r, c) {
   const cell = getGrid()[r][c];
-  if (cell.type === 'gold' && cell.goldValue > 0) {
+  const goldPickup = collectGoldCell(r, c);
+  if (goldPickup?.kind === 'gold') {
     playSfx('gold');
-    spawnPickupFloat(r, c, `${cell.chest ? '🎁' : '💰'} +${cell.goldValue}`);
-    addGold(cell.goldValue);
-    cell.goldValue = 0;
-    cell.chest = false;
+    spawnPickupFloat(r, c, `${goldPickup.chest ? '🎁' : '💰'} +${goldPickup.amount}`);
+  } else if (goldPickup?.kind === 'item') {
+    spawnPickupFloat(r, c, `${PICKUP_EMOJI[goldPickup.item] || ''} +1`, 'float-info');
+    playSfx('pickup');
   }
   if (cell.item) {
     addItem(cell.item, 1);
@@ -53,19 +125,118 @@ export function collectAt(r, c) {
     cell.item = null;
     playSfx('pickup');
   }
+  if (getJoker() &&
+      r === getJoker().r &&
+      c === getJoker().c &&
+      !getJoker().used) {
+    getJoker().used = true;
+    cell.preview = null;
+    if (hasArtifact('joker_choice')) {
+      const choices = randomArtifactChoices(2);
+      if (choices.length >= 2) {
+        showArtifactChoiceOverlay(choices, artifact => {
+          grantJokerArtifact(r, c, artifact.id);
+        });
+      } else if (choices.length === 1) {
+        grantJokerArtifact(r, c, choices[0].id);
+      } else {
+        payOutEmptyJoker(r, c);
+      }
+    } else {
+      const artifact = grantRandomArtifact();
+      if (artifact) {
+        spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
+        playSfx('pickup');
+        showArtifactFoundOverlay(artifact);
+      } else {
+        payOutEmptyJoker(r, c);
+      }
+    }
+  }
   if (getFountain() &&
       r === getFountain().r &&
       c === getFountain().c &&
       !getFountain().used) {
-    if (getHp() >= MAX_HP) {
-      spawnPickupFloat(r, c, 'Already at full HP', 'float-info');
+    if (getHp() >= getMaxHp()) {
+      if (hasArtifact('fountain_item')) {
+        const item = randomArtifactItemType();
+        addItem(item, 1);
+        getFountain().used = true;
+        cell.preview = null;
+        spawnPickupFloat(r, c, `${PICKUP_EMOJI[item] || ''} +1`, 'float-info');
+        playSfx('pickup');
+      } else {
+        spawnPickupFloat(r, c, 'Already at full HP', 'float-info');
+      }
     } else {
       fullHeal();
       getFountain().used = true;
+      cell.preview = null;
       spawnPickupFloat(r, c, '+❤️', 'float-heal');
       playSfx('drink');
     }
   }
+  if (openMerchantAt(r, c)) {
+    return { kind: 'merchant' };
+  }
+  return null;
+}
+
+export function collectRevealedGold({ animate = true } = {}) {
+  let total = 0;
+  const collected = [];
+  const itemPickups = [];
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      const cell = getGrid()[r][c];
+      if (!getRevealed()[r]?.[c]) continue;
+      if (cell.type !== 'gold' || cell.goldValue <= 0) continue;
+      if (cell.chest) continue;
+      const pickup = collectGoldCell(r, c);
+      if (pickup?.kind === 'gold') {
+        total += pickup.amount;
+        collected.push({ r, c });
+      } else if (pickup?.kind === 'item') {
+        itemPickups.push(pickup.item);
+      }
+    }
+  }
+  if (total > 0) {
+    if (animate) {
+      collected.forEach((cell, idx) => {
+        spawnGoldMagnetFly(cell.r, cell.c, Math.min(idx * 35, 280));
+      });
+    }
+    spawnPickupFloat(getPlayerRow(), getPlayerCol(), `💰 +${total}`);
+    playSfx('gold');
+  }
+  if (itemPickups.length > 0) {
+    const label = itemPickups.length === 1
+      ? `${PICKUP_EMOJI[itemPickups[0]] || ''} +1`
+      : `🎒 +${itemPickups.length}`;
+    spawnPickupFloat(getPlayerRow(), getPlayerCol(), label, 'float-info');
+    playSfx('pickup');
+  }
+  if (animate && (total > 0 || itemPickups.length > 0)) {
+    setTimeout(() => {
+      if (hasRenderableBoardState()) renderGrid();
+    }, 620);
+  }
+  return total;
+}
+
+function hasRenderableBoardState() {
+  const rows = getRows();
+  const cols = getCols();
+  const grid = getGrid();
+  const revealed = getRevealed();
+  const flagged = getFlagged();
+  if (grid.length !== rows || revealed.length !== rows || flagged.length !== rows) return false;
+  for (let r = 0; r < rows; r++) {
+    if (!grid[r] || !revealed[r] || !flagged[r]) return false;
+    if (grid[r].length !== cols || revealed[r].length !== cols || flagged[r].length !== cols) return false;
+  }
+  return true;
 }
 
 // Walk from (startR, startC) stepping (dR, dC) each iteration. Skips the
@@ -95,6 +266,13 @@ export function detonateGas(r, c) {
   spawnPickupFloat(r, c, '💀', 'float-danger');
 }
 
+function maybeSettleHazardPay(r, c) {
+  const hazard = settleHazardPay();
+  if (!hazard) return null;
+  spawnPickupFloat(r, c, `Hazard Pay +${hazard.amount}`, 'float-info');
+  return hazard;
+}
+
 // Animate the player along a path of revealed cells. Returns true if the
 // walk completed (including winning on the exit); returns false if
 // something stopped it (e.g., win handled).
@@ -106,31 +284,106 @@ async function animateWalk(path) {
     autoRecenterOnPlayer();
     renderMinimap();
     await sleep(STEP_MS);
-    collectAt(path[i].r, path[i].c);
+    const pickup = collectAt(path[i].r, path[i].c);
     updateHud();
+    if (pickup?.kind === 'merchant') {
+      renderGrid();
+      return false;
+    }
 
     if (path[i].r === getExit().r && path[i].c === getExit().c) {
       playSfx('win');
       setGameOver(true);
       renderGrid();
-      addToLifetimeGold(getGold());
       if (getRulesetId() === AUTHORED_RULESET_ID) {
+        addToLifetimeGold(getGold());
         showAuthoredClearedOverlay(getGold());
       } else {
+        const effects = settleClearArtifacts();
+        addToLifetimeGold(getGold());
         const nextSize = gridSizeForLevel(getLevel() + 1);
-        showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+        showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize, effects);
       }
       return false;
     }
   }
   renderGrid();
-  // Open shop if we landed on the merchant.
-  if (getMerchant() &&
-      getPlayerRow() === getMerchant().r &&
-      getPlayerCol() === getMerchant().c) {
-    showShopOverlay(true);
+  return true;
+}
+
+function adjacentCells(r, c) {
+  const cells = [];
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      cells.push({ r: nr, c: nc });
+    }
+  }
+  return cells;
+}
+
+function isTriggeredGasMark(pos) {
+  if (!getRevealed()[pos.r]?.[pos.c]) return false;
+  const type = getGrid()[pos.r]?.[pos.c]?.type;
+  return type === 'detonated' || type === 'gas';
+}
+
+function tryChordReveal(r, c) {
+  if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
+  const cell = getGrid()[r][c];
+  if (!getRevealed()[r]?.[c] || cell.adjacent <= 0) return false;
+  const neighbors = adjacentCells(r, c);
+  const markedGas = neighbors.filter(pos =>
+    getFlagged()[pos.r]?.[pos.c] || isTriggeredGasMark(pos)
+  ).length;
+  if (markedGas !== cell.adjacent) return false;
+
+  let changed = false;
+  for (const pos of neighbors) {
+    if (getFlagged()[pos.r]?.[pos.c] || getRevealed()[pos.r]?.[pos.c]) continue;
+    const target = getGrid()[pos.r][pos.c];
+    if (target.type === 'wall') continue;
+    changed = true;
+    if (target.type === 'gas') {
+      damagePlayer(1);
+      detonateGas(pos.r, pos.c);
+      maybeSettleHazardPay(pos.r, pos.c);
+      getRevealed()[pos.r][pos.c] = true;
+    } else {
+      revealCell(pos.r, pos.c);
+    }
+  }
+  if (!changed) return true;
+  playSfx('dig');
+  renderGrid();
+  collectRevealedGold();
+  updateHud();
+  if (getHp() <= 0) {
+    setGameOver(true);
+    if (getRulesetId() === AUTHORED_RULESET_ID) {
+      showAuthoredDeathOverlay(getGold());
+    } else {
+      recordRun({
+        levelReached: getLevel(),
+        totalGold: getRunGoldEarned(),
+        cause: 'death',
+      });
+      clearSavedRun();
+      showDeathOverlay(getLevel(), getGold(), getStashGold());
+    }
   }
   return true;
+}
+
+function settleClearArtifacts() {
+  const dividend = settleExitDividend();
+  const bounty = settleFlagBounty();
+  const heal = settleEndLevelHeal();
+  if (dividend?.amount || bounty?.net || heal?.amount) updateHud();
+  return { dividend, bounty, heal };
 }
 
 // Among the 8 neighbors of (tr, tc), find the revealed non-wall cell
@@ -209,9 +462,7 @@ export async function handleClick(r, c) {
   if (getBusy()) return;
 
   // Re-open shop if player clicks their own cell and it's the merchant.
-  if (r === getPlayerRow() && c === getPlayerCol() &&
-      getMerchant() && r === getMerchant().r && c === getMerchant().c) {
-    showShopOverlay(true);
+  if (r === getPlayerRow() && c === getPlayerCol() && openMerchantAt(r, c)) {
     return;
   }
 
@@ -226,6 +477,7 @@ export async function handleClick(r, c) {
   try {
     // Clicked a revealed cell: just walk to it.
     if (getRevealed()[r][c]) {
+      if (tryChordReveal(r, c)) return;
       const path = findPath(getPlayerRow(), getPlayerCol(), r, c);
       if (!path || path.length < 2) return;
       await animateWalk(path);
@@ -252,6 +504,7 @@ export async function handleClick(r, c) {
       playSfx('boom');
       damagePlayer(1);
       detonateGas(r, c);
+      maybeSettleHazardPay(r, c);
       getRevealed()[r][c] = true;
       setPlayerPosition(r, c);
       updatePlayerSprite();
@@ -265,6 +518,12 @@ export async function handleClick(r, c) {
         if (getRulesetId() === AUTHORED_RULESET_ID) {
           showAuthoredDeathOverlay(getGold());
         } else {
+          recordRun({
+            levelReached: getLevel(),
+            totalGold: getRunGoldEarned(),
+            cause: 'death',
+          });
+          clearSavedRun();
           showDeathOverlay(getLevel(), getGold(), getStashGold());
         }
         return;
@@ -278,16 +537,20 @@ export async function handleClick(r, c) {
       updateHud();
       renderGrid();
       autoRecenterOnPlayer();
+      collectRevealedGold();
+      updateHud();
 
       if (r === getExit().r && c === getExit().c) {
         playSfx('win');
         setGameOver(true);
-        addToLifetimeGold(getGold());
         if (getRulesetId() === AUTHORED_RULESET_ID) {
+          addToLifetimeGold(getGold());
           showAuthoredClearedOverlay(getGold());
         } else {
+          const effects = settleClearArtifacts();
+          addToLifetimeGold(getGold());
           const nextSize = gridSizeForLevel(getLevel() + 1);
-          showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize);
+          showEscapedOverlay(getLevel(), getGold(), getStashGold(), nextSize, effects);
         }
         return;
       }
@@ -382,5 +645,4 @@ export function debugRevealAll() {
 }
 
 // Wire cross-module dependencies at module load.
-setRevealCell(revealCell);
 setRenderDeps({ isAdjacentToPlayer });

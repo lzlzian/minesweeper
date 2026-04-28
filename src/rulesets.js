@@ -5,15 +5,12 @@
 // starting at level 13. Levels 1-12 always use 'regular'.
 //
 // Ruleset shape: { id: string, weight: number, prepare?: (state) => void, apply?: (state) => void }
-// - prepare runs BEFORE level generation (may set override fields on state).
-// - apply runs AFTER level generation (may mutate the finished board/entities).
+// - prepare runs BEFORE level generation.
+// - apply runs AFTER level generation.
 // Both hooks are optional.
 
-import { prepareTreasureChamber, applyTreasureChamber } from './board/generation.js';
-
 export const RULESETS = [
-  { id: 'regular',          weight: 9, prepare: null,                   apply: null },
-  { id: 'treasure_chamber', weight: 1, prepare: prepareTreasureChamber, apply: applyTreasureChamber },
+  { id: 'regular', weight: 1, prepare: null, apply: null },
 ];
 
 export function weightedPick(list) {

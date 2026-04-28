@@ -20,10 +20,13 @@ export function hideTooltip() {
 
 function showTooltip(triggerEl, data) {
   if (!data) return;
+  const howtoHtml = data.howto
+    ? '<div class="tooltip-howto">' + escapeHtml(data.howto) + '</div>'
+    : '';
   tooltipEl.innerHTML =
-    '<div class="tooltip-name">' + data.name + '</div>' +
-    '<div class="tooltip-desc">' + data.desc + '</div>' +
-    '<div class="tooltip-howto">' + data.howto + '</div>';
+    '<div class="tooltip-name">' + escapeHtml(data.name) + '</div>' +
+    '<div class="tooltip-desc">' + escapeHtml(data.desc) + '</div>' +
+    howtoHtml;
   tooltipEl.classList.remove('hidden');
   tooltipEl.classList.remove('tooltip-below');
   positionTooltip(triggerEl);
@@ -64,7 +67,7 @@ function positionTooltip(triggerEl) {
 }
 
 // Wire hover (desktop) and long-press (mobile) tooltip triggers on an element.
-// `data` is the resolved tooltip object: { name, desc, howto }.
+// `data` is the resolved tooltip object: { name, desc, howto? }.
 export function attachTooltip(el, data) {
   let startX = 0;
   let startY = 0;
@@ -132,3 +135,7 @@ export function attachTooltip(el, data) {
 
 window.addEventListener('scroll', hideTooltip, true);
 window.addEventListener('resize', hideTooltip);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}

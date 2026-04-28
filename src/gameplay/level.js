@@ -1,31 +1,43 @@
 import {
   getState,
   getLevel, getRows, getCols, getGrid, getRevealed, getFlagged,
-  getLevelsSinceMerchant, getMerchant, getFountain,
+  getLevelsSinceMerchant, getMerchant, getFountain, getJoker,
   getRulesetId, getBiomeOverrides, getPlayerRow, getPlayerCol, getExit,
-  moveGoldToStash,
+  getStartCornerIdx,
+  getStashGold, getRunGoldEarned, hasArtifact, moveGoldToStash, spendGold,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
-  setExit, setActiveItem, setLevelsSinceMerchant,
-  incrementLevelsSinceMerchant, setMerchant, setFountain,
+  setGrid, setExit, setActiveItem, setLevelsSinceMerchant,
+  incrementLevelsSinceMerchant, setMerchant, setFountain, setJoker,
   incrementLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
-  resetForNewRun, resetLevelGold, fullHeal,
+  setStartCornerIdx, setGenMeta,
+  addItem, resetForNewRun, resetLevelGold, resetLevelArtifactState, fullHeal,
   getSavePayload, applySavePayload,
 } from '../state.js';
 import { startBgm } from '../audio.js';
 import { playerSprite } from '../ui/dom.js';
-import { renderGrid, updateHud, updatePlayerSprite, resetHurtFlash } from '../ui/render.js';
+import { PICKUP_EMOJI, renderGrid, updateHud, updatePlayerSprite, resetHurtFlash, spawnPickupFloat } from '../ui/render.js';
 import { getViewportSize, cellCenterPx, setPan } from '../ui/view.js';
-import { hideOverlay } from '../ui/overlay.js';
+import { hideOverlay, showGenerationOverlay, showPaymentFailedOverlay, showRunWonOverlay } from '../ui/overlay.js';
 import { RULESETS, weightedPick, resolveRuleset, gridSizeForLevel } from '../rulesets.js';
 import {
-  pickPlayerStart, pickExit, pickMerchantCorner, isReachable,
+  pickMerchantCorner, isReachable,
 } from '../board/layout.js';
 import {
-  countAdjacentGas, generateGrid,
+  countAdjacentGas,
   cleanMerchantCell, carvePath,
+  generateRegionalGrid, validateRegionalGeneration, getRegionalMetrics,
 } from '../board/generation.js';
 import { rollMerchantStock } from './merchant.js';
-import { collectAt, ensureSafeStart, revealCell } from './interaction.js';
+import { recordRun } from './leaderboard.js';
+import { isFinalRunLevel, isPostPaymentRewardLevel, paymentAmountForLevel } from './quota.js';
+import {
+  artifactPaymentAmount,
+  isArtifactCadenceLevel,
+  randomArtifactItemType,
+  useDebtCushion,
+} from './artifacts.js';
+import { clearSavedRun, loadRunPayload, saveRunPayload } from './runSave.js';
+import { collectAt, collectRevealedGold, ensureSafeStart, revealCell } from './interaction.js';
 import { makeSolvable, solve, syncRevealedZeroCascades } from '../solver.js';
 
 // ============================================================
@@ -43,27 +55,190 @@ function isOldGenMode() {
 
 // Minimum deduction steps required per level bracket.
 // Boards solved in fewer steps than minSteps are rejected (too trivial).
-function stepRange(level) {
+function stepRange(level, { regional = false } = {}) {
+  if (regional) {
+    if (level <= 4)  return { min: 2, max: 8 };
+    if (level <= 12) return { min: 4, max: 12 };
+    return { min: 6, max: Infinity };
+  }
   if (level <= 4)  return { min: 3, max: 5 };
   if (level <= 12) return { min: 5, max: 10 };
   return { min: 8, max: Infinity };
 }
 
-const SAVE_KEY = 'miningCrawler.runState';
 const MERCHANT_SPAWN_CHANCE = 0.33;
+const JOKER_SPAWN_CHANCE = 0.33;
+
+function waitForLoadingPaint() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+function pickRegionalCorners() {
+  const corners = [
+    { r: 0, c: 0 },
+    { r: 0, c: getCols() - 1 },
+    { r: getRows() - 1, c: 0 },
+    { r: getRows() - 1, c: getCols() - 1 },
+  ];
+  const startIdx = Math.floor(Math.random() * 4);
+  setStartCornerIdx(startIdx);
+  return {
+    start: corners[startIdx],
+    exit: corners[3 - startIdx],
+  };
+}
+
+function regionalFeatureCell(genMeta, purpose) {
+  const region = genMeta?.regions?.find(r => r.purpose === purpose);
+  return region?.featureCell ?? null;
+}
+
+function revealRandomGasForSurvey() {
+  if (!hasArtifact('gas_survey')) return null;
+  const candidates = [];
+  for (let r = 0; r < getRows(); r++) {
+    for (let c = 0; c < getCols(); c++) {
+      if (getRevealed()[r]?.[c]) continue;
+      if (getGrid()[r]?.[c]?.type !== 'gas') continue;
+      candidates.push({ r, c });
+    }
+  }
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  getRevealed()[pick.r][pick.c] = true;
+  return pick;
+}
+
+function revealBranchLanternCells(genMeta) {
+  if (!hasArtifact('branch_lantern')) return 0;
+  if (!genMeta?.regions?.length) return 0;
+  let revealed = 0;
+  for (const branch of genMeta.regions.filter(region => region.kind === 'branch')) {
+    const entrance = branch.entrance;
+    if (!entrance) continue;
+    const cell = getGrid()[entrance.r]?.[entrance.c];
+    if (!cell || cell.type === 'gas' || cell.type === 'wall') continue;
+    if (!getRevealed()[entrance.r]?.[entrance.c]) revealed++;
+    getRevealed()[entrance.r][entrance.c] = true;
+  }
+  return revealed;
+}
+
+function revealMinersMapCell(genMeta) {
+  if (!hasArtifact('miners_map')) return null;
+  const spine = genMeta?.regions?.find(region => region.kind === 'spine');
+  if (!spine) return null;
+  const candidates = spine.cells.filter(cell => {
+    if (cell.r === getPlayerRow() && cell.c === getPlayerCol()) return false;
+    if (cell.r === getExit().r && cell.c === getExit().c) return false;
+    if (getRevealed()[cell.r]?.[cell.c]) return false;
+    const gridCell = getGrid()[cell.r]?.[cell.c];
+    return gridCell?.type === 'empty' && gridCell.adjacent > 0;
+  });
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  getRevealed()[pick.r][pick.c] = true;
+  return pick;
+}
+
+function applyLevelStartArtifactReveals(genMeta) {
+  const lanternCount = revealBranchLanternCells(genMeta);
+  const mapCell = revealMinersMapCell(genMeta);
+  return { lanternCount, mapCell };
+}
+
+function applyLevelStartItemArtifacts() {
+  if (!isArtifactCadenceLevel(getLevel())) return [];
+  const effects = [];
+  if (hasArtifact('wide_pockets')) {
+    const item = randomArtifactItemType();
+    addItem(item, 1);
+    effects.push({ item, label: `${PICKUP_EMOJI[item] || ''} +1` });
+  }
+  if (hasArtifact('pocket_pickaxe')) {
+    addItem('pickaxe', 1);
+    effects.push({ item: 'pickaxe', label: `${PICKUP_EMOJI.pickaxe} +1` });
+  }
+  return effects;
+}
+
+function logRegionalAccept(level, attempt, genMeta, solveRes, fixups, tMs, stepNote = '') {
+  const metrics = getRegionalMetrics(genMeta, solveRes.revealed);
+  genMeta.metrics = metrics;
+  console.info(`[regional-gen] level=${level} size=${getRows()} regions=spine:${metrics.spineCells} branch:${metrics.branchCells}`);
+  console.info(`[regional-gen] spineGold=${metrics.spineGold} optionalGold=${metrics.optionalGold} gates=${metrics.gates} branchLeak=${metrics.branchLeak.toFixed(2)} attempts=${attempt + 1}`);
+  console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${solveRes.steps} need=[${stepRange(level, { regional: true }).min},${stepRange(level, { regional: true }).max}] fixups=${fixups}${stepNote} t=${tMs}ms`);
+}
+
+function cloneGrid(grid) {
+  return grid.map(row => row.map(cell => ({ ...cell })));
+}
+
+function cloneMatrix(matrix) {
+  return matrix.map(row => row.slice());
+}
+
+function clonePlain(value) {
+  return value ? structuredClone(value) : null;
+}
+
+function captureGeneratedCandidate({ genMeta, solveRes, regionalCheck, min, max, reason }) {
+  const rewardRevealed = regionalCheck?.issues?.some(issue => issue.includes('reward revealed'));
+  if (rewardRevealed) return null;
+
+  const stepShortfall = Math.max(0, min - solveRes.steps);
+  const stepOverflow = Number.isFinite(max) ? Math.max(0, solveRes.steps - max) : 0;
+  const leakPenalty = regionalCheck?.ok ? 0 : Math.round((regionalCheck?.branchLeak ?? 0) * 100);
+  const score =
+    (regionalCheck?.ok ? 1000 : 650) +
+    Math.min(solveRes.steps, min) * 40 -
+    stepShortfall * 140 -
+    stepOverflow * 80 -
+    leakPenalty;
+
+  return {
+    score,
+    reason,
+    steps: solveRes.steps,
+    branchLeak: regionalCheck?.branchLeak ?? 0,
+    grid: cloneGrid(getGrid()),
+    revealed: cloneMatrix(getRevealed()),
+    flagged: cloneMatrix(getFlagged()),
+    merchant: clonePlain(getMerchant()),
+    fountain: clonePlain(getFountain()),
+    joker: clonePlain(getJoker()),
+    genMeta: clonePlain(genMeta),
+    player: { r: getPlayerRow(), c: getPlayerCol() },
+    exit: { ...getExit() },
+    startCornerIdx: getStartCornerIdx(),
+  };
+}
+
+function restoreGeneratedCandidate(candidate) {
+  setGrid(cloneGrid(candidate.grid));
+  setRevealed(cloneMatrix(candidate.revealed));
+  setFlagged(cloneMatrix(candidate.flagged));
+  setMerchant(clonePlain(candidate.merchant));
+  setFountain(clonePlain(candidate.fountain));
+  setJoker(clonePlain(candidate.joker));
+  setGenMeta(clonePlain(candidate.genMeta));
+  setPlayerPosition(candidate.player.r, candidate.player.c);
+  setExit({ ...candidate.exit });
+  setStartCornerIdx(candidate.startCornerIdx);
+}
 
 export function saveRun() {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(getSavePayload()));
+  saveRunPayload(getSavePayload());
 }
 
 export function loadRun() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  return loadRunPayload();
 }
 
 export function clearSave() {
-  localStorage.removeItem(SAVE_KEY);
+  clearSavedRun();
 }
 
 export async function initLevel() {
@@ -85,6 +260,9 @@ export async function initLevel() {
   setActiveItem(null);
   setMerchant(null);
   setFountain(null);
+  setJoker(null);
+  setGenMeta(null);
+  resetLevelArtifactState();
   setRows(gridSizeForLevel(getLevel()));
   setCols(getRows());
 
@@ -92,9 +270,12 @@ export async function initLevel() {
   const spawnMerchant = getBiomeOverrides()?.suppressMerchant
     ? false
     : (getLevelsSinceMerchant() >= 2 || Math.random() < MERCHANT_SPAWN_CHANCE);
+  const spawnFountain = Math.random() < 0.50;
+  const spawnJoker = isPostPaymentRewardLevel(getLevel()) || Math.random() < JOKER_SPAWN_CHANCE;
 
   const maxAttempts = 500;
   let solved = false;
+  let bestCandidate = null;
 
   for (let attempt = 0; attempt < maxAttempts && !solved; attempt++) {
     // Yield to the event loop periodically so the browser stays responsive.
@@ -106,20 +287,32 @@ export async function initLevel() {
     setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setMerchant(null);
     setFountain(null);
-    const gasDensity = getBiomeOverrides()?.gasDensity ?? 0.20;
-    const gasCount = Math.floor(getRows() * getCols() * gasDensity);
-    generateGrid(gasCount);
+    setJoker(null);
+    setGenMeta(null);
 
-    const start = pickPlayerStart();
-    if (!start) continue;
+    const { start, exit } = pickRegionalCorners();
     setPlayerPosition(start.r, start.c);
+    setExit(exit);
+
+    const genMeta = generateRegionalGrid({
+      level: getLevel(),
+      start,
+      exit,
+      features: {
+        merchant: spawnMerchant,
+        fountain: spawnFountain,
+        joker: spawnJoker,
+      },
+    });
+    setGenMeta(genMeta);
+    if (!genMeta.regions.some(region => region.kind === 'branch')) continue;
+    if (genMeta.failedBranchPlans.includes('gold')) continue;
+    const preEntityMetrics = getRegionalMetrics(genMeta);
+    if (preEntityMetrics.optionalGold <= preEntityMetrics.spineGold) continue;
+
     ensureSafeStart(getPlayerRow(), getPlayerCol());
     // Spawn cell auto-reveals; don't grant a free item there.
     getGrid()[getPlayerRow()][getPlayerCol()].item = null;
-
-    const exit = pickExit(getPlayerRow(), getPlayerCol());
-    if (!exit) continue;
-    setExit(exit);
 
     // Exit cell itself must not be gas
     if (getGrid()[exit.r][exit.c].type === 'gas') {
@@ -149,11 +342,15 @@ export async function initLevel() {
     // Merchant placement (if this level spawns one).
     let merchantPos = null;
     if (spawnMerchant) {
-      merchantPos = pickMerchantCorner();
-      if (!merchantPos) continue;
-      if (merchantPos.r === getPlayerRow() && merchantPos.c === getPlayerCol()) continue;
-      if (merchantPos.r === exit.r && merchantPos.c === exit.c) continue;
-      cleanMerchantCell(merchantPos.r, merchantPos.c);
+      merchantPos = regionalFeatureCell(genMeta, 'merchant');
+      if (merchantPos &&
+          !(merchantPos.r === getPlayerRow() && merchantPos.c === getPlayerCol()) &&
+          !(merchantPos.r === exit.r && merchantPos.c === exit.c)) {
+        cleanMerchantCell(merchantPos.r, merchantPos.c);
+        getGrid()[merchantPos.r][merchantPos.c].preview = 'merchant';
+      } else {
+        merchantPos = null;
+      }
     }
 
     const exitReachable = isReachable(getPlayerRow(), getPlayerCol(), exit.r, exit.c);
@@ -165,35 +362,41 @@ export async function initLevel() {
       setMerchant({ r: merchantPos.r, c: merchantPos.c, stock: rollMerchantStock(), rerollCount: 0 });
     }
 
-    // Roll fountain (50%, no pity, ruleset-agnostic).
-    if (Math.random() < 0.50) {
-      const candidates = [];
-      for (let r = 0; r < getRows(); r++) {
-        for (let c = 0; c < getCols(); c++) {
-          if (getGrid()[r][c].type !== 'empty') continue;
-          if (getGrid()[r][c].item) continue;
-          if (r === getPlayerRow() && c === getPlayerCol()) continue;
-          if (r === exit.r && c === exit.c) continue;
-          if (getMerchant() && r === getMerchant().r && c === getMerchant().c) continue;
-          candidates.push({ r, c });
-        }
-      }
-      if (candidates.length > 0) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-        getGrid()[pick.r][pick.c].type = 'fountain';
+    // Fountain placement (50%, no pity, ruleset-agnostic).
+    if (spawnFountain) {
+      const pick = regionalFeatureCell(genMeta, 'fountain');
+      if (pick) {
+        const fountainCell = getGrid()[pick.r][pick.c];
+        fountainCell.type = 'fountain';
+        fountainCell.goldValue = 0;
+        fountainCell.item = null;
+        fountainCell.chest = false;
+        fountainCell.preview = 'fountain';
         setFountain({ r: pick.r, c: pick.c, used: false });
       }
     }
+    const fountainReachable = !getFountain() || isReachable(getPlayerRow(), getPlayerCol(), getFountain().r, getFountain().c);
+    if (!fountainReachable) continue;
 
-    // Pre-reveal exit, start, merchant, and fountain cells.
-    getRevealed()[exit.r][exit.c] = true;
+    if (spawnJoker) {
+      const pick = regionalFeatureCell(genMeta, 'joker');
+      if (pick) {
+        const jokerCell = getGrid()[pick.r][pick.c];
+        jokerCell.type = 'empty';
+        jokerCell.goldValue = 0;
+        jokerCell.item = null;
+        jokerCell.chest = false;
+        jokerCell.preview = 'joker';
+        setJoker({ r: pick.r, c: pick.c, used: false });
+      }
+    }
+    const jokerReachable = !getJoker() || isReachable(getPlayerRow(), getPlayerCol(), getJoker().r, getJoker().c);
+    if (!jokerReachable) continue;
+
+    // Pre-reveal only the start-side information for validation. The exit is
+    // revealed for UI after acceptance, but the no-guess proof must not depend
+    // on remote exit-side clues.
     getRevealed()[getPlayerRow()][getPlayerCol()] = true;
-    if (getMerchant()) {
-      getRevealed()[getMerchant().r][getMerchant().c] = true;
-    }
-    if (getFountain()) {
-      getRevealed()[getFountain().r][getFountain().c] = true;
-    }
 
     // Reveal the player's start 3×3 so new players see safe ground around them.
     for (let dr = -1; dr <= 1; dr++) {
@@ -201,11 +404,14 @@ export async function initLevel() {
         revealCell(getPlayerRow() + dr, getPlayerCol() + dc);
       }
     }
+    syncRevealedZeroCascades(getGrid(), getRows(), getCols(), getRevealed());
 
     // No-guess solver: feed the real revealed state so step count is accurate.
     if (!isOldGenMode()) {
       const excludeCells = [];
       if (merchantPos) excludeCells.push(merchantPos);
+      if (genMeta?.protectedCells) excludeCells.push(...genMeta.protectedCells);
+      if (genMeta?.rewardCells) excludeCells.push(...genMeta.rewardCells);
       const t0 = performance.now();
       const noGuessRes = makeSolvable(
         getGrid(), getRows(), getCols(),
@@ -214,7 +420,7 @@ export async function initLevel() {
         exit,
         { maxFixAttempts: 30, exclude: excludeCells },
       );
-      const { min, max } = stepRange(getLevel());
+      const { min, max } = stepRange(getLevel(), { regional: !!genMeta });
       if (!noGuessRes.solved) {
         const tMs = Math.round(performance.now() - t0);
         console.info(`[no-guess] attempt=${attempt} REJECT reason=unsolvable fixups=${noGuessRes.fixups} steps=${noGuessRes.steps} t=${tMs}ms`);
@@ -245,12 +451,38 @@ export async function initLevel() {
         console.info(`[no-guess] attempt=${attempt} REJECT reason=post-sync-unsolvable fixups=${noGuessRes.fixups} steps=${finalNoGuessRes.steps}${stepNote} t=${tMs}ms`);
         continue;
       }
+      const regionalCheck = validateRegionalGeneration(genMeta, finalNoGuessRes.revealed);
+      const candidateFrom = (reason) => {
+        const candidate = captureGeneratedCandidate({
+          genMeta,
+          solveRes: finalNoGuessRes,
+          regionalCheck,
+          min,
+          max,
+          reason,
+        });
+        if (candidate && (!bestCandidate || candidate.score > bestCandidate.score)) {
+          bestCandidate = candidate;
+        }
+      };
+      if (!regionalCheck.ok) {
+        candidateFrom('regional-near-miss');
+        console.info(`[regional-gen] attempt=${attempt} REJECT reason=${regionalCheck.issues.join('|')} leak=${regionalCheck.branchLeak.toFixed(2)}`);
+        continue;
+      }
       if (finalNoGuessRes.steps < min || finalNoGuessRes.steps > max) {
+        candidateFrom('step-near-miss');
         console.info(`[no-guess] attempt=${attempt} REJECT reason=steps steps=${finalNoGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups}${stepNote} t=${tMs}ms`);
         continue;
       }
-      console.info(`[no-guess] attempt=${attempt} ACCEPT steps=${finalNoGuessRes.steps} need=[${min},${max}] fixups=${noGuessRes.fixups}${stepNote} t=${tMs}ms`);
+      logRegionalAccept(getLevel(), attempt, genMeta, finalNoGuessRes, noGuessRes.fixups, tMs, stepNote);
     }
+    solved = true;
+  }
+
+  if (!solved && bestCandidate) {
+    console.warn(`initLevel: ${maxAttempts} strict attempts missed, using best no-guess candidate reason=${bestCandidate.reason} steps=${bestCandidate.steps} leak=${bestCandidate.branchLeak.toFixed(2)}`);
+    restoreGeneratedCandidate(bestCandidate);
     solved = true;
   }
 
@@ -260,6 +492,8 @@ export async function initLevel() {
     setFlagged(Array.from({ length: getRows() }, () => Array(getCols()).fill(false)));
     setMerchant(null);
     setFountain(null);
+    setJoker(null);
+    setGenMeta(null);
     carvePath(getPlayerRow(), getPlayerCol(), getExit().r, getExit().c);
     if (spawnMerchant) {
       const merchantPos = pickMerchantCorner();
@@ -282,17 +516,25 @@ export async function initLevel() {
     }
   }
 
+  getRevealed()[getExit().r][getExit().c] = true;
+  applyLevelStartArtifactReveals(getState().genMeta);
+  revealRandomGasForSurvey();
+  const itemEffects = applyLevelStartItemArtifacts();
   collectAt(getPlayerRow(), getPlayerCol());
-
   updateHud();
   renderGrid();
+  collectRevealedGold();
+  updateHud();
+  itemEffects.forEach((effect, idx) => {
+    spawnPickupFloat(getPlayerRow(), getPlayerCol(), effect.label, 'float-info');
+  });
   // Snap pan to center on player at level start (instant, not animated).
   const vp = getViewportSize();
   const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
   // Ruleset hooks receive the raw state singleton — see RULESETS contract.
-  // Hooks may mutate the grid (e.g., treasure_chamber overwrites corner cells),
-  // so re-render after they run.
+  // Current procedural generation uses the regular regional recipe, but the
+  // hook stays as a future extension point.
   ruleset.apply?.(getState());
   renderGrid();
   hideOverlay();
@@ -302,6 +544,8 @@ export async function startGame() {
   document.body.classList.add('in-run');
   clearSave();
   resetForNewRun();
+  showGenerationOverlay();
+  await waitForLoadingPaint();
   await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
@@ -312,6 +556,8 @@ export async function startGame() {
 export async function resumeGame(save) {
   document.body.classList.add('in-run');
   applySavePayload(save);
+  showGenerationOverlay();
+  await waitForLoadingPaint();
   await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
@@ -319,28 +565,76 @@ export async function resumeGame(save) {
   startBgm();
 }
 
-export async function nextLevel() {
-  moveGoldToStash();
+async function descendToNextGeneratedLevel() {
   incrementLevel();
-  const overrides = getBiomeOverrides();
-  if (overrides?.freezePityTick) {
-    // Freeze pity timer: do not increment levelsSinceMerchant across this level.
-  } else if (getMerchant()) {
+  if (getMerchant()) {
     setLevelsSinceMerchant(0);
   } else {
     incrementLevelsSinceMerchant();
   }
   setRulesetId(null);
   saveRun();
+  showGenerationOverlay();
+  await waitForLoadingPaint();
   await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
 }
 
+function finishRunWon(clearedLevel) {
+  setGameOver(true);
+  recordRun({
+    levelReached: clearedLevel,
+    totalGold: getRunGoldEarned(),
+    cause: 'win',
+  });
+  clearSavedRun();
+  showRunWonOverlay(clearedLevel, getRunGoldEarned(), getStashGold());
+}
+
+export async function nextLevel() {
+  const clearedLevel = getLevel();
+  moveGoldToStash();
+  const paymentDue = artifactPaymentAmount(paymentAmountForLevel(clearedLevel));
+  if (paymentDue > 0) {
+    const totalBeforePayment = getStashGold();
+    const shortfall = paymentDue - totalBeforePayment;
+    if (useDebtCushion(shortfall)) {
+      updateHud();
+      if (isFinalRunLevel(clearedLevel)) {
+        finishRunWon(clearedLevel);
+        return;
+      }
+      await descendToNextGeneratedLevel();
+      return;
+    }
+    spendGold(paymentDue);
+    updateHud();
+    if (getStashGold() < 0) {
+      setGameOver(true);
+      recordRun({
+        levelReached: clearedLevel,
+        totalGold: getRunGoldEarned(),
+        cause: 'payment',
+      });
+      clearSavedRun();
+      showPaymentFailedOverlay(clearedLevel, paymentDue, totalBeforePayment);
+      return;
+    }
+  }
+  if (isFinalRunLevel(clearedLevel)) {
+    finishRunWon(clearedLevel);
+    return;
+  }
+  await descendToNextGeneratedLevel();
+}
+
 export async function retryLevel() {
   resetLevelGold();
   fullHeal();
+  showGenerationOverlay();
+  await waitForLoadingPaint();
   await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();

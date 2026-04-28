@@ -177,12 +177,14 @@ export function solve(grid, rows, cols, revealedIn, flaggedIn, player, exit) {
 export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player, exit, opts = {}) {
   const FAR = opts.far ?? 4;
   const exclude = opts.exclude ?? [];
+  const isExcluded = (r, c) => exclude.some(p => p.r === r && p.c === c);
 
   const sources = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (grid[r][c].type !== 'gas') continue;
       if (flagged[r][c]) continue;
+      if (isExcluded(r, c)) continue;
       let onFrontier = false;
       for (const [dr, dc] of DIRS) {
         const nr = r + dr, nc = c + dc;
@@ -202,7 +204,7 @@ export function relocateFrontierGas(grid, rows, cols, revealed, flagged, player,
       if (flagged[r][c]) continue;
       if (r === player.r && c === player.c) continue;
       if (r === exit.r && c === exit.c) continue;
-      if (exclude.some(p => p.r === r && p.c === c)) continue;
+      if (isExcluded(r, c)) continue;
 
       let minDist = Infinity;
       outer: for (let rr = 0; rr < rows; rr++) {

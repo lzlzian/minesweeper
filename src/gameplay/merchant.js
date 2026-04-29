@@ -73,33 +73,35 @@ export function buyFromMerchant(idx) {
   const slotEl = document.querySelectorAll('#overlay-content .shop-slot')[idx];
   if (slotEl && slotEl._suppressNextClick) {
     slotEl._suppressNextClick = false;
-    return;
+    return false;
   }
-  if (!getMerchant()) return;
+  if (!getMerchant()) return false;
   const slot = getMerchant().stock[idx];
-  if (!slot || slot.sold) return;
+  if (!slot || slot.sold) return false;
   const price = merchantArtifactPrice(slot.price);
   const totalGold = getGold() + getStashGold();
-  if (totalGold < price) return;
+  if (totalGold < price) return false;
   spendGold(price);
   addItem(slot.type, 1);
   slot.sold = true;
   playSfx('payment');
   updateHud();
   showShopOverlay(); // re-render with updated state
+  return true;
 }
 
 export function rerollMerchant() {
-  if (!getMerchant()) return;
+  if (!getMerchant()) return false;
   const cost = merchantEffectiveRerollCost(getMerchant().rerollCount);
   const totalGold = getGold() + getStashGold();
-  if (totalGold < cost) return;
+  if (totalGold < cost) return false;
   spendGold(cost);
   getMerchant().rerollCount++;
   getMerchant().stock = rollMerchantStock();
   playSfx('payment');
   updateHud();
   showShopOverlay(); // re-render with new stock and new reroll cost
+  return true;
 }
 
 export function leaveShop() {

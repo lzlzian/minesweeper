@@ -3,7 +3,7 @@ import {
   getLevel, getRows, getCols, getGrid, getRevealed, getFlagged,
   getLevelsSinceMerchant, getMerchant, getFountain, getJoker,
   getRulesetId, getBiomeOverrides, getPlayerRow, getPlayerCol, getExit,
-  getStartCornerIdx,
+  getStartCornerIdx, getGameOver,
   getStashGold, getRunGoldEarned, hasArtifact, moveGoldToStash, spendGold,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setGrid, setExit, setActiveItem, setLevelsSinceMerchant,
@@ -43,6 +43,10 @@ import { makeSolvable, solve, syncRevealedZeroCascades } from '../solver.js';
 // ============================================================
 // LEVEL LIFECYCLE
 // ============================================================
+
+// Keep in sync with authored.js. Duplicated here to avoid turning save helpers
+// into part of the authored playback import graph.
+const AUTHORED_RULESET_ID = 'authored';
 
 // A/B toggle: ?oldgen=1 skips the no-guess solver entirely to compare feel.
 function isOldGenMode() {
@@ -181,7 +185,7 @@ function cloneMatrix(matrix) {
 }
 
 function clonePlain(value) {
-  return value ? structuredClone(value) : null;
+  return value == null ? null : structuredClone(value);
 }
 
 function captureGeneratedCandidate({ genMeta, solveRes, regionalCheck, min, max, reason }) {
@@ -229,8 +233,80 @@ function restoreGeneratedCandidate(candidate) {
   setStartCornerIdx(candidate.startCornerIdx);
 }
 
+const SAVED_LEVEL_VERSION = 1;
+
+function matrixMatchesShape(matrix, rows, cols) {
+  if (!Array.isArray(matrix) || matrix.length !== rows) return false;
+  return matrix.every(row => Array.isArray(row) && row.length === cols);
+}
+
+function hasSavableLevelState() {
+  const rows = getRows();
+  const cols = getCols();
+  if (rows <= 0 || cols <= 0) return false;
+  return matrixMatchesShape(getGrid(), rows, cols) &&
+    matrixMatchesShape(getRevealed(), rows, cols) &&
+    matrixMatchesShape(getFlagged(), rows, cols);
+}
+
+export function captureSavedLevelState() {
+  if (!hasSavableLevelState()) return null;
+  return {
+    version: SAVED_LEVEL_VERSION,
+    rows: getRows(),
+    cols: getCols(),
+    grid: cloneGrid(getGrid()),
+    revealed: cloneMatrix(getRevealed()),
+    flagged: cloneMatrix(getFlagged()),
+    player: { r: getPlayerRow(), c: getPlayerCol() },
+    exit: { ...getExit() },
+    merchant: clonePlain(getMerchant()),
+    fountain: clonePlain(getFountain()),
+    joker: clonePlain(getJoker()),
+    startCornerIdx: getStartCornerIdx(),
+    biomeOverrides: clonePlain(getBiomeOverrides()),
+  };
+}
+
+export function restoreSavedLevelState(levelState) {
+  if (!levelState || levelState.version !== SAVED_LEVEL_VERSION) return false;
+  const rows = levelState.rows;
+  const cols = levelState.cols;
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows <= 0 || cols <= 0) return false;
+  if (!matrixMatchesShape(levelState.grid, rows, cols)) return false;
+  if (!matrixMatchesShape(levelState.revealed, rows, cols)) return false;
+  if (!matrixMatchesShape(levelState.flagged, rows, cols)) return false;
+  if (!levelState.player || !levelState.exit) return false;
+
+  setRows(rows);
+  setCols(cols);
+  setGrid(cloneGrid(levelState.grid));
+  setRevealed(cloneMatrix(levelState.revealed));
+  setFlagged(cloneMatrix(levelState.flagged));
+  setPlayerPosition(levelState.player.r, levelState.player.c);
+  setExit({ ...levelState.exit });
+  setMerchant(clonePlain(levelState.merchant));
+  setFountain(clonePlain(levelState.fountain));
+  setJoker(clonePlain(levelState.joker));
+  setGenMeta(null);
+  setStartCornerIdx(levelState.startCornerIdx ?? 0);
+  setBiomeOverrides(clonePlain(levelState.biomeOverrides));
+  setGameOver(false);
+  setBusy(false);
+  setActiveItem(null);
+  return true;
+}
+
+function centerPanOnPlayer() {
+  const vp = getViewportSize();
+  const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
+  setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
+}
+
 export function saveRun() {
-  saveRunPayload(getSavePayload());
+  if (getRulesetId() === AUTHORED_RULESET_ID || getGameOver()) return;
+  const levelState = captureSavedLevelState();
+  saveRunPayload(getSavePayload(levelState ? { levelState } : {}));
 }
 
 export function loadRun() {
@@ -529,9 +605,7 @@ export async function initLevel() {
     spawnPickupFloat(getPlayerRow(), getPlayerCol(), effect.label, 'float-info');
   });
   // Snap pan to center on player at level start (instant, not animated).
-  const vp = getViewportSize();
-  const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
-  setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
+  centerPanOnPlayer();
   // Ruleset hooks receive the raw state singleton — see RULESETS contract.
   // Current procedural generation uses the regular regional recipe, but the
   // hook stays as a future extension point.
@@ -547,6 +621,7 @@ export async function startGame() {
   showGenerationOverlay();
   await waitForLoadingPaint();
   await initLevel();
+  saveRun();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
@@ -558,7 +633,15 @@ export async function resumeGame(save) {
   applySavePayload(save);
   showGenerationOverlay();
   await waitForLoadingPaint();
-  await initLevel();
+  if (restoreSavedLevelState(save?.levelState)) {
+    updateHud();
+    renderGrid();
+    centerPanOnPlayer();
+    hideOverlay();
+  } else {
+    await initLevel();
+  }
+  saveRun();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
@@ -573,10 +656,10 @@ async function descendToNextGeneratedLevel() {
     incrementLevelsSinceMerchant();
   }
   setRulesetId(null);
-  saveRun();
   showGenerationOverlay();
   await waitForLoadingPaint();
   await initLevel();
+  saveRun();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';

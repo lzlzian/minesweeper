@@ -184,32 +184,38 @@ export function resetLevelArtifactState() { state.hazardPayClaimed = false; }
 export function fullHeal() { state.hp = state.maxHp; }
 
 // ----- Save/load -----
-export function getSavePayload() {
+export function getSavePayload(extra = {}) {
   return {
     level: state.level,
+    gold: state.gold,
     stashGold: state.stashGold,
     runGoldEarned: state.runGoldEarned,
     maxHp: state.maxHp,
     artifacts: [...state.artifacts],
+    hazardPayClaimed: state.hazardPayClaimed,
     debtCushionUsed: state.debtCushionUsed,
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
     rulesetId: state.rulesetId,
     hp: state.hp,
+    ...extra,
   };
 }
 
 export function applySavePayload(save) {
   state.level = save.level;
-  state.gold = 0;
+  state.gold = save.gold ?? 0;
   state.stashGold = save.stashGold;
   state.runGoldEarned = save.runGoldEarned ?? save.stashGold ?? 0;
   state.maxHp = save.maxHp ?? MAX_HP;
-  state.levelsSinceMerchant = save.levelsSinceMerchant;
+  state.levelsSinceMerchant = save.levelsSinceMerchant ?? 0;
   state.artifacts = [...(save.artifacts ?? [])];
-  state.hazardPayClaimed = false;
+  state.hazardPayClaimed = !!save.hazardPayClaimed;
   state.debtCushionUsed = !!save.debtCushionUsed;
-  state.items = { ...save.items };
+  state.items = { ...(save.items ?? {}) };
+  state.items.potion = state.items.potion ?? 0;
+  state.items.scanner = state.items.scanner ?? 0;
+  state.items.pickaxe = state.items.pickaxe ?? 0;
   state.items.row = state.items.row ?? 0;
   state.items.column = state.items.column ?? 0;
   state.items.cross = state.items.cross ?? 0;

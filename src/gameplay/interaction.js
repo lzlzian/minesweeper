@@ -50,6 +50,17 @@ import { gridSizeForLevel } from '../rulesets.js';
 // INTERACTION (walk, reveal, collect, flag, pickaxe targeting)
 // ============================================================
 
+let autosaveRun = () => {};
+
+export function setInteractionAutosave(fn) {
+  autosaveRun = typeof fn === 'function' ? fn : () => {};
+}
+
+function autosaveIfActiveRun() {
+  if (getRulesetId() === AUTHORED_RULESET_ID || getGameOver()) return;
+  autosaveRun();
+}
+
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -90,6 +101,7 @@ function grantJokerArtifact(r, c, artifactId) {
   playSfx('pickup');
   showArtifactFoundOverlay(artifact);
   updateHud();
+  autosaveIfActiveRun();
   return true;
 }
 
@@ -288,6 +300,7 @@ async function animateWalk(path) {
     updateHud();
     if (pickup?.kind === 'merchant') {
       renderGrid();
+      autosaveIfActiveRun();
       return false;
     }
 
@@ -308,6 +321,7 @@ async function animateWalk(path) {
     }
   }
   renderGrid();
+  autosaveIfActiveRun();
   return true;
 }
 
@@ -374,6 +388,8 @@ function tryChordReveal(r, c) {
       clearSavedRun();
       showDeathOverlay(getLevel(), getGold(), getStashGold());
     }
+  } else {
+    autosaveIfActiveRun();
   }
   return true;
 }
@@ -451,6 +467,7 @@ async function handleItemClick(r, c) {
     playSfx('pickaxe');
     updateHud();
     renderGrid();
+    autosaveIfActiveRun();
     return true;
   }
 
@@ -463,6 +480,7 @@ export async function handleClick(r, c) {
 
   // Re-open shop if player clicks their own cell and it's the merchant.
   if (r === getPlayerRow() && c === getPlayerCol() && openMerchantAt(r, c)) {
+    autosaveIfActiveRun();
     return;
   }
 
@@ -528,6 +546,7 @@ export async function handleClick(r, c) {
         }
         return;
       }
+      autosaveIfActiveRun();
     } else {
       playSfx('dig');
       revealCell(r, c);
@@ -554,6 +573,7 @@ export async function handleClick(r, c) {
         }
         return;
       }
+      autosaveIfActiveRun();
     }
   } finally {
     setBusy(false);
@@ -633,6 +653,7 @@ export function handleRightClick(r, c) {
   getFlagged()[r][c] = !getFlagged()[r][c];
   playSfx(getFlagged()[r][c] ? 'mark' : 'unmark');
   renderGrid();
+  autosaveIfActiveRun();
 }
 
 export function debugRevealAll() {

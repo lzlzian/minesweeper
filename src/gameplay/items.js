@@ -15,6 +15,12 @@ import { walkRay, detonateGas, revealCell, collectRevealedGold } from './interac
 // ITEMS
 // ============================================================
 
+let autosaveRun = () => {};
+
+export function setItemAutosave(fn) {
+  autosaveRun = typeof fn === 'function' ? fn : () => {};
+}
+
 export const ITEM_TOOLTIPS = {
   potion:  { name: 'Potion',      desc: 'Restore 1 ❤️.',                                         howto: 'Tap to use instantly.' },
   scanner: { name: 'Scanner',     desc: 'Reveal the 3×3 around you.',                             howto: 'Tap to use instantly.' },
@@ -75,6 +81,7 @@ function useItemPotion() {
   healPlayer(1);
   playSfx('drink');
   updateHud();
+  autosaveRun();
 }
 
 // True if the 3×3 around the player contains at least one unrevealed,
@@ -205,6 +212,7 @@ function finishRevealItem() {
   collectRevealedGold();
   updateHud();
   updateItemBar();
+  autosaveRun();
 }
 
 // Reveal the player's row — two rays (west, east), stop at walls, gas

@@ -21,9 +21,17 @@ function assertApprox(a, b, epsilon, msg) {
 import {
   resetForNewRun, getSavePayload, applySavePayload,
   getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
-  getDebtCushionUsed, getMaxHp, getArtifacts, getGold,
+  getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed,
   setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
+  setHazardPayClaimed, setExit,
 } from '../src/state.js';
+import {
+  captureSavedLevelState,
+  clearSave,
+  loadRun,
+  restoreSavedLevelState,
+  saveRun,
+} from '../src/gameplay/level.js';
 import {
   ARTIFACTS,
   DEBT_CUSHION_GOLD,
@@ -71,6 +79,82 @@ test('save/load round-trip preserves run-scoped fields', () => {
   assertEq(getItems().potion, 0);
 });
 
+test('run save includes the active generated level snapshot', () => {
+  clearSave();
+  resetForNewRun();
+  setLevel(2);
+  addGold(17);
+  setHazardPayClaimed(true);
+  setRows(2); setCols(2);
+  setPlayerPosition(0, 1);
+  setExit({ r: 1, c: 1 });
+  const g = makeEmptyGrid(2, 2);
+  g[1][1].type = 'gas';
+  g[0][1].preview = 'merchant';
+  setGrid(g);
+  setRevealed([
+    [true, true],
+    [false, false],
+  ]);
+  setFlagged([
+    [false, false],
+    [true, false],
+  ]);
+  setMerchant({
+    r: 0,
+    c: 1,
+    rerollCount: 1,
+    stock: [{ type: 'potion', basePrice: 100, discountKey: 'full', price: 100, sold: true }],
+  });
+
+  saveRun();
+  const save = loadRun();
+  assertEq(save.level, 2);
+  assertEq(save.gold, 17);
+  assertEq(save.hazardPayClaimed, true);
+  assertEq(save.levelState.rows, 2);
+  assertEq(save.levelState.player.r, 0);
+  assertEq(save.levelState.player.c, 1);
+  assertEq(save.levelState.grid[1][1].type, 'gas');
+  assertEq(save.levelState.flagged[1][0], true);
+  assertEq(save.levelState.merchant.stock[0].sold, true);
+  clearSave();
+});
+
+test('saved level snapshot restores board state without generation', () => {
+  resetForNewRun();
+  setRows(2); setCols(2);
+  setPlayerPosition(1, 0);
+  setExit({ r: 0, c: 1 });
+  const g = makeEmptyGrid(2, 2);
+  g[0][1].type = 'gold';
+  g[0][1].goldValue = 55;
+  setGrid(g);
+  setRevealed([
+    [false, true],
+    [true, false],
+  ]);
+  setFlagged([
+    [false, false],
+    [false, true],
+  ]);
+  const snapshot = captureSavedLevelState();
+
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  setExit({ r: 0, c: 0 });
+  setGrid(makeEmptyGrid(1, 1));
+  setRevealed([[true]]);
+  setFlagged([[false]]);
+
+  assertEq(restoreSavedLevelState(snapshot), true);
+  assertEq(getGrid().length, 2);
+  assertEq(getGrid()[0][1].type, 'gold');
+  assertEq(getGrid()[0][1].goldValue, 55);
+  assertEq(getRevealed()[0][1], true);
+  assertEq(getFlagged()[1][1], true);
+});
+
 test('resetForNewRun restores defaults', () => {
   damagePlayer(2);
   addGold(500);
@@ -81,6 +165,7 @@ test('resetForNewRun restores defaults', () => {
   assertEq(getRunGoldEarned(), 0);
   assertEq(getArtifacts().length, 0);
   assertEq(getMaxHp(), 3);
+  assertEq(getHazardPayClaimed(), false);
 });
 
 test('max HP artifact increases current and max HP', () => {
@@ -369,7 +454,8 @@ test('anchorCountForSize returns expected counts per size bracket', () => {
 // -- board layout --
 import { isReachable, findPath } from '../src/board/layout.js';
 import {
-  getGrid, setGrid, setRows, setCols, setRevealed, setFlagged,
+  getGrid, getRevealed, getFlagged,
+  setGrid, setRows, setCols, setRevealed, setFlagged,
   setBiomeOverrides, setFountain, setPlayerPosition,
 } from '../src/state.js';
 import { collectAt, collectRevealedGold } from '../src/gameplay/interaction.js';

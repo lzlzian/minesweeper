@@ -23,7 +23,7 @@ import {
   getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
   getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed,
   setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
-  setHazardPayClaimed, setExit,
+  setHazardPayClaimed, setExit, setGameOver,
 } from '../src/state.js';
 import {
   captureSavedLevelState,
@@ -458,7 +458,7 @@ import {
   setGrid, setRows, setCols, setRevealed, setFlagged,
   setBiomeOverrides, setFountain, setPlayerPosition,
 } from '../src/state.js';
-import { collectAt, collectRevealedGold } from '../src/gameplay/interaction.js';
+import { collectAt, collectRevealedGold, handleRightClick } from '../src/gameplay/interaction.js';
 import { renderGrid, updateHud } from '../src/ui/render.js';
 
 function makeEmptyGrid(rows, cols) {
@@ -752,6 +752,54 @@ test('countAdjacentGas handles grid edges', () => {
   setGrid(g);
   // Corner (0,0) has one gas neighbor
   assertEq(countAdjacentGas(0, 0), 1);
+});
+
+test('right-clicking a solved number flags all remaining hidden gas cells', () => {
+  resetForNewRun();
+  setGameOver(false);
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[1][1].adjacent = 2;
+  g[0][0].type = 'gas';
+  g[2][2].type = 'gas';
+  setGrid(g);
+  setRevealed([
+    [false, true, true],
+    [true, true, true],
+    [true, true, false],
+  ]);
+  setFlagged([
+    [false, false, false],
+    [false, false, false],
+    [false, false, false],
+  ]);
+  handleRightClick(1, 1);
+  assertEq(getFlagged()[0][0], true);
+  assertEq(getFlagged()[2][2], true);
+});
+
+test('right-click flag shortcut counts triggered gas as known gas', () => {
+  resetForNewRun();
+  setGameOver(false);
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[1][1].adjacent = 2;
+  g[0][0].type = 'detonated';
+  g[0][1].type = 'gas';
+  setGrid(g);
+  setRevealed([
+    [true, false, true],
+    [true, true, true],
+    [true, true, true],
+  ]);
+  setFlagged([
+    [false, false, false],
+    [false, false, false],
+    [false, false, false],
+  ]);
+  handleRightClick(1, 1);
+  assertEq(getFlagged()[0][0], false);
+  assertEq(getFlagged()[0][1], true);
 });
 
 test('regional gold budgets scale into late game', () => {

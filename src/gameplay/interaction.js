@@ -394,6 +394,31 @@ function tryChordReveal(r, c) {
   return true;
 }
 
+function tryFlagRemainingGasNeighbors(r, c) {
+  const cell = getGrid()[r][c];
+  if (!getRevealed()[r]?.[c] || cell.adjacent <= 0) return false;
+  const neighbors = adjacentCells(r, c);
+  const knownGas = neighbors.filter(pos =>
+    getFlagged()[pos.r]?.[pos.c] || isTriggeredGasMark(pos)
+  ).length;
+  const remainingGas = cell.adjacent - knownGas;
+  if (remainingGas <= 0) return false;
+
+  const candidates = neighbors.filter(pos => {
+    if (getFlagged()[pos.r]?.[pos.c] || getRevealed()[pos.r]?.[pos.c]) return false;
+    return getGrid()[pos.r]?.[pos.c]?.type !== 'wall';
+  });
+  if (candidates.length !== remainingGas) return false;
+
+  for (const pos of candidates) {
+    getFlagged()[pos.r][pos.c] = true;
+  }
+  playSfx('mark');
+  renderGrid();
+  autosaveIfActiveRun();
+  return true;
+}
+
 function settleClearArtifacts() {
   const dividend = settleExitDividend();
   const bounty = settleFlagBounty();
@@ -649,7 +674,10 @@ export function revealCell(r, c) {
 export function handleRightClick(r, c) {
   if (getGameOver()) return;
   if (getGrid()[r][c].type === 'wall') return;
-  if (getRevealed()[r][c]) return;
+  if (getRevealed()[r][c]) {
+    tryFlagRemainingGasNeighbors(r, c);
+    return;
+  }
   getFlagged()[r][c] = !getFlagged()[r][c];
   playSfx(getFlagged()[r][c] ? 'mark' : 'unmark');
   renderGrid();

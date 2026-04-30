@@ -114,6 +114,8 @@ export function autoRecenterOnPlayer() {
 
 export function renderMinimap() {
   if (!getGrid() || !getGrid().length) return;
+  const theme = getComputedStyle(document.body);
+  const themeColor = (name, fallback) => theme.getPropertyValue(name).trim() || fallback;
   const dpr = window.devicePixelRatio || 1;
   const cssSize = 100;
   // Resize backing store for crisp rendering on high-DPI displays.
@@ -133,7 +135,7 @@ export function renderMinimap() {
   const offsetY = (cssSize - drawH) / 2;
 
   // Background (fully opaque so unrevealed area is visibly dark even over faint BG).
-  ctx.fillStyle = '#111';
+  ctx.fillStyle = themeColor('--minimap-bg', '#111');
   ctx.fillRect(0, 0, cssSize, cssSize);
 
   // Draw each cell.
@@ -144,11 +146,11 @@ export function renderMinimap() {
       const cell = getGrid()[r][c];
 
       if (!getRevealed()[r][c]) {
-        ctx.fillStyle = '#222';
+        ctx.fillStyle = themeColor('--minimap-hidden', '#222');
       } else if (cell.type === 'wall') {
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = themeColor('--minimap-wall', '#333');
       } else {
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = themeColor('--minimap-revealed', '#666');
       }
       ctx.fillRect(x, y, pxPerCell, pxPerCell);
     }

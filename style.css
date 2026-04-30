@@ -5,7 +5,54 @@
 }
 
 body {
-  background: #1a1a2e;
+  --page-bg: #1a1a2e;
+  --page-bg-top: #1a1a2e;
+  --page-bg-bottom: #111827;
+  --page-pattern: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 18px);
+  --hud-panel: #16213e;
+  --hud-border: #2a3a5a;
+  --hud-text: #eee;
+  --biome-panel: #22331f;
+  --biome-border: #6fb36a;
+  --biome-text: #d7f6cf;
+  --quota-panel: #3f2340;
+  --quota-border: #ffd166;
+  --quota-text: #ffe7a3;
+  --viewport-bg: rgba(8, 13, 28, 0.5);
+  --board-glow: rgba(255, 215, 0, 0.06);
+  --grid-gap: rgba(3, 8, 16, 0.8);
+  --cell-hidden: #3a3a5c;
+  --cell-hidden-hover: #4a4a6c;
+  --cell-revealed: #16213e;
+  --cell-wall: #2a2a3a;
+  --cell-wall-line: #1a1a2a;
+  --cell-reachable: #4a4a6c;
+  --cell-reachable-hover: #5a5a7c;
+  --cell-reachable-ring: rgba(255, 215, 0, 0.3);
+  --cell-gold: #4a3800;
+  --cell-gas: #5c1a1a;
+  --cell-detonated: #3a1a1a;
+  --cell-crystal: #12333d;
+  --cell-crystal-glow: rgba(88, 211, 209, 0.45);
+  --cell-flagged: #3a2a5c;
+  --cell-exit: #6b3a1a;
+  --cell-exit-glow: rgba(255, 215, 0, 0.6);
+  --cell-merchant: #2a4a6b;
+  --cell-merchant-glow: rgba(100, 200, 255, 0.6);
+  --preview-ring: rgba(255, 215, 0, 0.28);
+  --item-panel: #16213e;
+  --item-panel-hover: #1f2d52;
+  --overlay-panel: #16213e;
+  --overlay-choice: #223058;
+  --overlay-choice-hover: #2d3d6c;
+  --spinner-accent: #ffd700;
+  --minimap-bg: #111111;
+  --minimap-hidden: #222222;
+  --minimap-wall: #333333;
+  --minimap-revealed: #666666;
+  background:
+    var(--page-pattern),
+    linear-gradient(180deg, var(--page-bg-top), var(--page-bg-bottom));
   color: #eee;
   font-family: 'Segoe UI', system-ui, sans-serif;
   display: flex;
@@ -20,6 +67,131 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  transition: background 180ms ease;
+}
+
+body[data-biome="coal_shafts"] {
+  --page-bg-top: #141711;
+  --page-bg-bottom: #0e1214;
+  --page-pattern:
+    repeating-linear-gradient(90deg, rgba(206, 145, 67, 0.06) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(0deg, rgba(89, 108, 72, 0.08) 0 1px, transparent 1px 26px);
+  --hud-panel: #19261d;
+  --hud-border: #37402a;
+  --biome-panel: #27301f;
+  --biome-border: #8aa36a;
+  --biome-text: #e6f2d1;
+  --viewport-bg: rgba(20, 18, 12, 0.48);
+  --board-glow: rgba(206, 145, 67, 0.13);
+  --grid-gap: #11160f;
+  --cell-hidden: #3b3426;
+  --cell-hidden-hover: #4a422f;
+  --cell-revealed: #1a261f;
+  --cell-wall: #28261f;
+  --cell-wall-line: #15120e;
+  --cell-reachable: #4a422f;
+  --cell-reachable-hover: #5a5038;
+  --cell-gold: #4a3709;
+  --cell-flagged: #463151;
+  --item-panel: #18251f;
+  --item-panel-hover: #213328;
+  --overlay-panel: #17231e;
+  --overlay-choice: #203229;
+  --overlay-choice-hover: #2f3d2b;
+  --minimap-bg: #10120d;
+  --minimap-hidden: #242218;
+  --minimap-wall: #363026;
+  --minimap-revealed: #6a664f;
+}
+
+body[data-biome="crystal_veins"] {
+  --page-bg-top: #071a24;
+  --page-bg-bottom: #09111f;
+  --page-pattern:
+    repeating-linear-gradient(45deg, rgba(88, 211, 209, 0.12) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(135deg, rgba(244, 114, 182, 0.05) 0 1px, transparent 1px 24px);
+  --hud-panel: #102a36;
+  --hud-border: #2f6070;
+  --biome-panel: #123238;
+  --biome-border: #58d3d1;
+  --biome-text: #d7fffb;
+  --viewport-bg: rgba(7, 28, 40, 0.58);
+  --board-glow: rgba(88, 211, 209, 0.18);
+  --grid-gap: #051821;
+  --cell-hidden: #173d4c;
+  --cell-hidden-hover: #20566a;
+  --cell-revealed: #0d2534;
+  --cell-wall: #142331;
+  --cell-wall-line: #06121a;
+  --cell-reachable: #23576a;
+  --cell-reachable-hover: #2e6e85;
+  --cell-reachable-ring: rgba(88, 211, 209, 0.38);
+  --cell-gold: #574311;
+  --cell-gas: #612032;
+  --cell-detonated: #331825;
+  --cell-crystal: #0f4b5c;
+  --cell-crystal-glow: rgba(88, 211, 209, 0.7);
+  --cell-flagged: #3d2b68;
+  --cell-exit: #5a3168;
+  --cell-exit-glow: rgba(244, 114, 182, 0.62);
+  --cell-merchant: #164e63;
+  --cell-merchant-glow: rgba(88, 211, 209, 0.7);
+  --preview-ring: rgba(88, 211, 209, 0.42);
+  --item-panel: #102a36;
+  --item-panel-hover: #183e4d;
+  --overlay-panel: #0f2633;
+  --overlay-choice: #143648;
+  --overlay-choice-hover: #1a4a5d;
+  --spinner-accent: #58d3d1;
+  --minimap-bg: #051119;
+  --minimap-hidden: #123140;
+  --minimap-wall: #1a2632;
+  --minimap-revealed: #4f93a3;
+}
+
+body[data-biome="endless_deep"] {
+  --page-bg-top: #06070f;
+  --page-bg-bottom: #02040a;
+  --page-pattern:
+    repeating-linear-gradient(120deg, rgba(138, 124, 240, 0.08) 0 1px, transparent 1px 20px),
+    repeating-linear-gradient(30deg, rgba(183, 255, 90, 0.035) 0 1px, transparent 1px 28px);
+  --hud-panel: #11162a;
+  --hud-border: #323a69;
+  --biome-panel: #241d3a;
+  --biome-border: #8a7cf0;
+  --biome-text: #e1dcff;
+  --viewport-bg: rgba(2, 4, 10, 0.68);
+  --board-glow: rgba(138, 124, 240, 0.16);
+  --grid-gap: #03040b;
+  --cell-hidden: #24203b;
+  --cell-hidden-hover: #302b4d;
+  --cell-revealed: #0d1225;
+  --cell-wall: #12131e;
+  --cell-wall-line: #05060c;
+  --cell-reachable: #332f55;
+  --cell-reachable-hover: #3f3a68;
+  --cell-reachable-ring: rgba(183, 255, 90, 0.3);
+  --cell-gold: #493b08;
+  --cell-gas: #55172b;
+  --cell-detonated: #260b17;
+  --cell-crystal: #1e3158;
+  --cell-crystal-glow: rgba(138, 124, 240, 0.58);
+  --cell-flagged: #302051;
+  --cell-exit: #303f1c;
+  --cell-exit-glow: rgba(183, 255, 90, 0.55);
+  --cell-merchant: #262d5c;
+  --cell-merchant-glow: rgba(138, 124, 240, 0.64);
+  --preview-ring: rgba(183, 255, 90, 0.28);
+  --item-panel: #11162a;
+  --item-panel-hover: #1a2140;
+  --overlay-panel: #101427;
+  --overlay-choice: #1b2140;
+  --overlay-choice-hover: #252b54;
+  --spinner-accent: #b7ff5a;
+  --minimap-bg: #03040a;
+  --minimap-hidden: #19172a;
+  --minimap-wall: #22202d;
+  --minimap-revealed: #565b83;
 }
 
 #hud {
@@ -37,40 +209,25 @@ body {
 
 #hud > span,
 #hud > button {
-  background: #16213e;
+  background: var(--hud-panel);
+  color: var(--hud-text);
+  border: 1px solid var(--hud-border);
   padding: 0.5rem 1rem;
   border-radius: 6px;
 }
 
 #hud .quota-display {
-  background: #3f2340;
-  border: 1px solid #ffd166;
-  color: #ffe7a3;
+  background: var(--quota-panel);
+  border-color: var(--quota-border);
+  color: var(--quota-text);
   box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.12);
 }
 
 #hud .biome-display {
-  background: #22331f;
-  border: 1px solid #6fb36a;
-  color: #d7f6cf;
-}
-
-body[data-biome="coal_shafts"] #hud .biome-display {
-  background: #27301f;
-  border-color: #8aa36a;
-  color: #e6f2d1;
-}
-
-body[data-biome="crystal_veins"] #hud .biome-display {
-  background: #123238;
-  border-color: #58d3d1;
-  color: #d7fffb;
-}
-
-body[data-biome="endless_deep"] #hud .biome-display {
-  background: #241d3a;
-  border-color: #8a7cf0;
-  color: #e1dcff;
+  background: var(--biome-panel);
+  border-color: var(--biome-border);
+  color: var(--biome-text);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
 }
 
 #artifact-display {
@@ -98,9 +255,9 @@ body[data-biome="endless_deep"] #hud .biome-display {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid #3a4a6a;
+  border: 1px solid var(--hud-border);
   border-radius: 6px;
-  background: #223058;
+  background: var(--overlay-choice);
   color: #eee;
   font-size: 1.1rem;
   line-height: 1;
@@ -109,14 +266,16 @@ body[data-biome="endless_deep"] #hud .biome-display {
 
 #artifact-display .artifact-token:hover,
 #artifact-display .artifact-token:focus-visible {
-  background: #2d3d6c;
-  border-color: #ffd166;
+  background: var(--overlay-choice-hover);
+  border-color: var(--quota-border);
   outline: none;
 }
 
 #grid-container {
   display: grid;
   gap: 2px;
+  background: var(--grid-gap);
+  box-shadow: 0 0 24px var(--board-glow);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
 }
@@ -195,7 +354,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
 .cell {
   width: 40px;
   height: 40px;
-  background: #3a3a5c;
+  background: var(--cell-hidden);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -207,36 +366,36 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 .cell:hover {
-  background: #4a4a6c;
+  background: var(--cell-hidden-hover);
 }
 
 .cell.revealed {
-  background: #16213e;
+  background: var(--cell-revealed);
   cursor: default;
 }
 
 .cell.revealed:hover {
-  background: #16213e;
+  background: var(--cell-revealed);
 }
 
 .cell.gold {
-  background: #4a3800;
+  background: var(--cell-gold);
   color: #ffd700;
 }
 
 .cell.crystal {
-  background: #12333d;
+  background: var(--cell-crystal);
   color: #d7fffb;
-  box-shadow: inset 0 0 12px rgba(88, 211, 209, 0.45);
+  box-shadow: inset 0 0 12px var(--cell-crystal-glow);
 }
 
 .cell.gas {
-  background: #5c1a1a;
+  background: var(--cell-gas);
   color: #ff6b6b;
 }
 
 .cell.detonated {
-  background: #3a1a1a;
+  background: var(--cell-detonated);
 }
 
 .cell .num.cross {
@@ -244,7 +403,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 .cell.flagged {
-  background: #3a2a5c;
+  background: var(--cell-flagged);
 }
 
 .cell.flagged::after {
@@ -276,7 +435,8 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 #overlay-content {
-  background: #16213e;
+  background: var(--overlay-panel);
+  border: 1px solid var(--hud-border);
   padding: 2rem;
   border-radius: 12px;
   text-align: center;
@@ -297,7 +457,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 #overlay-content .payment-due {
-  color: #ffe7a3;
+  color: var(--quota-text);
   font-weight: 800;
 }
 
@@ -332,7 +492,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 #overlay-content .artifact-found-kicker {
-  color: #ffd166;
+  color: var(--quota-border);
   font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -344,9 +504,9 @@ body[data-biome="endless_deep"] #hud .biome-display {
   height: 4.5rem;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 209, 102, 0.55);
+  border: 1px solid var(--quota-border);
   border-radius: 10px;
-  background: #223058;
+  background: var(--overlay-choice);
   font-size: 2.5rem;
   box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.08);
 }
@@ -382,14 +542,14 @@ body[data-biome="endless_deep"] #hud .biome-display {
   margin: 0;
   padding: 0.7rem;
   text-align: left;
-  background: #223058;
-  border: 1px solid #3a4a6a;
+  background: var(--overlay-choice);
+  border: 1px solid var(--hud-border);
   border-radius: 8px;
 }
 
 #overlay-content .artifact-choice:hover {
-  background: #2d3d6c;
-  border-color: #ffd166;
+  background: var(--overlay-choice-hover);
+  border-color: var(--quota-border);
 }
 
 .artifact-choice-icon {
@@ -398,7 +558,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #16213e;
+  background: var(--overlay-panel);
   font-size: 1.8rem;
 }
 
@@ -444,7 +604,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
   width: 48px;
   height: 48px;
   border: 4px solid rgba(255, 255, 255, 0.22);
-  border-top-color: #ffd700;
+  border-top-color: var(--spinner-accent);
   border-radius: 50%;
   animation: generation-spin 0.8s linear infinite;
 }
@@ -480,11 +640,7 @@ body[data-biome="endless_deep"] #hud .biome-display {
 }
 
 .cell.preview {
-  box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.28);
-}
-
-body[data-biome="crystal_veins"] .cell.preview {
-  box-shadow: inset 0 0 0 2px rgba(88, 211, 209, 0.32);
+  box-shadow: inset 0 0 0 2px var(--preview-ring);
 }
 
 .cell .preview-icon {
@@ -503,21 +659,21 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .cell.reachable {
-  background: #4a4a6c;
-  box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.3);
+  background: var(--cell-reachable);
+  box-shadow: inset 0 0 0 2px var(--cell-reachable-ring);
   cursor: pointer;
 }
 
 .cell.reachable:hover {
-  background: #5a5a7c;
-  box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.6);
+  background: var(--cell-reachable-hover);
+  box-shadow: inset 0 0 0 2px var(--preview-ring);
 }
 
 
 .cell.wall {
-  background: #2a2a3a;
+  background: var(--cell-wall);
   cursor: default;
-  box-shadow: inset 0 0 0 1px #1a1a2a;
+  box-shadow: inset 0 0 0 1px var(--cell-wall-line);
 }
 
 .cell.wall::before {
@@ -525,8 +681,22 @@ body[data-biome="crystal_veins"] .cell.preview {
   font-size: 1.3rem;
 }
 
+body[data-biome="crystal_veins"] .cell.wall::before {
+  content: '◆';
+  color: #8fe8f4;
+  font-size: 1.05rem;
+  text-shadow: 0 0 8px rgba(88, 211, 209, 0.55);
+}
+
+body[data-biome="endless_deep"] .cell.wall::before {
+  content: '▪';
+  color: #8a7cf0;
+  font-size: 1.35rem;
+  text-shadow: 0 0 7px rgba(138, 124, 240, 0.45);
+}
+
 .cell.wall:hover {
-  background: #2a2a3a;
+  background: var(--cell-wall);
 }
 
 .cell {
@@ -534,8 +704,8 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .cell.exit {
-  background: #6b3a1a;
-  box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.6);
+  background: var(--cell-exit);
+  box-shadow: inset 0 0 10px var(--cell-exit-glow);
 }
 
 .cell.exit::before {
@@ -546,7 +716,7 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .cell.exit.revealed {
-  background: #6b3a1a;
+  background: var(--cell-exit);
 }
 
 #item-bar {
@@ -561,8 +731,8 @@ body[data-biome="crystal_veins"] .cell.preview {
 #item-bar::-webkit-scrollbar { display: none; }
 
 .item-btn {
-  background: #16213e;
-  border: 2px solid #2a3a5a;
+  background: var(--item-panel);
+  border: 2px solid var(--hud-border);
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
   color: #eee;
@@ -577,8 +747,8 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .item-btn:hover:not(:disabled) {
-  background: #1f2d52;
-  border-color: #3a4a6a;
+  background: var(--item-panel-hover);
+  border-color: var(--biome-border);
 }
 
 .item-btn:disabled {
@@ -587,8 +757,8 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .item-btn.active {
-  border-color: #ffd700;
-  background: #2a2a3a;
+  border-color: var(--quota-border);
+  background: var(--cell-wall);
   box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
@@ -604,8 +774,8 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .cell.merchant {
-  background: #2a4a6b;
-  box-shadow: inset 0 0 10px rgba(100, 200, 255, 0.6);
+  background: var(--cell-merchant);
+  box-shadow: inset 0 0 10px var(--cell-merchant-glow);
 }
 
 .cell.merchant::before {
@@ -616,7 +786,7 @@ body[data-biome="crystal_veins"] .cell.preview {
 }
 
 .cell.merchant.revealed {
-  background: #2a4a6b;
+  background: var(--cell-merchant);
 }
 
 .shop-slots {
@@ -777,6 +947,9 @@ body[data-biome="crystal_veins"] .cell.preview {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  background:
+    linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.16)),
+    var(--viewport-bg);
 }
 
 #viewport {
@@ -793,6 +966,7 @@ body[data-biome="crystal_veins"] .cell.preview {
   padding: 16px;
   transform-origin: 0 0;
   will-change: transform;
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.28));
 }
 
 #minimap {
@@ -801,9 +975,10 @@ body[data-biome="crystal_veins"] .cell.preview {
   right: 10px;
   width: 100px;
   height: 100px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--minimap-bg);
+  border: 1px solid var(--biome-border);
   border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   z-index: 8;
   cursor: pointer;
 }

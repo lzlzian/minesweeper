@@ -397,6 +397,13 @@ test('payment schedule charges checkpoint deltas', () => {
   assertEq(paymentAmountForLevel(36), 2040);
 });
 
+test('biome payment multiplier raises Crystal Veins checkpoint pressure', () => {
+  const crystal = biomeById(CRYSTAL_VEINS_BIOME_ID);
+  assertEq(paymentAmountForLevel(18, crystal.economy), 1104);
+  assertEq(paymentAmountForLevel(21, crystal.economy), 1311);
+  assertEq(nextPaymentForLevel(16, crystal.economy).amount, 1104);
+});
+
 test('Exit Clause reduces payments by ten percent', () => {
   resetForNewRun();
   assertEq(artifactPaymentAmount(120), 120);
@@ -602,12 +609,16 @@ test('Lucky Receipt increases chest gold by twenty-five percent', () => {
   assertEq(getGrid()[0][0].goldValue, 0);
 });
 
-test('Crystal clue cells reveal one adjacent safe numbered cell', () => {
+test('Crystal clue cells reveal nearby safe numbered cells and pay shard gold once', () => {
   resetForNewRun();
   setRows(3); setCols(3);
   const g = makeEmptyGrid(3, 3);
   g[0][0].type = 'gas';
   g[1][1].crystal = true;
+  g[1][1].crystalClueCount = 2;
+  g[1][1].crystalClueRadius = 2;
+  g[1][1].crystalGoldValue = 8;
+  g[1][1].preview = 'crystal';
   setGrid(g);
   setRevealed(emptyGrid(3, 3));
   setFlagged(emptyGrid(3, 3));
@@ -621,16 +632,23 @@ test('Crystal clue cells reveal one adjacent safe numbered cell', () => {
 
   assertEq(getRevealed()[1][1], true);
   assertEq(getGrid()[1][1].crystalUsed, true);
+  assertEq(getGrid()[1][1].preview, null);
   const revealed = [];
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
       if (getRevealed()[r][c]) revealed.push({ r, c });
     }
   }
-  assertEq(revealed.length, 2);
-  const clue = revealed.find(cell => cell.r !== 1 || cell.c !== 1);
-  if (!clue) throw new Error('expected crystal to reveal a clue cell');
-  if (getGrid()[clue.r][clue.c].adjacent <= 0) throw new Error('expected numbered clue cell');
+  assertEq(revealed.length, 3);
+  const clues = revealed.filter(cell => cell.r !== 1 || cell.c !== 1);
+  assertEq(clues.length, 2);
+  for (const clue of clues) {
+    if (getGrid()[clue.r][clue.c].adjacent <= 0) throw new Error('expected numbered clue cell');
+  }
+  assertEq(getGold(), 8);
+
+  revealCell(1, 1);
+  assertEq(getGold(), 8);
 });
 
 test('Overflow Flask makes full-HP fountain grant an item instead', () => {
@@ -895,12 +913,21 @@ test('Crystal Veins budgets and generation add greed/info flavor', () => {
       biome: crystal,
     });
     const metrics = getRegionalMetrics(meta);
-    if (metrics.crystalCells >= 3) accepted = { meta, metrics };
+    const goldBranch = meta.regions.find(region => region.purpose === 'gold');
+    const chests = goldBranch?.cells.filter(cell => getGrid()[cell.r][cell.c].chest).length ?? 0;
+    if (metrics.crystalCells >= 3 && chests >= 2) accepted = { meta, metrics, goldBranch, chests };
   }
-  if (!accepted) throw new Error('expected Crystal Veins generation to place crystal clue cells');
+  if (!accepted) throw new Error('expected Crystal Veins generation to place crystal cells and bonus gold chests');
   assertEq(accepted.meta.biomeId, CRYSTAL_VEINS_BIOME_ID);
   const crystalCells = accepted.meta.crystalCells.filter(cell => getGrid()[cell.r][cell.c].crystal);
   if (crystalCells.length < 3) throw new Error('expected crystal cells on the grid');
+  for (const cell of crystalCells) {
+    const gridCell = getGrid()[cell.r][cell.c];
+    assertEq(gridCell.crystalGoldValue, 8);
+    assertEq(gridCell.crystalClueCount, 2);
+    assertEq(gridCell.crystalClueRadius, 2);
+  }
+  if (accepted.chests < 2) throw new Error('expected Crystal Veins gold branch to include a bonus chest');
 });
 
 test('flag bounty artifact pays correct flags and charges wrong flags', () => {

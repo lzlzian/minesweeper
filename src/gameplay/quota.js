@@ -18,28 +18,42 @@ const PAYMENT_AMOUNTS = new Map([
   [30, 1680],
 ]);
 
+function paymentMultiplierFrom(economy = {}) {
+  if (typeof economy === 'number') {
+    return Number.isFinite(economy) ? Math.max(0, economy) : 1;
+  }
+  const multiplier = economy?.paymentMultiplier ?? 1;
+  return Number.isFinite(multiplier) ? Math.max(0, multiplier) : 1;
+}
+
+function scaledPayment(amount, economy = {}) {
+  if (amount <= 0) return 0;
+  const multiplier = paymentMultiplierFrom(economy);
+  return Math.round(amount * multiplier);
+}
+
 export function nextPaymentLevel(level) {
   if (level <= FIRST_PAYMENT_LEVEL) return FIRST_PAYMENT_LEVEL;
   return FIRST_PAYMENT_LEVEL + Math.ceil((level - FIRST_PAYMENT_LEVEL) / PAYMENT_INTERVAL) * PAYMENT_INTERVAL;
 }
 
-export function paymentAmountForLevel(level) {
+export function paymentAmountForLevel(level, economy = {}) {
   if (level !== nextPaymentLevel(level)) return 0;
-  if (PAYMENT_AMOUNTS.has(level)) return PAYMENT_AMOUNTS.get(level);
+  if (PAYMENT_AMOUNTS.has(level)) return scaledPayment(PAYMENT_AMOUNTS.get(level), economy);
   if (level > LAST_FIXED_PAYMENT_LEVEL) {
     const extraSteps = (level - LAST_FIXED_PAYMENT_LEVEL) / PAYMENT_INTERVAL;
     if (Number.isInteger(extraSteps)) {
-      return PAYMENT_AMOUNTS.get(LAST_FIXED_PAYMENT_LEVEL) + ENDLESS_PAYMENT_STEP * extraSteps;
+      return scaledPayment(PAYMENT_AMOUNTS.get(LAST_FIXED_PAYMENT_LEVEL) + ENDLESS_PAYMENT_STEP * extraSteps, economy);
     }
   }
   return 0;
 }
 
-export function nextPaymentForLevel(level) {
+export function nextPaymentForLevel(level, economy = {}) {
   const dueLevel = nextPaymentLevel(level);
   return {
     level: dueLevel,
-    amount: paymentAmountForLevel(dueLevel),
+    amount: paymentAmountForLevel(dueLevel, economy),
   };
 }
 

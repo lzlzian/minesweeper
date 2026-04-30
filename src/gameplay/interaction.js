@@ -100,21 +100,37 @@ function activateCrystalCell(r, c) {
   cell.crystalUsed = true;
   if (cell.preview === 'crystal') cell.preview = null;
 
-  const candidates = adjacentCells(r, c).filter(pos => {
-    if (getRevealed()[pos.r]?.[pos.c] || getFlagged()[pos.r]?.[pos.c]) return false;
-    const target = getGrid()[pos.r]?.[pos.c];
-    if (!target || target.type === 'wall' || target.type === 'gas') return false;
-    if (target.type !== 'empty') return false;
-    if (target.item || target.preview || target.crystal) return false;
-    return target.adjacent > 0;
-  });
-  if (!candidates.length) return null;
+  const radius = Math.max(1, cell.crystalClueRadius ?? 1);
+  const clueCount = Math.max(1, cell.crystalClueCount ?? 1);
+  const candidates = [];
+  for (let nr = r - radius; nr <= r + radius; nr++) {
+    for (let nc = c - radius; nc <= c + radius; nc++) {
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      if (nr === r && nc === c) continue;
+      if (getRevealed()[nr]?.[nc] || getFlagged()[nr]?.[nc]) continue;
+      const target = getGrid()[nr]?.[nc];
+      if (!target || target.type === 'wall' || target.type === 'gas') continue;
+      if (target.type !== 'empty') continue;
+      if (target.item || target.preview || target.crystal) continue;
+      if (target.adjacent <= 0) continue;
+      candidates.push({ r: nr, c: nc, adjacent: target.adjacent });
+    }
+  }
 
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  getRevealed()[pick.r][pick.c] = true;
-  spawnPickupFloat(r, c, '💎 clue', 'float-info');
+  candidates.sort((a, b) => b.adjacent - a.adjacent || Math.random() - 0.5);
+  const clues = candidates.slice(0, clueCount);
+  for (const clue of clues) {
+    getRevealed()[clue.r][clue.c] = true;
+  }
+
+  const gold = Math.max(0, cell.crystalGoldValue ?? 0);
+  if (gold > 0) addGold(gold);
+  const clueLabel = clues.length === 1 ? '1 clue' : `${clues.length} clues`;
+  const goldLabel = gold > 0 ? ` +${gold}g` : '';
+  spawnPickupFloat(r, c, `💎 ${clueLabel}${goldLabel}`, 'float-info');
   playSfx('pickup');
-  return pick;
+  if (gold > 0) updateHud();
+  return { clues, gold };
 }
 
 function grantJokerArtifact(r, c, artifactId) {

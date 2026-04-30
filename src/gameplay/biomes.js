@@ -52,11 +52,13 @@ export const BIOMES = [
     generation: {
       gasMultiplier: 1,
       spineGasMultiplier: 1,
-      branchGasMultiplier: 1.18,
+      branchGasMultiplier: 1.30,
       goldMultiplier: 1,
       branchCapacityBonus: 0,
       crystalCells: 4,
       crystalPreviewChance: 1,
+      crystalClueCount: 2,
+      crystalClueRadius: 2,
     },
     features: {
       merchantChance: 0.40,
@@ -65,11 +67,14 @@ export const BIOMES = [
       itemDropChance: 0.60,
     },
     economy: {
-      paymentMultiplier: 1,
+      paymentMultiplier: 1.15,
       spineGoldMultiplier: 0.85,
       optionalGoldMultiplier: 1.25,
       featureGoldMultiplier: 1.15,
       chestGoldMultiplier: 1.25,
+      crystalGold: 8,
+      goldBranchExtraChestChance: 1,
+      goldBranchExtraChestMultiplier: 0.22,
     },
   },
   {

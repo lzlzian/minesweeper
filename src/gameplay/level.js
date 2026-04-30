@@ -439,6 +439,9 @@ export async function initLevel() {
     getGrid()[exit.r][exit.c].item = null;
     getGrid()[exit.r][exit.c].crystal = false;
     getGrid()[exit.r][exit.c].crystalUsed = false;
+    getGrid()[exit.r][exit.c].crystalGoldValue = 0;
+    getGrid()[exit.r][exit.c].crystalClueCount = 0;
+    getGrid()[exit.r][exit.c].crystalClueRadius = 0;
 
     // Exit cell should not carry gold — keeps the exit cell mechanically clean
     if (getGrid()[exit.r][exit.c].type === 'gold') {
@@ -448,6 +451,9 @@ export async function initLevel() {
       getGrid()[exit.r][exit.c].preview = null;
       getGrid()[exit.r][exit.c].crystal = false;
       getGrid()[exit.r][exit.c].crystalUsed = false;
+      getGrid()[exit.r][exit.c].crystalGoldValue = 0;
+      getGrid()[exit.r][exit.c].crystalClueCount = 0;
+      getGrid()[exit.r][exit.c].crystalClueRadius = 0;
     }
 
     // Merchant placement (if this level spawns one).
@@ -485,6 +491,9 @@ export async function initLevel() {
         fountainCell.preview = 'fountain';
         fountainCell.crystal = false;
         fountainCell.crystalUsed = false;
+        fountainCell.crystalGoldValue = 0;
+        fountainCell.crystalClueCount = 0;
+        fountainCell.crystalClueRadius = 0;
         setFountain({ r: pick.r, c: pick.c, used: false });
       }
     }
@@ -502,6 +511,9 @@ export async function initLevel() {
         jokerCell.preview = 'joker';
         jokerCell.crystal = false;
         jokerCell.crystalUsed = false;
+        jokerCell.crystalGoldValue = 0;
+        jokerCell.crystalClueCount = 0;
+        jokerCell.crystalClueRadius = 0;
         setJoker({ r: pick.r, c: pick.c, used: false });
       }
     }
@@ -721,7 +733,7 @@ function finishRunWon(clearedLevel) {
 export async function nextLevel() {
   const clearedLevel = getLevel();
   moveGoldToStash();
-  const paymentDue = artifactPaymentAmount(paymentAmountForLevel(clearedLevel));
+  const paymentDue = artifactPaymentAmount(paymentAmountForLevel(clearedLevel, biomeForLevel(clearedLevel).economy));
   if (paymentDue > 0) {
     const totalBeforePayment = getStashGold();
     const shortfall = paymentDue - totalBeforePayment;

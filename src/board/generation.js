@@ -22,6 +22,9 @@ function makeCell(type = 'empty') {
     preview: null,
     crystal: false,
     crystalUsed: false,
+    crystalGoldValue: 0,
+    crystalClueCount: 0,
+    crystalClueRadius: 0,
   };
 }
 
@@ -126,6 +129,9 @@ function markRegionCell(meta, region, r, c, genTag = null) {
   cell.preview = null;
   cell.crystal = false;
   cell.crystalUsed = false;
+  cell.crystalGoldValue = 0;
+  cell.crystalClueCount = 0;
+  cell.crystalClueRadius = 0;
 
   if (!previous) {
     meta.regionByCell.set(key, region.id);
@@ -191,6 +197,9 @@ function placeGasAt(meta, r, c, { allowRegion = false } = {}) {
   cell.preview = null;
   cell.crystal = false;
   cell.crystalUsed = false;
+  cell.crystalGoldValue = 0;
+  cell.crystalClueCount = 0;
+  cell.crystalClueRadius = 0;
   return true;
 }
 
@@ -562,6 +571,9 @@ function setBranchWallIfReachable(branch, cell) {
   gridCell.preview = null;
   gridCell.crystal = false;
   gridCell.crystalUsed = false;
+  gridCell.crystalGoldValue = 0;
+  gridCell.crystalClueCount = 0;
+  gridCell.crystalClueRadius = 0;
   if (!branchIsReachable(branch)) {
     gridCell.type = 'empty';
     return false;
@@ -893,6 +905,9 @@ function placeGoldOnCell(r, c, amount, { chest = false, preview = false } = {}) 
   cell.item = null;
   cell.crystal = false;
   cell.crystalUsed = false;
+  cell.crystalGoldValue = 0;
+  cell.crystalClueCount = 0;
+  cell.crystalClueRadius = 0;
   return true;
 }
 
@@ -955,6 +970,20 @@ function placeRegionalRewards(meta, level) {
   const budgets = regionalGoldBudgetsForLevel(level, economy);
   const chestMultiplier = economy.chestGoldMultiplier ?? 1;
 
+  const placeExtraGoldBranchChest = (branch, value) => {
+    const extraChest = shuffleInPlace(branch.cells.filter(cell => {
+      if (cell.r === branch.entrance.r && cell.c === branch.entrance.c) return false;
+      if (branch.rewardCells.some(rewardCell => rewardCell.r === cell.r && rewardCell.c === cell.c)) return false;
+      return getGrid()[cell.r][cell.c].type === 'empty';
+    }))[0];
+    if (!extraChest) return false;
+    if (!placeGoldOnCell(extraChest.r, extraChest.c, value, { chest: true, preview: true })) return false;
+    const extraReward = { r: extraChest.r, c: extraChest.c };
+    branch.rewardCells.push(extraReward);
+    meta.rewardCells.push(extraReward);
+    return true;
+  };
+
   const safeSpineCells = spineRegion.cells.filter(cell => {
     const distStart = Math.max(Math.abs(cell.r - meta.start.r), Math.abs(cell.c - meta.start.c));
     const distExit = Math.max(Math.abs(cell.r - meta.exit.r), Math.abs(cell.c - meta.exit.c));
@@ -978,20 +1007,15 @@ function placeRegionalRewards(meta, level) {
       placeGoldOnCell(reward.r, reward.c, chestValue, { chest: true, preview: true });
     }
 
+    const biomeExtraChestChance = economy.goldBranchExtraChestChance ?? 0;
+    if (Math.random() < biomeExtraChestChance) {
+      const extraChestValue = Math.max(15, Math.floor(budgets.optional * (economy.goldBranchExtraChestMultiplier ?? 0.18) * chestMultiplier));
+      placeExtraGoldBranchChest(branch, extraChestValue);
+    }
+
     if (hasArtifact('extra_chest')) {
-      const extraChest = shuffleInPlace(branch.cells.filter(cell => {
-        if (cell.r === branch.entrance.r && cell.c === branch.entrance.c) return false;
-        if (branch.rewardCells.some(rewardCell => rewardCell.r === cell.r && rewardCell.c === cell.c)) return false;
-        return getGrid()[cell.r][cell.c].type === 'empty';
-      }))[0];
-      if (extraChest) {
-        const extraChestValue = Math.max(15, Math.floor(budgets.optional * 0.25 * chestMultiplier));
-        if (placeGoldOnCell(extraChest.r, extraChest.c, extraChestValue, { chest: true, preview: true })) {
-          const extraReward = { r: extraChest.r, c: extraChest.c };
-          branch.rewardCells.push(extraReward);
-          meta.rewardCells.push(extraReward);
-        }
-      }
+      const extraChestValue = Math.max(15, Math.floor(budgets.optional * 0.25 * chestMultiplier));
+      placeExtraGoldBranchChest(branch, extraChestValue);
     }
 
     const branchGoldCells = branch.cells.filter(cell => {
@@ -1009,6 +1033,9 @@ function placeCrystalAt(meta, cell) {
   if (gridCell.item || gridCell.preview) return false;
   gridCell.crystal = true;
   gridCell.crystalUsed = false;
+  gridCell.crystalGoldValue = meta.biome?.economy?.crystalGold ?? 0;
+  gridCell.crystalClueCount = meta.biome?.generation?.crystalClueCount ?? 1;
+  gridCell.crystalClueRadius = meta.biome?.generation?.crystalClueRadius ?? 1;
   if (Math.random() < (meta.biome?.generation?.crystalPreviewChance ?? 0)) {
     gridCell.preview = 'crystal';
   }
@@ -1420,6 +1447,9 @@ export function carvePath(fromR, fromC, toR, toC) {
       cell.preview = null;
       cell.crystal = false;
       cell.crystalUsed = false;
+      cell.crystalGoldValue = 0;
+      cell.crystalClueCount = 0;
+      cell.crystalClueRadius = 0;
     }
   }
   // Recompute adjacency for the whole grid (cheap at 12x12)

@@ -11,9 +11,9 @@ import {
 } from './dom.js';
 import { applyPan, renderMinimap } from './view.js';
 import { attachTooltip } from './tooltip.js';
-import { nextPaymentForLevel } from '../gameplay/quota.js';
+import { nextPaymentForLevel, nextPaymentLevel } from '../gameplay/quota.js';
 import { PAYMENT_DISCOUNT_PERCENT, artifactById, artifactPaymentAmount } from '../gameplay/artifacts.js';
-import { biomeNameForId } from '../gameplay/biomes.js';
+import { biomeForLevel, biomeNameForId } from '../gameplay/biomes.js';
 
 // Callback injections for functions whose owners haven't been extracted yet.
 // Removed as the modules migrate:
@@ -188,7 +188,8 @@ export function spawnGoldMagnetFly(r, c, delayMs = 0) {
 
 export function updateHud() {
   goldDisplay.textContent = `💰 ${getGold()} · Stash: ${getStashGold()}`;
-  const payment = nextPaymentForLevel(getLevel());
+  const dueLevel = nextPaymentLevel(getLevel());
+  const payment = nextPaymentForLevel(getLevel(), biomeForLevel(dueLevel).economy);
   const paymentAmount = artifactPaymentAmount(payment.amount);
   const paymentDiscount = paymentAmount < payment.amount
     ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${payment.amount}g)`

@@ -10,6 +10,7 @@ import { getDebtCushionUsed, getRulesetId, hasArtifact } from '../state.js';
 import { getLeaderboard, recordRun } from '../gameplay/leaderboard.js';
 import { isFinalRunLevel, paymentAmountForLevel } from '../gameplay/quota.js';
 import { DEBT_CUSHION_GOLD, PAYMENT_DISCOUNT_PERCENT, artifactPaymentAmount } from '../gameplay/artifacts.js';
+import { biomeForLevel } from '../gameplay/biomes.js';
 
 // String literal (not imported from authored.js) to avoid a static cycle:
 // authored.js statically imports renderStartMenu/hideOverlay from this file.
@@ -120,7 +121,7 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {
   const dividend = effects?.dividend ?? null;
   const bounty = effects?.bounty ?? null;
   const heal = effects?.heal ?? null;
-  const basePaymentDue = paymentAmountForLevel(level);
+  const basePaymentDue = paymentAmountForLevel(level, biomeForLevel(level).economy);
   const paymentDue = artifactPaymentAmount(basePaymentDue);
   const afterPayment = stashGold + gold - paymentDue;
   const debtCushionApplies = paymentDue > 0 &&

@@ -15,17 +15,23 @@ body {
   --biome-panel: #22331f;
   --biome-border: #6fb36a;
   --biome-text: #d7f6cf;
+  --biome-mark: '◆';
   --quota-panel: #3f2340;
   --quota-border: #ffd166;
   --quota-text: #ffe7a3;
   --viewport-bg: rgba(8, 13, 28, 0.5);
+  --viewport-rim: rgba(255, 255, 255, 0.06);
   --board-glow: rgba(255, 215, 0, 0.06);
+  --board-rim: rgba(255, 255, 255, 0.10);
   --grid-gap: rgba(3, 8, 16, 0.8);
   --cell-hidden: #3a3a5c;
+  --cell-hidden-texture: none;
   --cell-hidden-hover: #4a4a6c;
   --cell-revealed: #16213e;
+  --cell-revealed-texture: none;
   --cell-wall: #2a2a3a;
   --cell-wall-line: #1a1a2a;
+  --cell-wall-texture: none;
   --cell-reachable: #4a4a6c;
   --cell-reachable-hover: #5a5a7c;
   --cell-reachable-ring: rgba(255, 215, 0, 0.3);
@@ -40,6 +46,8 @@ body {
   --cell-merchant: #2a4a6b;
   --cell-merchant-glow: rgba(100, 200, 255, 0.6);
   --preview-ring: rgba(255, 215, 0, 0.28);
+  --player-outline: #ffd700;
+  --player-glow: rgba(255, 215, 0, 0.38);
   --item-panel: #16213e;
   --item-panel-hover: #1f2d52;
   --overlay-panel: #16213e;
@@ -81,18 +89,30 @@ body[data-biome="coal_shafts"] {
   --biome-panel: #27301f;
   --biome-border: #8aa36a;
   --biome-text: #e6f2d1;
+  --biome-mark: '⛏';
   --viewport-bg: rgba(20, 18, 12, 0.48);
+  --viewport-rim: rgba(206, 145, 67, 0.18);
   --board-glow: rgba(206, 145, 67, 0.13);
+  --board-rim: rgba(206, 145, 67, 0.24);
   --grid-gap: #11160f;
   --cell-hidden: #3b3426;
+  --cell-hidden-texture:
+    linear-gradient(135deg, rgba(206, 145, 67, 0.10) 0 1px, transparent 1px 10px),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 14px);
   --cell-hidden-hover: #4a422f;
   --cell-revealed: #1a261f;
+  --cell-revealed-texture:
+    linear-gradient(90deg, rgba(138, 163, 106, 0.08) 0 1px, transparent 1px 11px);
   --cell-wall: #28261f;
   --cell-wall-line: #15120e;
+  --cell-wall-texture:
+    repeating-linear-gradient(135deg, rgba(206, 145, 67, 0.12) 0 2px, transparent 2px 8px);
   --cell-reachable: #4a422f;
   --cell-reachable-hover: #5a5038;
   --cell-gold: #4a3709;
   --cell-flagged: #463151;
+  --player-outline: #ffd166;
+  --player-glow: rgba(255, 209, 102, 0.36);
   --item-panel: #18251f;
   --item-panel-hover: #213328;
   --overlay-panel: #17231e;
@@ -115,14 +135,24 @@ body[data-biome="crystal_veins"] {
   --biome-panel: #123238;
   --biome-border: #58d3d1;
   --biome-text: #d7fffb;
+  --biome-mark: '💎';
   --viewport-bg: rgba(7, 28, 40, 0.58);
+  --viewport-rim: rgba(88, 211, 209, 0.22);
   --board-glow: rgba(88, 211, 209, 0.18);
+  --board-rim: rgba(88, 211, 209, 0.32);
   --grid-gap: #051821;
   --cell-hidden: #173d4c;
+  --cell-hidden-texture:
+    linear-gradient(135deg, rgba(88, 211, 209, 0.18) 0 1px, transparent 1px 12px),
+    linear-gradient(45deg, rgba(244, 114, 182, 0.08) 0 1px, transparent 1px 16px);
   --cell-hidden-hover: #20566a;
   --cell-revealed: #0d2534;
+  --cell-revealed-texture:
+    linear-gradient(135deg, rgba(88, 211, 209, 0.10) 0 1px, transparent 1px 15px);
   --cell-wall: #142331;
   --cell-wall-line: #06121a;
+  --cell-wall-texture:
+    repeating-linear-gradient(45deg, rgba(88, 211, 209, 0.16) 0 2px, transparent 2px 9px);
   --cell-reachable: #23576a;
   --cell-reachable-hover: #2e6e85;
   --cell-reachable-ring: rgba(88, 211, 209, 0.38);
@@ -137,6 +167,8 @@ body[data-biome="crystal_veins"] {
   --cell-merchant: #164e63;
   --cell-merchant-glow: rgba(88, 211, 209, 0.7);
   --preview-ring: rgba(88, 211, 209, 0.42);
+  --player-outline: #58d3d1;
+  --player-glow: rgba(88, 211, 209, 0.48);
   --item-panel: #102a36;
   --item-panel-hover: #183e4d;
   --overlay-panel: #0f2633;
@@ -160,14 +192,24 @@ body[data-biome="endless_deep"] {
   --biome-panel: #241d3a;
   --biome-border: #8a7cf0;
   --biome-text: #e1dcff;
+  --biome-mark: '∞';
   --viewport-bg: rgba(2, 4, 10, 0.68);
+  --viewport-rim: rgba(138, 124, 240, 0.22);
   --board-glow: rgba(138, 124, 240, 0.16);
+  --board-rim: rgba(138, 124, 240, 0.28);
   --grid-gap: #03040b;
   --cell-hidden: #24203b;
+  --cell-hidden-texture:
+    linear-gradient(120deg, rgba(138, 124, 240, 0.12) 0 1px, transparent 1px 13px),
+    linear-gradient(30deg, rgba(183, 255, 90, 0.06) 0 1px, transparent 1px 20px);
   --cell-hidden-hover: #302b4d;
   --cell-revealed: #0d1225;
+  --cell-revealed-texture:
+    linear-gradient(120deg, rgba(138, 124, 240, 0.08) 0 1px, transparent 1px 18px);
   --cell-wall: #12131e;
   --cell-wall-line: #05060c;
+  --cell-wall-texture:
+    repeating-linear-gradient(120deg, rgba(138, 124, 240, 0.14) 0 2px, transparent 2px 10px);
   --cell-reachable: #332f55;
   --cell-reachable-hover: #3f3a68;
   --cell-reachable-ring: rgba(183, 255, 90, 0.3);
@@ -182,6 +224,8 @@ body[data-biome="endless_deep"] {
   --cell-merchant: #262d5c;
   --cell-merchant-glow: rgba(138, 124, 240, 0.64);
   --preview-ring: rgba(183, 255, 90, 0.28);
+  --player-outline: #b7ff5a;
+  --player-glow: rgba(183, 255, 90, 0.38);
   --item-panel: #11162a;
   --item-panel-hover: #1a2140;
   --overlay-panel: #101427;
@@ -205,6 +249,10 @@ body[data-biome="endless_deep"] {
   font-size: 1.2rem;
   font-weight: bold;
   flex-shrink: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    rgba(0, 0, 0, 0.10);
+  border-bottom: 1px solid var(--viewport-rim);
 }
 
 #hud > span,
@@ -224,10 +272,26 @@ body[data-biome="endless_deep"] {
 }
 
 #hud .biome-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   background: var(--biome-panel);
   border-color: var(--biome-border);
   color: var(--biome-text);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
+}
+
+#hud .biome-display::before {
+  content: var(--biome-mark);
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px var(--biome-border);
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 #artifact-display {
@@ -275,7 +339,10 @@ body[data-biome="endless_deep"] {
   display: grid;
   gap: 2px;
   background: var(--grid-gap);
-  box-shadow: 0 0 24px var(--board-glow);
+  outline: 1px solid var(--board-rim);
+  box-shadow:
+    0 0 0 4px rgba(0, 0, 0, 0.18),
+    0 0 24px var(--board-glow);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
 }
@@ -294,6 +361,9 @@ body[data-biome="endless_deep"] {
   transition: transform 0.08s linear;
   z-index: 5;
   will-change: transform;
+  filter:
+    drop-shadow(0 0 8px var(--player-glow))
+    drop-shadow(0 3px 2px rgba(0, 0, 0, 0.55));
 }
 
 .pickup-float {
@@ -354,7 +424,9 @@ body[data-biome="endless_deep"] {
 .cell {
   width: 40px;
   height: 40px;
-  background: var(--cell-hidden);
+  background:
+    var(--cell-hidden-texture),
+    var(--cell-hidden);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -366,16 +438,22 @@ body[data-biome="endless_deep"] {
 }
 
 .cell:hover {
-  background: var(--cell-hidden-hover);
+  background:
+    var(--cell-hidden-texture),
+    var(--cell-hidden-hover);
 }
 
 .cell.revealed {
-  background: var(--cell-revealed);
+  background:
+    var(--cell-revealed-texture),
+    var(--cell-revealed);
   cursor: default;
 }
 
 .cell.revealed:hover {
-  background: var(--cell-revealed);
+  background:
+    var(--cell-revealed-texture),
+    var(--cell-revealed);
 }
 
 .cell.gold {
@@ -615,8 +693,11 @@ body[data-biome="endless_deep"] {
 
 
 .cell.player {
-  outline: 3px solid #ffd700;
+  outline: 3px solid var(--player-outline);
   outline-offset: -3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 14px var(--player-glow);
 }
 
 .cell .num {
@@ -659,19 +740,25 @@ body[data-biome="endless_deep"] {
 }
 
 .cell.reachable {
-  background: var(--cell-reachable);
+  background:
+    var(--cell-hidden-texture),
+    var(--cell-reachable);
   box-shadow: inset 0 0 0 2px var(--cell-reachable-ring);
   cursor: pointer;
 }
 
 .cell.reachable:hover {
-  background: var(--cell-reachable-hover);
+  background:
+    var(--cell-hidden-texture),
+    var(--cell-reachable-hover);
   box-shadow: inset 0 0 0 2px var(--preview-ring);
 }
 
 
 .cell.wall {
-  background: var(--cell-wall);
+  background:
+    var(--cell-wall-texture),
+    var(--cell-wall);
   cursor: default;
   box-shadow: inset 0 0 0 1px var(--cell-wall-line);
 }
@@ -696,7 +783,9 @@ body[data-biome="endless_deep"] .cell.wall::before {
 }
 
 .cell.wall:hover {
-  background: var(--cell-wall);
+  background:
+    var(--cell-wall-texture),
+    var(--cell-wall);
 }
 
 .cell {
@@ -950,6 +1039,20 @@ body[data-biome="endless_deep"] .cell.wall::before {
   background:
     linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.16)),
     var(--viewport-bg);
+  border-top: 1px solid var(--viewport-rim);
+  isolation: isolate;
+}
+
+#play-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0 18%, var(--viewport-rim) 18% 19%, transparent 19% 48%, var(--viewport-rim) 48% 49%, transparent 49%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 35%, rgba(0, 0, 0, 0.20));
+  opacity: 0.55;
 }
 
 #viewport {
@@ -957,6 +1060,8 @@ body[data-biome="endless_deep"] .cell.wall::before {
   overflow: hidden;
   flex: 1 1 auto;
   touch-action: none;
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px var(--viewport-rim);
 }
 
 #viewport #board {

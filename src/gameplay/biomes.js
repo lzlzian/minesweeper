@@ -1,0 +1,124 @@
+// ============================================================
+// BIOMES
+// ============================================================
+
+export const COAL_SHAFTS_BIOME_ID = 'coal_shafts';
+export const CRYSTAL_VEINS_BIOME_ID = 'crystal_veins';
+export const ENDLESS_DEEP_BIOME_ID = 'endless_deep';
+
+export const BIOMES = [
+  {
+    id: COAL_SHAFTS_BIOME_ID,
+    name: 'Coal Shafts',
+    shortName: 'Coal',
+    levelStart: 1,
+    levelEnd: 15,
+    tagline: 'Old tunnels, fresh debts.',
+    theme: {
+      className: 'biome-coal-shafts',
+    },
+    generation: {
+      gasMultiplier: 1,
+      spineGasMultiplier: 1,
+      branchGasMultiplier: 1,
+      goldMultiplier: 1,
+      branchCapacityBonus: 0,
+      crystalCells: 0,
+    },
+    features: {
+      merchantChance: 0.33,
+      fountainChance: 0.50,
+      jokerChance: 0.33,
+      itemDropChance: 0.50,
+    },
+    economy: {
+      paymentMultiplier: 1,
+      spineGoldMultiplier: 1,
+      optionalGoldMultiplier: 1,
+      featureGoldMultiplier: 1,
+      chestGoldMultiplier: 1,
+    },
+  },
+  {
+    id: CRYSTAL_VEINS_BIOME_ID,
+    name: 'Crystal Veins',
+    shortName: 'Crystal',
+    levelStart: 16,
+    levelEnd: 30,
+    tagline: 'Bright clues, brighter bait.',
+    theme: {
+      className: 'biome-crystal-veins',
+    },
+    generation: {
+      gasMultiplier: 1,
+      spineGasMultiplier: 1,
+      branchGasMultiplier: 1.18,
+      goldMultiplier: 1,
+      branchCapacityBonus: 0,
+      crystalCells: 4,
+      crystalPreviewChance: 1,
+    },
+    features: {
+      merchantChance: 0.40,
+      fountainChance: 0.35,
+      jokerChance: 0.40,
+      itemDropChance: 0.60,
+    },
+    economy: {
+      paymentMultiplier: 1,
+      spineGoldMultiplier: 0.85,
+      optionalGoldMultiplier: 1.25,
+      featureGoldMultiplier: 1.15,
+      chestGoldMultiplier: 1.25,
+    },
+  },
+  {
+    id: ENDLESS_DEEP_BIOME_ID,
+    name: 'Endless Deep',
+    shortName: 'Deep',
+    levelStart: 31,
+    levelEnd: Infinity,
+    tagline: 'Past the charted mine.',
+    theme: {
+      className: 'biome-endless-deep',
+    },
+    generation: {
+      gasMultiplier: 1,
+      spineGasMultiplier: 1,
+      branchGasMultiplier: 1,
+      goldMultiplier: 1,
+      branchCapacityBonus: 0,
+      crystalCells: 0,
+    },
+    features: {
+      merchantChance: 0.33,
+      fountainChance: 0.50,
+      jokerChance: 0.33,
+      itemDropChance: 0.50,
+    },
+    economy: {
+      paymentMultiplier: 1,
+      spineGoldMultiplier: 1,
+      optionalGoldMultiplier: 1,
+      featureGoldMultiplier: 1,
+      chestGoldMultiplier: 1,
+    },
+  },
+];
+
+export const BIOME_BODY_CLASSES = BIOMES
+  .map(biome => biome.theme?.className)
+  .filter(Boolean);
+
+export function biomeForLevel(level) {
+  const found = BIOMES.find(biome => level >= biome.levelStart && level <= biome.levelEnd);
+  return found ?? BIOMES[BIOMES.length - 1];
+}
+
+export function biomeById(id) {
+  return BIOMES.find(biome => biome.id === id) ?? null;
+}
+
+export function biomeNameForId(id, fallbackLevel = 1) {
+  return (biomeById(id) ?? biomeForLevel(fallbackLevel)).name;
+}

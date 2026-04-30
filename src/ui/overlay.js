@@ -63,12 +63,14 @@ export function hideOverlay() {
   overlay.classList.add('hidden');
 }
 
-export function showGenerationOverlay() {
+export function showGenerationOverlay(biome = null) {
+  const title = biome?.name ? `Preparing ${escapeHtml(biome.name)}` : 'Preparing mine';
+  const detail = biome?.tagline || 'Finding a fair route...';
   showOverlay(`
     <div class="generation-loading" role="status" aria-live="polite">
       <div class="generation-spinner" aria-hidden="true"></div>
-      <h2>Preparing mine</h2>
-      <p>Finding a fair route...</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(detail)}</p>
     </div>
   `);
 }

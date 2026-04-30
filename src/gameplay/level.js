@@ -3,13 +3,13 @@ import {
   getLevel, getRows, getCols, getGrid, getRevealed, getFlagged,
   getLevelsSinceMerchant, getMerchant, getFountain, getJoker,
   getRulesetId, getBiomeOverrides, getPlayerRow, getPlayerCol, getExit,
-  getStartCornerIdx, getGameOver,
+  getStartCornerIdx, getGameOver, getBiomeId,
   getStashGold, getRunGoldEarned, hasArtifact, moveGoldToStash, spendGold,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setGrid, setExit, setActiveItem, setLevelsSinceMerchant,
   incrementLevelsSinceMerchant, setMerchant, setFountain, setJoker,
-  incrementLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
-  setStartCornerIdx, setGenMeta,
+  incrementLevel, setLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
+  setStartCornerIdx, setGenMeta, setBiomeId,
   addItem, resetForNewRun, resetLevelGold, resetLevelArtifactState, fullHeal,
   getSavePayload, applySavePayload,
 } from '../state.js';
@@ -30,6 +30,7 @@ import {
 import { rollMerchantStock } from './merchant.js';
 import { recordRun } from './leaderboard.js';
 import { isFinalRunLevel, isPostPaymentRewardLevel, paymentAmountForLevel } from './quota.js';
+import { BIOME_BODY_CLASSES, biomeById, biomeForLevel } from './biomes.js';
 import {
   artifactPaymentAmount,
   isArtifactCadenceLevel,
@@ -264,6 +265,7 @@ export function captureSavedLevelState() {
     fountain: clonePlain(getFountain()),
     joker: clonePlain(getJoker()),
     startCornerIdx: getStartCornerIdx(),
+    biomeId: getBiomeId(),
     biomeOverrides: clonePlain(getBiomeOverrides()),
   };
 }
@@ -290,7 +292,9 @@ export function restoreSavedLevelState(levelState) {
   setJoker(clonePlain(levelState.joker));
   setGenMeta(null);
   setStartCornerIdx(levelState.startCornerIdx ?? 0);
+  setBiomeId(levelState.biomeId ?? getBiomeId() ?? biomeForLevel(getLevel()).id);
   setBiomeOverrides(clonePlain(levelState.biomeOverrides));
+  applyBiomePresentation(activeBiomeForCurrentState());
   setGameOver(false);
   setBusy(false);
   setActiveItem(null);
@@ -301,6 +305,26 @@ function centerPanOnPlayer() {
   const vp = getViewportSize();
   const cc = cellCenterPx(getPlayerRow(), getPlayerCol());
   setPan(vp.w / 2 - cc.x, vp.h / 2 - cc.y);
+}
+
+function applyBiomePresentation(biome) {
+  for (const className of BIOME_BODY_CLASSES) {
+    document.body.classList.remove(className);
+  }
+  if (biome?.id) document.body.dataset.biome = biome.id;
+  else document.body.removeAttribute('data-biome');
+  if (biome?.theme?.className) document.body.classList.add(biome.theme.className);
+}
+
+function setActiveBiomeForLevel(level = getLevel()) {
+  const biome = biomeForLevel(level);
+  setBiomeId(biome.id);
+  applyBiomePresentation(biome);
+  return biome;
+}
+
+function activeBiomeForCurrentState() {
+  return biomeById(getBiomeId()) ?? setActiveBiomeForLevel();
 }
 
 export function saveRun() {
@@ -318,6 +342,7 @@ export function clearSave() {
 }
 
 export async function initLevel() {
+  const activeBiome = setActiveBiomeForLevel();
   // Roll ruleset if not already set (retries/resumes preserve it).
   if (!getRulesetId()) {
     setRulesetId((getLevel() >= 13 && RULESETS.length > 1)
@@ -343,11 +368,13 @@ export async function initLevel() {
   setCols(getRows());
 
   // Decide whether a merchant spawns this level.
+  const biomeFeatures = activeBiome.features ?? {};
   const spawnMerchant = getBiomeOverrides()?.suppressMerchant
     ? false
-    : (getLevelsSinceMerchant() >= 2 || Math.random() < MERCHANT_SPAWN_CHANCE);
-  const spawnFountain = Math.random() < 0.50;
-  const spawnJoker = isPostPaymentRewardLevel(getLevel()) || Math.random() < JOKER_SPAWN_CHANCE;
+    : (getLevelsSinceMerchant() >= 2 || Math.random() < (biomeFeatures.merchantChance ?? MERCHANT_SPAWN_CHANCE));
+  const spawnFountain = Math.random() < (biomeFeatures.fountainChance ?? 0.50);
+  const spawnJoker = isPostPaymentRewardLevel(getLevel()) || Math.random() < (biomeFeatures.jokerChance ?? JOKER_SPAWN_CHANCE);
+  const spawnItemDrop = Math.random() < (biomeFeatures.itemDropChance ?? 0.50);
 
   const maxAttempts = 500;
   let solved = false;
@@ -378,7 +405,9 @@ export async function initLevel() {
         merchant: spawnMerchant,
         fountain: spawnFountain,
         joker: spawnJoker,
+        itemDrop: spawnItemDrop,
       },
+      biome: activeBiome,
     });
     setGenMeta(genMeta);
     if (!genMeta.regions.some(region => region.kind === 'branch')) continue;
@@ -408,11 +437,17 @@ export async function initLevel() {
     }
     // Exit cell stays mechanically clean — no item drop there either.
     getGrid()[exit.r][exit.c].item = null;
+    getGrid()[exit.r][exit.c].crystal = false;
+    getGrid()[exit.r][exit.c].crystalUsed = false;
 
     // Exit cell should not carry gold — keeps the exit cell mechanically clean
     if (getGrid()[exit.r][exit.c].type === 'gold') {
       getGrid()[exit.r][exit.c].type = 'empty';
       getGrid()[exit.r][exit.c].goldValue = 0;
+      getGrid()[exit.r][exit.c].chest = false;
+      getGrid()[exit.r][exit.c].preview = null;
+      getGrid()[exit.r][exit.c].crystal = false;
+      getGrid()[exit.r][exit.c].crystalUsed = false;
     }
 
     // Merchant placement (if this level spawns one).
@@ -448,6 +483,8 @@ export async function initLevel() {
         fountainCell.item = null;
         fountainCell.chest = false;
         fountainCell.preview = 'fountain';
+        fountainCell.crystal = false;
+        fountainCell.crystalUsed = false;
         setFountain({ r: pick.r, c: pick.c, used: false });
       }
     }
@@ -463,6 +500,8 @@ export async function initLevel() {
         jokerCell.item = null;
         jokerCell.chest = false;
         jokerCell.preview = 'joker';
+        jokerCell.crystal = false;
+        jokerCell.crystalUsed = false;
         setJoker({ r: pick.r, c: pick.c, used: false });
       }
     }
@@ -618,7 +657,8 @@ export async function startGame() {
   document.body.classList.add('in-run');
   clearSave();
   resetForNewRun();
-  showGenerationOverlay();
+  const biome = setActiveBiomeForLevel();
+  showGenerationOverlay(biome);
   await waitForLoadingPaint();
   await initLevel();
   saveRun();
@@ -631,7 +671,8 @@ export async function startGame() {
 export async function resumeGame(save) {
   document.body.classList.add('in-run');
   applySavePayload(save);
-  showGenerationOverlay();
+  const biome = activeBiomeForCurrentState();
+  showGenerationOverlay(biome);
   await waitForLoadingPaint();
   if (restoreSavedLevelState(save?.levelState)) {
     updateHud();
@@ -656,7 +697,8 @@ async function descendToNextGeneratedLevel() {
     incrementLevelsSinceMerchant();
   }
   setRulesetId(null);
-  showGenerationOverlay();
+  const biome = setActiveBiomeForLevel();
+  showGenerationOverlay(biome);
   await waitForLoadingPaint();
   await initLevel();
   saveRun();
@@ -716,10 +758,51 @@ export async function nextLevel() {
 export async function retryLevel() {
   resetLevelGold();
   fullHeal();
-  showGenerationOverlay();
+  const biome = setActiveBiomeForLevel();
+  showGenerationOverlay(biome);
   await waitForLoadingPaint();
   await initLevel();
   updatePlayerSprite(true);
   resetHurtFlash();
   playerSprite.textContent = '🙂';
+}
+
+export async function devTeleportToLevel(level, { freshRun = false } = {}) {
+  const targetLevel = Math.floor(Number(level));
+  if (!Number.isFinite(targetLevel) || targetLevel < 1) {
+    throw new Error(`invalid dev teleport level: ${level}`);
+  }
+
+  const shouldStartFresh = freshRun || !document.body.classList.contains('in-run') || getGameOver();
+  document.body.classList.add('in-run');
+  if (shouldStartFresh) {
+    clearSave();
+    resetForNewRun();
+  } else {
+    resetLevelGold();
+    setGameOver(false);
+    setBusy(false);
+    setActiveItem(null);
+  }
+
+  setLevel(targetLevel);
+  setRulesetId(null);
+  setBiomeOverrides(null);
+  setLevelsSinceMerchant(0);
+
+  const biome = setActiveBiomeForLevel(targetLevel);
+  showGenerationOverlay(biome);
+  await waitForLoadingPaint();
+  await initLevel();
+  saveRun();
+  updatePlayerSprite(true);
+  resetHurtFlash();
+  playerSprite.textContent = '🙂';
+  startBgm();
+
+  return {
+    level: getLevel(),
+    biomeId: getBiomeId(),
+    biomeName: activeBiomeForCurrentState().name,
+  };
 }

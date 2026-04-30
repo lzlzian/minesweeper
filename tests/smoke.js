@@ -21,9 +21,9 @@ function assertApprox(a, b, epsilon, msg) {
 import {
   resetForNewRun, getSavePayload, applySavePayload,
   getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
-  getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed,
+  getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed, getBiomeId,
   setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
-  setHazardPayClaimed, setExit, setGameOver,
+  setHazardPayClaimed, setExit, setGameOver, setBiomeId,
 } from '../src/state.js';
 import {
   captureSavedLevelState,
@@ -32,6 +32,14 @@ import {
   restoreSavedLevelState,
   saveRun,
 } from '../src/gameplay/level.js';
+import {
+  COAL_SHAFTS_BIOME_ID,
+  CRYSTAL_VEINS_BIOME_ID,
+  ENDLESS_DEEP_BIOME_ID,
+  biomeById,
+  biomeForLevel,
+  biomeNameForId,
+} from '../src/gameplay/biomes.js';
 import {
   ARTIFACTS,
   DEBT_CUSHION_GOLD,
@@ -62,12 +70,14 @@ test('save/load round-trip preserves run-scoped fields', () => {
   moveGoldToStash();
   consumeItem('potion');
   grantArtifact('flag_bounty');
+  setBiomeId(COAL_SHAFTS_BIOME_ID);
 
   const snap = getSavePayload();
 
   setLevel(99);
   damagePlayer(2);
   addGold(1000);
+  setBiomeId(ENDLESS_DEEP_BIOME_ID);
 
   applySavePayload(snap);
 
@@ -76,7 +86,18 @@ test('save/load round-trip preserves run-scoped fields', () => {
   assertEq(getStashGold(), 20);
   assertEq(getRunGoldEarned(), 20);
   assertEq(getArtifacts().includes('flag_bounty'), true);
+  assertEq(getBiomeId(), COAL_SHAFTS_BIOME_ID);
   assertEq(getItems().potion, 0);
+});
+
+test('biome registry maps current run and future endless levels', () => {
+  assertEq(biomeForLevel(1).id, COAL_SHAFTS_BIOME_ID);
+  assertEq(biomeForLevel(15).id, COAL_SHAFTS_BIOME_ID);
+  assertEq(biomeForLevel(16).id, CRYSTAL_VEINS_BIOME_ID);
+  assertEq(biomeForLevel(30).id, CRYSTAL_VEINS_BIOME_ID);
+  assertEq(biomeForLevel(31).id, ENDLESS_DEEP_BIOME_ID);
+  assertEq(biomeById(COAL_SHAFTS_BIOME_ID).name, 'Coal Shafts');
+  assertEq(biomeNameForId('missing-biome', 16), 'Crystal Veins');
 });
 
 test('run save includes the active generated level snapshot', () => {
@@ -85,6 +106,7 @@ test('run save includes the active generated level snapshot', () => {
   setLevel(2);
   addGold(17);
   setHazardPayClaimed(true);
+  setBiomeId(COAL_SHAFTS_BIOME_ID);
   setRows(2); setCols(2);
   setPlayerPosition(0, 1);
   setExit({ r: 1, c: 1 });
@@ -112,7 +134,9 @@ test('run save includes the active generated level snapshot', () => {
   assertEq(save.level, 2);
   assertEq(save.gold, 17);
   assertEq(save.hazardPayClaimed, true);
+  assertEq(save.biomeId, COAL_SHAFTS_BIOME_ID);
   assertEq(save.levelState.rows, 2);
+  assertEq(save.levelState.biomeId, COAL_SHAFTS_BIOME_ID);
   assertEq(save.levelState.player.r, 0);
   assertEq(save.levelState.player.c, 1);
   assertEq(save.levelState.grid[1][1].type, 'gas');
@@ -123,6 +147,7 @@ test('run save includes the active generated level snapshot', () => {
 
 test('saved level snapshot restores board state without generation', () => {
   resetForNewRun();
+  setBiomeId(COAL_SHAFTS_BIOME_ID);
   setRows(2); setCols(2);
   setPlayerPosition(1, 0);
   setExit({ r: 0, c: 1 });
@@ -141,6 +166,7 @@ test('saved level snapshot restores board state without generation', () => {
   const snapshot = captureSavedLevelState();
 
   setRows(1); setCols(1);
+  setBiomeId(ENDLESS_DEEP_BIOME_ID);
   setPlayerPosition(0, 0);
   setExit({ r: 0, c: 0 });
   setGrid(makeEmptyGrid(1, 1));
@@ -153,6 +179,8 @@ test('saved level snapshot restores board state without generation', () => {
   assertEq(getGrid()[0][1].goldValue, 55);
   assertEq(getRevealed()[0][1], true);
   assertEq(getFlagged()[1][1], true);
+  assertEq(getBiomeId(), COAL_SHAFTS_BIOME_ID);
+  assertEq(document.body.dataset.biome, COAL_SHAFTS_BIOME_ID);
 });
 
 test('resetForNewRun restores defaults', () => {
@@ -166,6 +194,7 @@ test('resetForNewRun restores defaults', () => {
   assertEq(getArtifacts().length, 0);
   assertEq(getMaxHp(), 3);
   assertEq(getHazardPayClaimed(), false);
+  assertEq(getBiomeId(), null);
 });
 
 test('max HP artifact increases current and max HP', () => {
@@ -364,6 +393,8 @@ test('payment schedule charges checkpoint deltas', () => {
   assertEq(paymentAmountForLevel(24), 1320);
   assertEq(paymentAmountForLevel(27), 1500);
   assertEq(paymentAmountForLevel(30), 1680);
+  assertEq(paymentAmountForLevel(33), 1860);
+  assertEq(paymentAmountForLevel(36), 2040);
 });
 
 test('Exit Clause reduces payments by ten percent', () => {
@@ -384,22 +415,24 @@ test('next payment display follows the current level bracket', () => {
   assertEq(nextPaymentForLevel(19).amount, 1140);
   assertEq(nextPaymentForLevel(28).level, 30);
   assertEq(nextPaymentForLevel(30).amount, 1680);
+  assertEq(nextPaymentForLevel(31).level, 33);
+  assertEq(nextPaymentForLevel(31).amount, 1860);
 });
 
 test('post-payment reward levels line up with guaranteed Joker levels', () => {
-  for (const level of [4, 7, 10, 13, 16, 19, 22, 25, 28]) {
+  for (const level of [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34]) {
     assertEq(isPostPaymentRewardLevel(level), true, `expected level ${level} to be post-payment`);
   }
-  for (const level of [1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 30]) {
+  for (const level of [1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 30, 33]) {
     assertEq(isPostPaymentRewardLevel(level), false, `expected level ${level} not to be post-payment`);
   }
 });
 
-test('run cap is level 30', () => {
-  assertEq(MAX_RUN_LEVEL, 30);
-  assertEq(isFinalRunLevel(29), false);
-  assertEq(isFinalRunLevel(30), true);
-  assertEq(isFinalRunLevel(31), true);
+test('run has no fixed final cap', () => {
+  assertEq(MAX_RUN_LEVEL, Infinity);
+  assertEq(isFinalRunLevel(30), false);
+  assertEq(isFinalRunLevel(31), false);
+  assertEq(isFinalRunLevel(100), false);
 });
 
 // -- rulesets --
@@ -458,7 +491,7 @@ import {
   setGrid, setRows, setCols, setRevealed, setFlagged,
   setBiomeOverrides, setFountain, setPlayerPosition,
 } from '../src/state.js';
-import { collectAt, collectRevealedGold, handleRightClick } from '../src/gameplay/interaction.js';
+import { collectAt, collectRevealedGold, handleRightClick, revealCell } from '../src/gameplay/interaction.js';
 import { renderGrid, updateHud } from '../src/ui/render.js';
 
 function makeEmptyGrid(rows, cols) {
@@ -567,6 +600,37 @@ test('Lucky Receipt increases chest gold by twenty-five percent', () => {
   collectAt(0, 0);
   assertEq(getGold(), 125);
   assertEq(getGrid()[0][0].goldValue, 0);
+});
+
+test('Crystal clue cells reveal one adjacent safe numbered cell', () => {
+  resetForNewRun();
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[0][0].type = 'gas';
+  g[1][1].crystal = true;
+  setGrid(g);
+  setRevealed(emptyGrid(3, 3));
+  setFlagged(emptyGrid(3, 3));
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      if (getGrid()[r][c].type !== 'gas') getGrid()[r][c].adjacent = countAdjacentGas(r, c);
+    }
+  }
+
+  revealCell(1, 1);
+
+  assertEq(getRevealed()[1][1], true);
+  assertEq(getGrid()[1][1].crystalUsed, true);
+  const revealed = [];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      if (getRevealed()[r][c]) revealed.push({ r, c });
+    }
+  }
+  assertEq(revealed.length, 2);
+  const clue = revealed.find(cell => cell.r !== 1 || cell.c !== 1);
+  if (!clue) throw new Error('expected crystal to reveal a clue cell');
+  if (getGrid()[clue.r][clue.c].adjacent <= 0) throw new Error('expected numbered clue cell');
 });
 
 test('Overflow Flask makes full-HP fountain grant an item instead', () => {
@@ -810,6 +874,33 @@ test('regional gold budgets scale into late game', () => {
   assertEq(regionalGoldBudgetsForLevel(21).optional, 240);
   assertEq(regionalGoldBudgetsForLevel(30).optional, 345);
   assertEq(regionalGoldBudgetsForLevel(30).feature, 106);
+});
+
+test('Crystal Veins budgets and generation add greed/info flavor', () => {
+  const crystal = biomeById(CRYSTAL_VEINS_BIOME_ID);
+  assertEq(regionalGoldBudgetsForLevel(16, crystal.economy).optional > regionalGoldBudgetsForLevel(16).optional, true);
+  assertEq(regionalGoldBudgetsForLevel(16, crystal.economy).spine < regionalGoldBudgetsForLevel(16).spine, true);
+
+  resetForNewRun();
+  setRows(20); setCols(20);
+  const start = { r: 0, c: 0 };
+  const exit = { r: 19, c: 19 };
+  let accepted = null;
+  for (let attempt = 0; attempt < 40 && !accepted; attempt++) {
+    const meta = generateRegionalGrid({
+      level: 16,
+      start,
+      exit,
+      features: { merchant: true, fountain: true, joker: true, itemDrop: true },
+      biome: crystal,
+    });
+    const metrics = getRegionalMetrics(meta);
+    if (metrics.crystalCells >= 3) accepted = { meta, metrics };
+  }
+  if (!accepted) throw new Error('expected Crystal Veins generation to place crystal clue cells');
+  assertEq(accepted.meta.biomeId, CRYSTAL_VEINS_BIOME_ID);
+  const crystalCells = accepted.meta.crystalCells.filter(cell => getGrid()[cell.r][cell.c].crystal);
+  if (crystalCells.length < 3) throw new Error('expected crystal cells on the grid');
 });
 
 test('flag bounty artifact pays correct flags and charges wrong flags', () => {

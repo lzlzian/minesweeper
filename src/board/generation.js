@@ -20,6 +20,8 @@ function makeCell(type = 'empty') {
     item: null,
     chest: false,
     preview: null,
+    crystal: false,
+    crystalUsed: false,
   };
 }
 
@@ -59,8 +61,8 @@ function branchFeatureCapacity(rows) {
   return 4;
 }
 
-function resolveRegionalFeatures(features, requestedItemDrops) {
-  const capacity = branchFeatureCapacity(getRows());
+function resolveRegionalFeatures(features, requestedItemDrops, generation = {}) {
+  const capacity = branchFeatureCapacity(getRows()) + (generation.branchCapacityBonus ?? 0);
   const requests = [
     { purpose: 'joker', enabled: !!features.joker },
     { purpose: 'merchant', enabled: !!features.merchant },
@@ -122,6 +124,8 @@ function markRegionCell(meta, region, r, c, genTag = null) {
   cell.item = null;
   cell.chest = false;
   cell.preview = null;
+  cell.crystal = false;
+  cell.crystalUsed = false;
 
   if (!previous) {
     meta.regionByCell.set(key, region.id);
@@ -185,6 +189,8 @@ function placeGasAt(meta, r, c, { allowRegion = false } = {}) {
   cell.item = null;
   cell.chest = false;
   cell.preview = null;
+  cell.crystal = false;
+  cell.crystalUsed = false;
   return true;
 }
 
@@ -554,6 +560,8 @@ function setBranchWallIfReachable(branch, cell) {
   gridCell.item = null;
   gridCell.chest = false;
   gridCell.preview = null;
+  gridCell.crystal = false;
+  gridCell.crystalUsed = false;
   if (!branchIsReachable(branch)) {
     gridCell.type = 'empty';
     return false;
@@ -724,6 +732,8 @@ function placeBranchRoomStructure(meta, level) {
 }
 
 function placeSpineDeductionGas(meta, level) {
+  const generation = meta.biome?.generation ?? {};
+  const gasMultiplier = (generation.gasMultiplier ?? 1) * (generation.spineGasMultiplier ?? 1);
   const candidates = [];
   for (const key of meta.spineCells) {
     const [r, c] = key.split(',').map(Number);
@@ -741,10 +751,11 @@ function placeSpineDeductionGas(meta, level) {
 
   shuffleInPlace(candidates);
   const seen = new Set();
-  const target = Math.max(
+  const baseTarget = Math.max(
     level <= 4 ? 5 : (level <= 12 ? 9 : 12),
     Math.floor(meta.spineCells.size * (level <= 4 ? 0.10 : (level <= 12 ? 0.14 : 0.15))),
   );
+  const target = Math.max(0, Math.round(baseTarget * gasMultiplier));
   let placed = 0;
   for (const candidate of candidates) {
     const key = cellKey(candidate.r, candidate.c);
@@ -768,7 +779,8 @@ function placeSpineDeductionGas(meta, level) {
   }
 
   shuffleInPlace(interiorCandidates);
-  const interiorTarget = level <= 4 ? 2 : (level <= 12 ? 5 : 6);
+  const baseInteriorTarget = level <= 4 ? 2 : (level <= 12 ? 5 : 6);
+  const interiorTarget = Math.max(0, Math.round(baseInteriorTarget * gasMultiplier));
   let interiorPlaced = 0;
   for (const candidate of interiorCandidates) {
     if (placeSpineGasIfReachable(meta, candidate.r, candidate.c)) interiorPlaced++;
@@ -776,14 +788,16 @@ function placeSpineDeductionGas(meta, level) {
   }
 }
 
-function branchGasTarget(branch, level, baseRisk) {
+function branchGasTarget(branch, level, baseRisk, generation = {}) {
   const rooms = branchRoomCells(branch).length;
-  if (rooms < 4) return baseRisk;
+  const gasMultiplier = (generation.gasMultiplier ?? 1) * (generation.branchGasMultiplier ?? 1);
+  if (rooms < 4) return Math.round(baseRisk * gasMultiplier);
   const density = level <= 4 ? 0.09 : (level <= 12 ? 0.13 : 0.17);
   const bySize = Math.floor(rooms * density);
   const floor = level <= 4 ? 1 : (level <= 12 ? 2 : 3);
   const cap = Math.max(floor, Math.floor(rooms * 0.26));
-  return Math.min(cap, Math.max(baseRisk, floor, bySize));
+  const target = Math.max(baseRisk, floor, bySize);
+  return Math.min(cap, Math.max(floor, Math.round(target * gasMultiplier)));
 }
 
 function branchRiskCandidates(branch) {
@@ -826,6 +840,7 @@ function placeBranchGasIfReachable(meta, branch, cell) {
 }
 
 function placeRegionalGas(meta, level) {
+  const generation = meta.biome?.generation ?? {};
   placeSpineDeductionGas(meta, level);
   const branches = meta.regions.filter(region => region.kind === 'branch');
   for (const branch of branches) {
@@ -853,7 +868,7 @@ function placeRegionalGas(meta, level) {
     }
 
     const baseRisk = branch.purpose === 'gold' ? branch.targetRiskGates : Math.max(0, branch.targetRiskGates - 1);
-    const targetBranchGas = branchGasTarget(branch, level, baseRisk);
+    const targetBranchGas = branchGasTarget(branch, level, baseRisk, generation);
     const riskCells = branchRiskCandidates(branch);
     let branchGas = 0;
     if (targetBranchGas > 0) {
@@ -876,6 +891,8 @@ function placeGoldOnCell(r, c, amount, { chest = false, preview = false } = {}) 
   cell.chest = chest;
   cell.preview = preview ? 'chest' : null;
   cell.item = null;
+  cell.crystal = false;
+  cell.crystalUsed = false;
   return true;
 }
 
@@ -897,25 +914,46 @@ function distributeGold(cells, budget, amounts) {
   return placed;
 }
 
-export function regionalGoldBudgetsForLevel(level) {
+function scaledBudget(amount, multiplier = 1) {
+  return Math.max(0, Math.round(amount * multiplier));
+}
+
+export function regionalGoldBudgetsForLevel(level, economy = {}) {
+  const goldMultiplier = economy.goldMultiplier ?? 1;
+  const spineMultiplier = goldMultiplier * (economy.spineGoldMultiplier ?? 1);
+  const optionalMultiplier = goldMultiplier * (economy.optionalGoldMultiplier ?? 1);
+  const featureMultiplier = goldMultiplier * (economy.featureGoldMultiplier ?? 1);
   if (level <= 4) {
-    return { spine: 22, optional: 52, feature: 26 };
+    return {
+      spine: scaledBudget(22, spineMultiplier),
+      optional: scaledBudget(52, optionalMultiplier),
+      feature: scaledBudget(26, featureMultiplier),
+    };
   }
   if (level <= 8) {
-    return { spine: 18, optional: 78, feature: 30 };
+    return {
+      spine: scaledBudget(18, spineMultiplier),
+      optional: scaledBudget(78, optionalMultiplier),
+      feature: scaledBudget(30, featureMultiplier),
+    };
   }
   const lateStep = Math.max(0, Math.floor((level - 9) / 3));
   return {
-    spine: 14,
-    optional: 100 + lateStep * 35,
-    feature: 36 + lateStep * 10,
+    spine: scaledBudget(14, spineMultiplier),
+    optional: scaledBudget(100 + lateStep * 35, optionalMultiplier),
+    feature: scaledBudget(36 + lateStep * 10, featureMultiplier),
   };
 }
 
 function placeRegionalRewards(meta, level) {
   const spineRegion = meta.regions.find(region => region.kind === 'spine');
   const branches = meta.regions.filter(region => region.kind === 'branch');
-  const budgets = regionalGoldBudgetsForLevel(level);
+  const economy = {
+    ...(meta.biome?.generation ?? {}),
+    ...(meta.biome?.economy ?? {}),
+  };
+  const budgets = regionalGoldBudgetsForLevel(level, economy);
+  const chestMultiplier = economy.chestGoldMultiplier ?? 1;
 
   const safeSpineCells = spineRegion.cells.filter(cell => {
     const distStart = Math.max(Math.abs(cell.r - meta.start.r), Math.abs(cell.c - meta.start.c));
@@ -936,7 +974,7 @@ function placeRegionalRewards(meta, level) {
     }
     const reward = branch.rewardCells[0];
     if (reward) {
-      const chestValue = Math.max(25, Math.floor(budgets.optional * 0.7));
+      const chestValue = Math.max(25, Math.floor(budgets.optional * 0.7 * chestMultiplier));
       placeGoldOnCell(reward.r, reward.c, chestValue, { chest: true, preview: true });
     }
 
@@ -947,7 +985,7 @@ function placeRegionalRewards(meta, level) {
         return getGrid()[cell.r][cell.c].type === 'empty';
       }))[0];
       if (extraChest) {
-        const extraChestValue = Math.max(15, Math.floor(budgets.optional * 0.25));
+        const extraChestValue = Math.max(15, Math.floor(budgets.optional * 0.25 * chestMultiplier));
         if (placeGoldOnCell(extraChest.r, extraChest.c, extraChestValue, { chest: true, preview: true })) {
           const extraReward = { r: extraChest.r, c: extraChest.c };
           branch.rewardCells.push(extraReward);
@@ -963,6 +1001,50 @@ function placeRegionalRewards(meta, level) {
     });
     distributeGold(branchGoldCells, Math.floor(budgets.optional * 0.3), [5, 5, 10]);
   }
+}
+
+function placeCrystalAt(meta, cell) {
+  const gridCell = getGrid()[cell.r][cell.c];
+  if (gridCell.type !== 'empty') return false;
+  if (gridCell.item || gridCell.preview) return false;
+  gridCell.crystal = true;
+  gridCell.crystalUsed = false;
+  if (Math.random() < (meta.biome?.generation?.crystalPreviewChance ?? 0)) {
+    gridCell.preview = 'crystal';
+  }
+  if (!meta.crystalCells) meta.crystalCells = [];
+  meta.crystalCells.push({ r: cell.r, c: cell.c });
+  return true;
+}
+
+function placeBiomeCrystals(meta) {
+  const requested = meta.biome?.generation?.crystalCells ?? 0;
+  if (requested <= 0) return 0;
+  const branches = meta.regions.filter(region => region.kind === 'branch');
+  const candidates = [];
+  for (const branch of branches) {
+    for (const cell of branch.cells) {
+      if (isBranchEntryCell(branch, cell)) continue;
+      if (isBranchReservedCell(branch, cell, { nearEntrance: false })) continue;
+      const gridCell = getGrid()[cell.r][cell.c];
+      if (gridCell.type !== 'empty') continue;
+      if (gridCell.item || gridCell.preview) continue;
+      if (gridCell.adjacent <= 0) continue;
+      candidates.push({ ...cell, branchPurpose: branch.purpose });
+    }
+  }
+  const sorted = shuffleInPlace(candidates).sort((a, b) => {
+    const aGold = a.branchPurpose === 'gold' ? 1 : 0;
+    const bGold = b.branchPurpose === 'gold' ? 1 : 0;
+    return bGold - aGold;
+  });
+  const target = Math.min(requested, sorted.length);
+  let placed = 0;
+  for (const cell of sorted) {
+    if (placeCrystalAt(meta, cell)) placed++;
+    if (placed >= target) break;
+  }
+  return placed;
 }
 
 function placeRegionalItemDrops(meta) {
@@ -984,6 +1066,7 @@ function placeRegionalItemDrops(meta) {
   for (const candidate of candidates) {
     const cell = getGrid()[candidate.r][candidate.c];
     if (cell.type === 'gas' || cell.type === 'wall') continue;
+    if (cell.crystal) continue;
     if (cell.item) continue;
     cell.item = randomItemType();
     cell.preview = 'item';
@@ -1152,6 +1235,7 @@ function regionalMetrics(meta, revealed = null) {
     optionalGold: branchGold,
     spineGas: spine ? countRegionGas(spine) : 0,
     optionalGas: branchGas,
+    crystalCells: meta.crystalCells?.length ?? 0,
     gates,
     branchLeak,
   };
@@ -1224,12 +1308,12 @@ export function getRegionalMetrics(meta, revealed = null) {
   return regionalMetrics(meta, revealed);
 }
 
-export function generateRegionalGrid({ level = 1, start, exit, features = {} } = {}) {
+export function generateRegionalGrid({ level = 1, start, exit, features = {}, biome = null } = {}) {
   if (!start || !exit) {
     throw new Error('generateRegionalGrid requires start and exit positions');
   }
   const rawRequestedItemDrops = regionalItemDropCount(features);
-  const plan = resolveRegionalFeatures(features, rawRequestedItemDrops);
+  const plan = resolveRegionalFeatures(features, rawRequestedItemDrops, biome?.generation ?? {});
   const regionalFeatures = plan.features;
 
   setGrid(Array.from({ length: getRows() }, () =>
@@ -1240,6 +1324,8 @@ export function generateRegionalGrid({ level = 1, start, exit, features = {} } =
     version: REGIONAL_VERSION,
     generator: 'regional-risk-v1',
     level,
+    biomeId: biome?.id ?? null,
+    biome,
     start: { ...start },
     exit: { ...exit },
     regions: [],
@@ -1268,6 +1354,7 @@ export function generateRegionalGrid({ level = 1, start, exit, features = {} } =
   placeRegionalGas(meta, level);
   recomputeAllAdjacency();
   placeRegionalRewards(meta, level);
+  placeBiomeCrystals(meta);
   placeRegionalItemDrops(meta);
   meta.metrics = regionalMetrics(meta);
   return meta;
@@ -1328,6 +1415,11 @@ export function carvePath(fromR, fromC, toR, toC) {
     if (cell.type === 'wall' || cell.type === 'gas') {
       cell.type = 'empty';
       cell.goldValue = 0;
+      cell.item = null;
+      cell.chest = false;
+      cell.preview = null;
+      cell.crystal = false;
+      cell.crystalUsed = false;
     }
   }
   // Recompute adjacency for the whole grid (cheap at 12x12)

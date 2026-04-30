@@ -3,16 +3,17 @@ import {
   getGrid, getRows, getCols, getRevealed, getFlagged,
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGold, getStashGold, getHp, getLevel, getItems, getActiveItem,
-  getItemCount, getGameOver, getMaxHp, getArtifacts,
+  getItemCount, getGameOver, getMaxHp, getArtifacts, getBiomeId,
 } from '../state.js';
 import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
-  quotaDisplay, artifactDisplay, playerSprite, itemButtons, itemCounts, board,
+  quotaDisplay, biomeDisplay, artifactDisplay, playerSprite, itemButtons, itemCounts, board,
 } from './dom.js';
 import { applyPan, renderMinimap } from './view.js';
 import { attachTooltip } from './tooltip.js';
 import { nextPaymentForLevel } from '../gameplay/quota.js';
 import { PAYMENT_DISCOUNT_PERCENT, artifactById, artifactPaymentAmount } from '../gameplay/artifacts.js';
+import { biomeNameForId } from '../gameplay/biomes.js';
 
 // Callback injections for functions whose owners haven't been extracted yet.
 // Removed as the modules migrate:
@@ -72,6 +73,7 @@ export function renderGrid() {
           if (g.type === 'gas') cell.classList.add('gas');
           else if (g.type === 'detonated') cell.classList.add('detonated');
           else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
+          else if (g.crystal) cell.classList.add('crystal');
 
           if (g.type === 'detonated') {
             const numSpan = document.createElement('span');
@@ -92,6 +94,7 @@ export function renderGrid() {
           else if (g.type === 'fountain' && getFountain() && !getFountain().used) icon = '💧';
           else if (isJoker && !getJoker().used) icon = '🃏';
           else if (g.item) icon = PICKUP_EMOJI[g.item];
+          else if (g.crystal) icon = g.crystalUsed ? '✦' : '💎';
 
           if (icon) {
             const iconSpan = document.createElement('span');
@@ -104,7 +107,7 @@ export function renderGrid() {
           if (isAdjacent) cell.classList.add('reachable');
         } else {
           const preview = getGrid()[r][c].preview;
-          const previewIcons = { chest: '🎁', fountain: '💧', item: '🎒', joker: '🃏' };
+          const previewIcons = { chest: '🎁', fountain: '💧', item: '🎒', joker: '🃏', crystal: '💎' };
           if (previewIcons[preview]) {
             cell.classList.add('preview');
             const iconSpan = document.createElement('span');
@@ -191,6 +194,7 @@ export function updateHud() {
     ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${payment.amount}g)`
     : '';
   quotaDisplay.textContent = `Payment due end of Level ${payment.level}: ${paymentAmount}g${paymentDiscount}`;
+  if (biomeDisplay) biomeDisplay.textContent = biomeNameForId(getBiomeId(), getLevel());
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, getMaxHp() - getHp()));
   levelDisplay.textContent = `Level ${getLevel()}`;
   renderArtifactDisplay();

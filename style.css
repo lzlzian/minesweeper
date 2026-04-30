@@ -49,6 +49,30 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.12);
 }
 
+#hud .biome-display {
+  background: #22331f;
+  border: 1px solid #6fb36a;
+  color: #d7f6cf;
+}
+
+body[data-biome="coal_shafts"] #hud .biome-display {
+  background: #27301f;
+  border-color: #8aa36a;
+  color: #e6f2d1;
+}
+
+body[data-biome="crystal_veins"] #hud .biome-display {
+  background: #123238;
+  border-color: #58d3d1;
+  color: #d7fffb;
+}
+
+body[data-biome="endless_deep"] #hud .biome-display {
+  background: #241d3a;
+  border-color: #8a7cf0;
+  color: #e1dcff;
+}
+
 #artifact-display {
   display: inline-flex;
   align-items: center;
@@ -198,6 +222,12 @@ body {
 .cell.gold {
   background: #4a3800;
   color: #ffd700;
+}
+
+.cell.crystal {
+  background: #12333d;
+  color: #d7fffb;
+  box-shadow: inset 0 0 12px rgba(88, 211, 209, 0.45);
 }
 
 .cell.gas {
@@ -451,6 +481,10 @@ body {
 
 .cell.preview {
   box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.28);
+}
+
+body[data-biome="crystal_veins"] .cell.preview {
+  box-shadow: inset 0 0 0 2px rgba(88, 211, 209, 0.32);
 }
 
 .cell .preview-icon {

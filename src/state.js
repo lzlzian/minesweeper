@@ -35,6 +35,7 @@ const state = {
   hazardPayClaimed: false,
   debtCushionUsed: false,
   rulesetId: null,
+  biomeId: null,
   biomeOverrides: null,
   startCornerIdx: 0,
   genMeta: null,
@@ -72,6 +73,7 @@ export function hasArtifact(id) { return state.artifacts.includes(id); }
 export function getHazardPayClaimed() { return state.hazardPayClaimed; }
 export function getDebtCushionUsed() { return state.debtCushionUsed; }
 export function getRulesetId() { return state.rulesetId; }
+export function getBiomeId() { return state.biomeId; }
 export function getBiomeOverrides() { return state.biomeOverrides; }
 export function getStartCornerIdx() { return state.startCornerIdx; }
 export function getGenMeta() { return state.genMeta; }
@@ -154,6 +156,7 @@ export function incrementLevel() { state.level++; }
 export function setRows(n) { state.rows = n; }
 export function setCols(n) { state.cols = n; }
 export function setRulesetId(id) { state.rulesetId = id; }
+export function setBiomeId(id) { state.biomeId = id; }
 export function setBiomeOverrides(o) { state.biomeOverrides = o; }
 export function setStartCornerIdx(i) { state.startCornerIdx = i; }
 export function setItems(items) { state.items = items; }
@@ -176,6 +179,8 @@ export function resetForNewRun() {
   state.hazardPayClaimed = false;
   state.debtCushionUsed = false;
   state.rulesetId = null;
+  state.biomeId = null;
+  state.biomeOverrides = null;
   state.genMeta = null;
 }
 
@@ -197,6 +202,7 @@ export function getSavePayload(extra = {}) {
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
     rulesetId: state.rulesetId,
+    biomeId: state.biomeId,
     hp: state.hp,
     ...extra,
   };
@@ -220,6 +226,7 @@ export function applySavePayload(save) {
   state.items.column = state.items.column ?? 0;
   state.items.cross = state.items.cross ?? 0;
   state.rulesetId = save.rulesetId ?? null;
+  state.biomeId = save.biomeId ?? null;
   state.hp = Math.min(save.hp ?? state.maxHp, state.maxHp);
 }
 

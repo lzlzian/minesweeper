@@ -94,6 +94,29 @@ function collectGoldCell(r, c) {
   return { kind: 'gold', amount, chest: wasChest };
 }
 
+function activateCrystalCell(r, c) {
+  const cell = getGrid()[r]?.[c];
+  if (!cell?.crystal || cell.crystalUsed) return null;
+  cell.crystalUsed = true;
+  if (cell.preview === 'crystal') cell.preview = null;
+
+  const candidates = adjacentCells(r, c).filter(pos => {
+    if (getRevealed()[pos.r]?.[pos.c] || getFlagged()[pos.r]?.[pos.c]) return false;
+    const target = getGrid()[pos.r]?.[pos.c];
+    if (!target || target.type === 'wall' || target.type === 'gas') return false;
+    if (target.type !== 'empty') return false;
+    if (target.item || target.preview || target.crystal) return false;
+    return target.adjacent > 0;
+  });
+  if (!candidates.length) return null;
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  getRevealed()[pick.r][pick.c] = true;
+  spawnPickupFloat(r, c, '💎 clue', 'float-info');
+  playSfx('pickup');
+  return pick;
+}
+
 function grantJokerArtifact(r, c, artifactId) {
   const artifact = grantArtifact(artifactId);
   if (!artifact) return false;
@@ -137,6 +160,7 @@ export function collectAt(r, c) {
     cell.item = null;
     playSfx('pickup');
   }
+  activateCrystalCell(r, c);
   if (getJoker() &&
       r === getJoker().r &&
       c === getJoker().c &&
@@ -653,6 +677,7 @@ export function revealCell(r, c) {
   if (start.type === 'gas' || start.type === 'wall') return;
 
   const stack = [{ r, c }];
+  const revealedCrystals = [];
   while (stack.length) {
     const { r: cr, c: cc } = stack.pop();
     if (cr < 0 || cr >= getRows() || cc < 0 || cc >= getCols()) continue;
@@ -660,6 +685,7 @@ export function revealCell(r, c) {
     const cell = getGrid()[cr][cc];
     if (cell.type === 'gas' || cell.type === 'wall') continue;
     getRevealed()[cr][cc] = true;
+    if (cell.crystal && !cell.crystalUsed) revealedCrystals.push({ r: cr, c: cc });
     if (cell.adjacent === 0) {
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
@@ -668,6 +694,9 @@ export function revealCell(r, c) {
         }
       }
     }
+  }
+  for (const crystal of revealedCrystals) {
+    activateCrystalCell(crystal.r, crystal.c);
   }
 }
 

@@ -3,7 +3,8 @@ import {
   getGrid, getRows, getCols, getRevealed, getFlagged,
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGold, getStashGold, getHp, getLevel, getItems, getActiveItem,
-  getItemCount, getGameOver, getMaxHp, getArtifacts, getBiomeId,
+  getItemCount, getGameOver, getMaxHp, getArtifacts, getBiomeId, getPaymentDebt,
+  getActiveContract,
 } from '../state.js';
 import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
@@ -12,7 +13,7 @@ import {
 import { applyPan, renderMinimap } from './view.js';
 import { attachTooltip } from './tooltip.js';
 import { nextPaymentForLevel, nextPaymentLevel } from '../gameplay/quota.js';
-import { PAYMENT_DISCOUNT_PERCENT, artifactById, artifactPaymentAmount } from '../gameplay/artifacts.js';
+import { PAYMENT_DISCOUNT_PERCENT, artifactById, artifactPaymentAmount, artifactRarityLabel } from '../gameplay/artifacts.js';
 import { biomeForLevel, biomeNameForId } from '../gameplay/biomes.js';
 
 // Callback injections for functions whose owners haven't been extracted yet.
@@ -43,6 +44,15 @@ export function setRenderDeps({
 
 export const PICKUP_EMOJI = { potion: '🍺', scanner: '🔍', pickaxe: '⛏️', row: '↔️', column: '↕️', cross: '✖️' };
 
+function jokerKind() {
+  const kind = getJoker()?.kind;
+  return kind === 'paid' ? 'paid' : 'guaranteed';
+}
+
+function jokerIcon() {
+  return jokerKind() === 'paid' ? '💸' : '🃏';
+}
+
 export function renderGrid() {
   gridContainer.innerHTML = '';
   gridContainer.style.gridTemplateColumns = `repeat(${getCols()}, 40px)`;
@@ -56,7 +66,11 @@ export function renderGrid() {
 
       const isAdjacent = isAdjacentToPlayerImpl(r, c);
 
-      if (getGrid()[r][c].type === 'wall') {
+      const gridCell = getGrid()[r][c];
+
+      if (gridCell.void) {
+        cell.classList.add('void');
+      } else if (gridCell.type === 'wall') {
         cell.classList.add('wall');
       } else {
         const isExit = (r === getExit().r && c === getExit().c);
@@ -65,15 +79,22 @@ export function renderGrid() {
         const isMerchant = getMerchant() && r === getMerchant().r && c === getMerchant().c;
         if (isMerchant) cell.classList.add('merchant');
         const isJoker = getJoker() && r === getJoker().r && c === getJoker().c;
+        if (isJoker && !getJoker().used) {
+          const kind = jokerKind();
+          cell.classList.add('joker', `joker-${kind}`);
+          cell.dataset.jokerKind = kind;
+        }
 
         if (getRevealed()[r][c]) {
-          const g = getGrid()[r][c];
+          const g = gridCell;
           cell.classList.add('revealed');
 
           if (g.type === 'gas') cell.classList.add('gas');
           else if (g.type === 'detonated') cell.classList.add('detonated');
           else if (g.type === 'gold' && g.goldValue > 0) cell.classList.add('gold');
           else if (g.crystal) cell.classList.add('crystal');
+          else if (g.bank) cell.classList.add('contract');
+          else if (g.contractBoard) cell.classList.add('contract');
 
           if (g.type === 'detonated') {
             const numSpan = document.createElement('span');
@@ -92,9 +113,11 @@ export function renderGrid() {
           if (g.type === 'gas') icon = '💀';
           else if (g.type === 'gold' && g.goldValue > 0) icon = g.chest ? '🎁' : '💰';
           else if (g.type === 'fountain' && getFountain() && !getFountain().used) icon = '💧';
-          else if (isJoker && !getJoker().used) icon = '🃏';
+          else if (isJoker && !getJoker().used) icon = jokerIcon();
           else if (g.item) icon = PICKUP_EMOJI[g.item];
           else if (g.crystal) icon = g.crystalUsed ? '✦' : '💎';
+          else if (g.bank) icon = '🏦';
+          else if (g.contractBoard) icon = '📋';
 
           if (icon) {
             const iconSpan = document.createElement('span');
@@ -106,13 +129,13 @@ export function renderGrid() {
           cell.classList.add('flagged');
           if (isAdjacent) cell.classList.add('reachable');
         } else {
-          const preview = getGrid()[r][c].preview;
-          const previewIcons = { chest: '🎁', fountain: '💧', item: '🎒', joker: '🃏', crystal: '💎' };
+          const preview = gridCell.preview;
+          const previewIcons = { chest: '🎁', fountain: '💧', item: '🎒', joker: '🃏', crystal: '💎', contract: '📋', bank: '🏦' };
           if (previewIcons[preview]) {
             cell.classList.add('preview');
             const iconSpan = document.createElement('span');
             iconSpan.className = 'icon preview-icon';
-            iconSpan.textContent = previewIcons[preview];
+            iconSpan.textContent = preview === 'joker' && isJoker ? jokerIcon() : previewIcons[preview];
             cell.appendChild(iconSpan);
           }
           if (isAdjacent) cell.classList.add('reachable');
@@ -190,11 +213,18 @@ export function updateHud() {
   goldDisplay.textContent = `💰 ${getGold()} · Stash: ${getStashGold()}`;
   const dueLevel = nextPaymentLevel(getLevel());
   const payment = nextPaymentForLevel(getLevel(), biomeForLevel(dueLevel).economy);
-  const paymentAmount = artifactPaymentAmount(payment.amount);
-  const paymentDiscount = paymentAmount < payment.amount
-    ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${payment.amount}g)`
+  const debt = payment.amount > 0 ? getPaymentDebt(payment.level) : 0;
+  const rawPayment = payment.amount + debt;
+  const paymentAmount = artifactPaymentAmount(rawPayment);
+  const paymentDiscount = paymentAmount < rawPayment
+    ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${rawPayment}g)`
     : '';
-  quotaDisplay.textContent = `Payment due end of Level ${payment.level}: ${paymentAmount}g${paymentDiscount}`;
+  const debtLabel = debt > 0 ? ` (+${debt} debt)` : '';
+  const activeContract = getActiveContract();
+  const contractLabel = activeContract
+    ? ` · 📋 ${activeContract.name} ${(activeContract.clearedLevels ?? 0)}/${activeContract.requiredClears ?? 2}: +${activeContract.payout}g`
+    : '';
+  quotaDisplay.textContent = `Payment due end of Level ${payment.level}: ${paymentAmount}g${debtLabel}${paymentDiscount}${contractLabel}`;
   if (biomeDisplay) biomeDisplay.textContent = biomeNameForId(getBiomeId(), getLevel());
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, getMaxHp() - getHp()));
   levelDisplay.textContent = `Level ${getLevel()}`;
@@ -224,10 +254,10 @@ function renderArtifactDisplay() {
     token.type = 'button';
     token.className = 'artifact-token';
     token.dataset.artifactId = id;
-    token.setAttribute('aria-label', `${artifact.name}: ${artifact.desc}`);
+    token.setAttribute('aria-label', `${artifact.name} (${artifactRarityLabel(artifact)}): ${artifact.desc}`);
     token.textContent = artifact.icon;
     attachTooltip(token, {
-      name: `${artifact.icon} ${artifact.name}`,
+      name: `${artifact.icon} ${artifact.name} · ${artifactRarityLabel(artifact)}`,
       desc: artifact.desc,
     });
     list.appendChild(token);

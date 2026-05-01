@@ -3,28 +3,37 @@ import {
   getRows, getCols, getGrid, getRevealed, getFlagged,
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGameOver, getBusy, getHp, getGold, getStashGold, getLevel,
-  getActiveItem, getRulesetId, getRunGoldEarned, getMaxHp, hasArtifact,
+  getActiveItem, getRulesetId, getRunGoldEarned, getMaxHp, getItemCount, hasArtifact,
+  getActiveContract,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setFountain, setJoker, setActiveItem,
-  addGold, addItem, consumeItem, damagePlayer, fullHeal,
+  addGold, addItem, addPaymentDebt, consumeItem, damagePlayer, fullHeal, spendGold,
+  recordLevelChestOpened, recordLevelGasTriggered, recordLevelItemUsed,
   addToLifetimeGold,
 } from '../state.js';
 import { AUTHORED_RULESET_ID } from './authored.js';
 import {
   CHEST_ITEM_CHANCE,
   artifactChestGoldAmount,
+  artifactContractChoiceCount,
   artifactLabel,
+  artifactPawnPrice,
   grantArtifact,
   grantRandomArtifact,
+  paidJokerPriceForLevel,
   randomArtifactChoices,
   randomArtifactItemType,
+  SCRAP_VOUCHER_GOLD,
   settleEndLevelHeal,
+  settleCleanToolsBonus,
+  settleDangerDividend,
   settleExitDividend,
   settleFlagBounty,
   settleHazardPay,
 } from './artifacts.js';
 import { recordRun } from './leaderboard.js';
 import { clearSavedRun } from './runSave.js';
+import { acceptContract, randomContractChoices, settleActiveContract } from './contracts.js';
 import { playSfx } from '../audio.js';
 import { findPath } from '../board/layout.js';
 import { countAdjacentGas } from '../board/generation.js';
@@ -39,18 +48,31 @@ import { showShopOverlay } from '../ui/shop.js';
 import {
   showArtifactChoiceOverlay,
   showArtifactFoundOverlay,
+  showBankOverlay,
+  showContractBoardOverlay,
+  showPaidJokerOverlay,
   showDeathOverlay,
   showEscapedOverlay,
   showAuthoredClearedOverlay,
   showAuthoredDeathOverlay,
 } from '../ui/overlay.js';
 import { gridSizeForLevel } from '../rulesets.js';
+import { paymentAfterNextForLevel } from './quota.js';
 
 // ============================================================
 // INTERACTION (walk, reveal, collect, flag, pickaxe targeting)
 // ============================================================
 
 let autosaveRun = () => {};
+
+const PAWN_PRICES = {
+  potion: 25,
+  scanner: 50,
+  pickaxe: 45,
+  row: 65,
+  column: 65,
+  cross: 80,
+};
 
 export function setInteractionAutosave(fn) {
   autosaveRun = typeof fn === 'function' ? fn : () => {};
@@ -82,6 +104,7 @@ function collectGoldCell(r, c) {
   const cell = getGrid()[r][c];
   if (cell.type !== 'gold' || cell.goldValue <= 0) return null;
   const wasChest = !!cell.chest;
+  if (wasChest) recordLevelChestOpened();
   if (wasChest && hasArtifact('chest_items') && Math.random() < CHEST_ITEM_CHANCE) {
     const item = randomArtifactItemType();
     addItem(item, 1);
@@ -149,6 +172,81 @@ function payOutEmptyJoker(r, c) {
   spawnPickupFloat(r, c, 'Joker pays +75', 'float-info');
   playSfx('gold');
   updateHud();
+  autosaveIfActiveRun();
+}
+
+function completeJokerEncounter(r, c) {
+  const joker = getJoker();
+  if (joker) joker.used = true;
+  getGrid()[r][c].preview = null;
+}
+
+function offerJokerChoices(r, c, count, options = {}) {
+  const choices = randomArtifactChoices(count);
+  if (choices.length >= 2) {
+    showArtifactChoiceOverlay(choices, artifact => {
+      grantJokerArtifact(r, c, artifact.id);
+    }, options);
+  } else if (choices.length === 1) {
+    grantJokerArtifact(r, c, choices[0].id);
+  } else {
+    payOutEmptyJoker(r, c);
+  }
+}
+
+function grantRandomJokerArtifact(r, c) {
+  const artifact = grantRandomArtifact();
+  if (artifact) {
+    spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
+    playSfx('pickup');
+    showArtifactFoundOverlay(artifact);
+    updateHud();
+    autosaveIfActiveRun();
+  } else {
+    payOutEmptyJoker(r, c);
+  }
+}
+
+function openJokerAt(r, c) {
+  const joker = getJoker();
+  if (!joker || r !== joker.r || c !== joker.c || joker.used) return false;
+
+  if (joker.kind === 'paid') {
+    const price = paidJokerPriceForLevel(getLevel());
+    const choiceCount = hasArtifact('joker_choice') ? 2 : 0;
+    showPaidJokerOverlay({
+      price,
+      canAfford: getGold() + getStashGold() >= price,
+      choiceCount,
+    }, () => {
+      if (joker.used || getGold() + getStashGold() < price) return;
+      spendGold(price);
+      completeJokerEncounter(r, c);
+      spawnPickupFloat(r, c, `Joker -${price}g`, 'float-info');
+      playSfx('gold');
+      updateHud();
+      renderGrid();
+      if (choiceCount > 1) {
+        offerJokerChoices(r, c, choiceCount, {
+          kicker: "Joker's Choice",
+          title: `Choose 1 of ${choiceCount}`,
+        });
+      } else {
+        grantRandomJokerArtifact(r, c);
+      }
+    });
+    return true;
+  }
+
+  completeJokerEncounter(r, c);
+  const choiceCount = hasArtifact('joker_choice') ? 4 : 3;
+  offerJokerChoices(r, c, choiceCount, {
+    kicker: 'Guaranteed Joker',
+    title: `Choose 1 of ${choiceCount}`,
+  });
+  updateHud();
+  renderGrid();
+  return true;
 }
 
 function openMerchantAt(r, c) {
@@ -157,6 +255,91 @@ function openMerchantAt(r, c) {
   if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
   getGrid()[r][c].preview = null;
   showShopOverlay(true);
+  return true;
+}
+
+function openBankAt(r, c) {
+  const cell = getGrid()[r][c];
+  if (!cell?.bank) return false;
+  if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
+  cell.preview = null;
+
+  const renderBank = () => {
+    const dueLevel = paymentAfterNextForLevel(getLevel());
+    const pawnItems = Object.entries(PAWN_PRICES)
+      .map(([key, price]) => ({
+        key,
+        price: artifactPawnPrice(price),
+        count: getItemCount(key),
+        name: key[0].toUpperCase() + key.slice(1),
+      }))
+      .filter(item => item.count > 0);
+    showBankOverlay({
+      offer: {
+        available: cell.contractPayout > 0 && !cell.contractUsed,
+        payout: cell.contractPayout,
+        debt: cell.contractDebt,
+        dueLevel,
+      },
+      pawnItems,
+    }, () => {
+      if (cell.contractUsed || cell.contractPayout <= 0) return;
+      cell.contractUsed = true;
+      const payout = cell.contractPayout;
+      const debt = cell.contractDebt;
+      cell.contractPayout = 0;
+      cell.contractDebt = 0;
+      addGold(payout);
+      addPaymentDebt(dueLevel, debt);
+      spawnPickupFloat(r, c, `🏦 +${payout}g / L${dueLevel} +${debt}`, 'float-info');
+      playSfx('gold');
+      updateHud();
+      renderGrid();
+      autosaveIfActiveRun();
+      renderBank();
+    }, (itemKey) => {
+      const price = artifactPawnPrice(PAWN_PRICES[itemKey]);
+      if (!price || getItemCount(itemKey) <= 0) return;
+      consumeItem(itemKey);
+      addGold(price);
+      spawnPickupFloat(r, c, `Pawn +${price}g`, 'float-info');
+      playSfx('gold');
+      updateHud();
+      renderGrid();
+      autosaveIfActiveRun();
+      renderBank();
+    });
+  };
+
+  renderBank();
+  return true;
+}
+
+function openContractBoardAt(r, c) {
+  const cell = getGrid()[r][c];
+  if (!cell?.contractBoard) return false;
+  if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
+  cell.preview = null;
+
+  const activeContract = getActiveContract();
+  if (!activeContract && !cell.contractChoices?.length && !cell.contractBoardUsed) {
+    cell.contractChoices = randomContractChoices(artifactContractChoiceCount(3));
+  }
+
+  showContractBoardOverlay({
+    choices: cell.contractChoices ?? [],
+    activeContract,
+  }, contract => {
+    const accepted = acceptContract(contract);
+    if (!accepted) return;
+    cell.contractBoardUsed = true;
+    cell.contractChoices = [];
+    spawnPickupFloat(r, c, `📋 -${accepted.cost}g · 0/${accepted.requiredClears}`, 'float-info');
+    playSfx('pickup');
+    updateHud();
+    renderGrid();
+    autosaveIfActiveRun();
+  });
   return true;
 }
 
@@ -177,33 +360,8 @@ export function collectAt(r, c) {
     playSfx('pickup');
   }
   activateCrystalCell(r, c);
-  if (getJoker() &&
-      r === getJoker().r &&
-      c === getJoker().c &&
-      !getJoker().used) {
-    getJoker().used = true;
-    cell.preview = null;
-    if (hasArtifact('joker_choice')) {
-      const choices = randomArtifactChoices(2);
-      if (choices.length >= 2) {
-        showArtifactChoiceOverlay(choices, artifact => {
-          grantJokerArtifact(r, c, artifact.id);
-        });
-      } else if (choices.length === 1) {
-        grantJokerArtifact(r, c, choices[0].id);
-      } else {
-        payOutEmptyJoker(r, c);
-      }
-    } else {
-      const artifact = grantRandomArtifact();
-      if (artifact) {
-        spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
-        playSfx('pickup');
-        showArtifactFoundOverlay(artifact);
-      } else {
-        payOutEmptyJoker(r, c);
-      }
-    }
+  if (openJokerAt(r, c)) {
+    return { kind: 'joker' };
   }
   if (getFountain() &&
       r === getFountain().r &&
@@ -230,6 +388,12 @@ export function collectAt(r, c) {
   }
   if (openMerchantAt(r, c)) {
     return { kind: 'merchant' };
+  }
+  if (openBankAt(r, c)) {
+    return { kind: 'bank' };
+  }
+  if (openContractBoardAt(r, c)) {
+    return { kind: 'contract' };
   }
   return null;
 }
@@ -315,7 +479,30 @@ export function walkRay(startR, startC, dR, dC, callback) {
 export function detonateGas(r, c) {
   getGrid()[r][c].type = 'detonated';
   getGrid()[r][c].goldValue = 0;
+  recordLevelGasTriggered();
   spawnPickupFloat(r, c, '💀', 'float-danger');
+  revealFuseMarkedGas(r, c);
+}
+
+function revealFuseMarkedGas(r, c) {
+  if (!hasArtifact('fuse_marks')) return null;
+  const candidates = [];
+  const radius = 2;
+  for (let nr = r - radius; nr <= r + radius; nr++) {
+    for (let nc = c - radius; nc <= c + radius; nc++) {
+      if (nr < 0 || nr >= getRows() || nc < 0 || nc >= getCols()) continue;
+      if (nr === r && nc === c) continue;
+      if (getRevealed()[nr]?.[nc] || getFlagged()[nr]?.[nc]) continue;
+      if (getGrid()[nr]?.[nc]?.type !== 'gas') continue;
+      candidates.push({ r: nr, c: nc, dist: Math.abs(nr - r) + Math.abs(nc - c) });
+    }
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.dist - b.dist || Math.random() - 0.5);
+  const pick = candidates[0];
+  getRevealed()[pick.r][pick.c] = true;
+  spawnPickupFloat(pick.r, pick.c, 'Fuse Marks', 'float-info');
+  return pick;
 }
 
 function maybeSettleHazardPay(r, c) {
@@ -338,7 +525,7 @@ async function animateWalk(path) {
     await sleep(STEP_MS);
     const pickup = collectAt(path[i].r, path[i].c);
     updateHud();
-    if (pickup?.kind === 'merchant') {
+    if (pickup?.kind === 'merchant' || pickup?.kind === 'bank' || pickup?.kind === 'contract' || pickup?.kind === 'joker') {
       renderGrid();
       autosaveIfActiveRun();
       return false;
@@ -461,10 +648,13 @@ function tryFlagRemainingGasNeighbors(r, c) {
 
 function settleClearArtifacts() {
   const dividend = settleExitDividend();
+  const danger = settleDangerDividend();
+  const cleanTools = settleCleanToolsBonus();
   const bounty = settleFlagBounty();
+  const contract = settleActiveContract();
   const heal = settleEndLevelHeal();
-  if (dividend?.amount || bounty?.net || heal?.amount) updateHud();
-  return { dividend, bounty, heal };
+  if (dividend?.amount || danger?.amount || cleanTools?.amount || bounty?.net || contract?.payout || heal?.amount) updateHud();
+  return { dividend, danger, cleanTools, bounty, contract, heal };
 }
 
 // Among the 8 neighbors of (tr, tc), find the revealed non-wall cell
@@ -501,19 +691,25 @@ async function handleItemClick(r, c) {
 
   if (item === 'pickaxe') {
     // Valid target: any wall cell.
-    if (cell.type !== 'wall') {
+    if (cell.type !== 'wall' || cell.void) {
       setActiveItem(null);
       updateItemBar();
       renderGrid();
       return true;
     }
     consumeItem('pickaxe');
+    recordLevelItemUsed();
     setActiveItem(null);
+    if (hasArtifact('scrap_voucher')) {
+      addGold(SCRAP_VOUCHER_GOLD);
+      spawnPickupFloat(r, c, `Scrap +${SCRAP_VOUCHER_GOLD}g`, 'float-info');
+    }
 
     // Convert wall to revealed floor. Walls never participated in adjacency
     // counts, so neighbor numbers are already correct — only the new cell
     // needs its adjacency computed.
     cell.type = 'empty';
+    cell.void = false;
     cell.goldValue = 0;
     cell.item = null; // defensive: walls shouldn't have items but be safe
     cell.adjacent = countAdjacentGas(r, c);
@@ -655,6 +851,7 @@ export function ensureSafeStart(r, c) {
       const cell = getGrid()[nr][nc];
       if (cell.type === 'gas') {
         cell.type = 'empty';
+        cell.void = false;
         cell.goldValue = 0;
         // Relocate gas to a distant cell
         let relocated = false;
@@ -672,6 +869,7 @@ export function ensureSafeStart(r, c) {
       }
       if (cell.type === 'wall') {
         cell.type = 'empty';
+        cell.void = false;
       }
     }
   }

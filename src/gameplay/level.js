@@ -4,14 +4,14 @@ import {
   getLevelsSinceMerchant, getMerchant, getFountain, getJoker,
   getRulesetId, getBiomeOverrides, getPlayerRow, getPlayerCol, getExit,
   getStartCornerIdx, getGameOver, getBiomeId,
-  getStashGold, getRunGoldEarned, hasArtifact, moveGoldToStash, spendGold,
+  getStashGold, getRunGoldEarned, getPaymentDebt, hasArtifact, moveGoldToStash, spendGold,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setGrid, setExit, setActiveItem, setLevelsSinceMerchant,
   incrementLevelsSinceMerchant, setMerchant, setFountain, setJoker,
   incrementLevel, setLevel, setRows, setCols, setRulesetId, setBiomeOverrides,
   setStartCornerIdx, setGenMeta, setBiomeId,
   addItem, resetForNewRun, resetLevelGold, resetLevelArtifactState, fullHeal,
-  getSavePayload, applySavePayload,
+  getSavePayload, applySavePayload, clearPaymentDebt,
 } from '../state.js';
 import { startBgm } from '../audio.js';
 import { playerSprite } from '../ui/dom.js';
@@ -35,6 +35,7 @@ import {
   artifactPaymentAmount,
   isArtifactCadenceLevel,
   randomArtifactItemType,
+  randomLineScanItemType,
   useDebtCushion,
 } from './artifacts.js';
 import { clearSavedRun, loadRunPayload, saveRunPayload } from './runSave.js';
@@ -148,10 +149,55 @@ function revealMinersMapCell(genMeta) {
   return pick;
 }
 
+function revealBranchMapCell(genMeta) {
+  if (!hasArtifact('branch_map')) return null;
+  if (!genMeta?.regions?.length) return null;
+  const candidates = [];
+  for (const branch of genMeta.regions.filter(region => region.kind === 'branch')) {
+    for (const cell of branch.cells ?? []) {
+      if (branch.entrance && cell.r === branch.entrance.r && cell.c === branch.entrance.c) continue;
+      if (branch.featureCell && cell.r === branch.featureCell.r && cell.c === branch.featureCell.c) continue;
+      if (getRevealed()[cell.r]?.[cell.c]) continue;
+      const gridCell = getGrid()[cell.r]?.[cell.c];
+      if (gridCell?.type === 'empty' && gridCell.adjacent > 0) {
+        candidates.push(cell);
+      }
+    }
+  }
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  getRevealed()[pick.r][pick.c] = true;
+  return pick;
+}
+
+function revealExitSurveyCell() {
+  if (!hasArtifact('exit_survey')) return null;
+  const radius = 4;
+  const candidates = [];
+  for (let r = getExit().r - radius; r <= getExit().r + radius; r++) {
+    for (let c = getExit().c - radius; c <= getExit().c + radius; c++) {
+      if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) continue;
+      if (r === getExit().r && c === getExit().c) continue;
+      if (r === getPlayerRow() && c === getPlayerCol()) continue;
+      if (getRevealed()[r]?.[c]) continue;
+      const cell = getGrid()[r]?.[c];
+      if (cell?.type !== 'empty' || cell.adjacent <= 0) continue;
+      if (cell.item || cell.preview || cell.crystal) continue;
+      candidates.push({ r, c });
+    }
+  }
+  if (!candidates.length) return null;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  getRevealed()[pick.r][pick.c] = true;
+  return pick;
+}
+
 function applyLevelStartArtifactReveals(genMeta) {
   const lanternCount = revealBranchLanternCells(genMeta);
   const mapCell = revealMinersMapCell(genMeta);
-  return { lanternCount, mapCell };
+  const branchMapCell = revealBranchMapCell(genMeta);
+  const exitSurveyCell = revealExitSurveyCell();
+  return { lanternCount, mapCell, branchMapCell, exitSurveyCell };
 }
 
 function applyLevelStartItemArtifacts() {
@@ -165,6 +211,19 @@ function applyLevelStartItemArtifacts() {
   if (hasArtifact('pocket_pickaxe')) {
     addItem('pickaxe', 1);
     effects.push({ item: 'pickaxe', label: `${PICKUP_EMOJI.pickaxe} +1` });
+  }
+  if (hasArtifact('field_rations')) {
+    addItem('potion', 1);
+    effects.push({ item: 'potion', label: `${PICKUP_EMOJI.potion} +1` });
+  }
+  if (hasArtifact('survey_battery')) {
+    addItem('scanner', 1);
+    effects.push({ item: 'scanner', label: `${PICKUP_EMOJI.scanner} +1` });
+  }
+  if (hasArtifact('toolbox_order')) {
+    const item = randomLineScanItemType();
+    addItem(item, 1);
+    effects.push({ item, label: `${PICKUP_EMOJI[item] || ''} +1` });
   }
   return effects;
 }
@@ -373,8 +432,13 @@ export async function initLevel() {
     ? false
     : (getLevelsSinceMerchant() >= 2 || Math.random() < (biomeFeatures.merchantChance ?? MERCHANT_SPAWN_CHANCE));
   const spawnFountain = Math.random() < (biomeFeatures.fountainChance ?? 0.50);
-  const spawnJoker = isPostPaymentRewardLevel(getLevel()) || Math.random() < (biomeFeatures.jokerChance ?? JOKER_SPAWN_CHANCE);
+  const guaranteedJoker = isPostPaymentRewardLevel(getLevel());
+  const randomJoker = !guaranteedJoker && Math.random() < (biomeFeatures.jokerChance ?? JOKER_SPAWN_CHANCE);
+  const spawnJoker = guaranteedJoker || randomJoker;
+  const jokerKind = guaranteedJoker ? 'guaranteed' : (randomJoker ? 'paid' : null);
   const spawnItemDrop = Math.random() < (biomeFeatures.itemDropChance ?? 0.50);
+  const spawnBank = Math.random() < (biomeFeatures.bankChance ?? 0);
+  const spawnContract = Math.random() < (biomeFeatures.contractChance ?? 0);
 
   const maxAttempts = 500;
   let solved = false;
@@ -406,6 +470,8 @@ export async function initLevel() {
         fountain: spawnFountain,
         joker: spawnJoker,
         itemDrop: spawnItemDrop,
+        bank: spawnBank,
+        contract: spawnContract,
       },
       biome: activeBiome,
     });
@@ -418,10 +484,18 @@ export async function initLevel() {
     ensureSafeStart(getPlayerRow(), getPlayerCol());
     // Spawn cell auto-reveals; don't grant a free item there.
     getGrid()[getPlayerRow()][getPlayerCol()].item = null;
+    getGrid()[getPlayerRow()][getPlayerCol()].bank = false;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractPayout = 0;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractDebt = 0;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractUsed = false;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractBoard = false;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractBoardUsed = false;
+    getGrid()[getPlayerRow()][getPlayerCol()].contractChoices = null;
 
     // Exit cell itself must not be gas
     if (getGrid()[exit.r][exit.c].type === 'gas') {
       getGrid()[exit.r][exit.c].type = 'empty';
+      getGrid()[exit.r][exit.c].void = false;
       // recompute adjacency for neighbors (a gas was removed)
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
@@ -442,10 +516,18 @@ export async function initLevel() {
     getGrid()[exit.r][exit.c].crystalGoldValue = 0;
     getGrid()[exit.r][exit.c].crystalClueCount = 0;
     getGrid()[exit.r][exit.c].crystalClueRadius = 0;
+    getGrid()[exit.r][exit.c].bank = false;
+    getGrid()[exit.r][exit.c].contractPayout = 0;
+    getGrid()[exit.r][exit.c].contractDebt = 0;
+    getGrid()[exit.r][exit.c].contractUsed = false;
+    getGrid()[exit.r][exit.c].contractBoard = false;
+    getGrid()[exit.r][exit.c].contractBoardUsed = false;
+    getGrid()[exit.r][exit.c].contractChoices = null;
 
     // Exit cell should not carry gold — keeps the exit cell mechanically clean
     if (getGrid()[exit.r][exit.c].type === 'gold') {
       getGrid()[exit.r][exit.c].type = 'empty';
+      getGrid()[exit.r][exit.c].void = false;
       getGrid()[exit.r][exit.c].goldValue = 0;
       getGrid()[exit.r][exit.c].chest = false;
       getGrid()[exit.r][exit.c].preview = null;
@@ -454,6 +536,13 @@ export async function initLevel() {
       getGrid()[exit.r][exit.c].crystalGoldValue = 0;
       getGrid()[exit.r][exit.c].crystalClueCount = 0;
       getGrid()[exit.r][exit.c].crystalClueRadius = 0;
+      getGrid()[exit.r][exit.c].bank = false;
+      getGrid()[exit.r][exit.c].contractPayout = 0;
+      getGrid()[exit.r][exit.c].contractDebt = 0;
+      getGrid()[exit.r][exit.c].contractUsed = false;
+      getGrid()[exit.r][exit.c].contractBoard = false;
+      getGrid()[exit.r][exit.c].contractBoardUsed = false;
+      getGrid()[exit.r][exit.c].contractChoices = null;
     }
 
     // Merchant placement (if this level spawns one).
@@ -494,6 +583,13 @@ export async function initLevel() {
         fountainCell.crystalGoldValue = 0;
         fountainCell.crystalClueCount = 0;
         fountainCell.crystalClueRadius = 0;
+        fountainCell.bank = false;
+        fountainCell.contractPayout = 0;
+        fountainCell.contractDebt = 0;
+        fountainCell.contractUsed = false;
+        fountainCell.contractBoard = false;
+        fountainCell.contractBoardUsed = false;
+        fountainCell.contractChoices = null;
         setFountain({ r: pick.r, c: pick.c, used: false });
       }
     }
@@ -505,6 +601,7 @@ export async function initLevel() {
       if (pick) {
         const jokerCell = getGrid()[pick.r][pick.c];
         jokerCell.type = 'empty';
+        jokerCell.void = false;
         jokerCell.goldValue = 0;
         jokerCell.item = null;
         jokerCell.chest = false;
@@ -514,7 +611,14 @@ export async function initLevel() {
         jokerCell.crystalGoldValue = 0;
         jokerCell.crystalClueCount = 0;
         jokerCell.crystalClueRadius = 0;
-        setJoker({ r: pick.r, c: pick.c, used: false });
+        jokerCell.bank = false;
+        jokerCell.contractPayout = 0;
+        jokerCell.contractDebt = 0;
+        jokerCell.contractUsed = false;
+        jokerCell.contractBoard = false;
+        jokerCell.contractBoardUsed = false;
+        jokerCell.contractChoices = null;
+        setJoker({ r: pick.r, c: pick.c, used: false, kind: jokerKind });
       }
     }
     const jokerReachable = !getJoker() || isReachable(getPlayerRow(), getPlayerCol(), getJoker().r, getJoker().c);
@@ -733,11 +837,14 @@ function finishRunWon(clearedLevel) {
 export async function nextLevel() {
   const clearedLevel = getLevel();
   moveGoldToStash();
-  const paymentDue = artifactPaymentAmount(paymentAmountForLevel(clearedLevel, biomeForLevel(clearedLevel).economy));
+  const basePaymentDue = paymentAmountForLevel(clearedLevel, biomeForLevel(clearedLevel).economy);
+  const rawPaymentDue = basePaymentDue > 0 ? basePaymentDue + getPaymentDebt(clearedLevel) : 0;
+  const paymentDue = artifactPaymentAmount(rawPaymentDue);
   if (paymentDue > 0) {
     const totalBeforePayment = getStashGold();
     const shortfall = paymentDue - totalBeforePayment;
     if (useDebtCushion(shortfall)) {
+      clearPaymentDebt(clearedLevel);
       updateHud();
       if (isFinalRunLevel(clearedLevel)) {
         finishRunWon(clearedLevel);
@@ -747,6 +854,7 @@ export async function nextLevel() {
       return;
     }
     spendGold(paymentDue);
+    clearPaymentDebt(clearedLevel);
     updateHud();
     if (getStashGold() < 0) {
       setGameOver(true);

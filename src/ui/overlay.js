@@ -6,10 +6,10 @@ import {
   startGame, resumeGame, nextLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
-import { getDebtCushionUsed, getRulesetId, hasArtifact } from '../state.js';
+import { getDebtCushionUsed, getGold, getPaymentDebt, getRulesetId, getStashGold, hasArtifact } from '../state.js';
 import { getLeaderboard, recordRun } from '../gameplay/leaderboard.js';
 import { isFinalRunLevel, paymentAmountForLevel } from '../gameplay/quota.js';
-import { DEBT_CUSHION_GOLD, PAYMENT_DISCOUNT_PERCENT, artifactPaymentAmount } from '../gameplay/artifacts.js';
+import { DEBT_CUSHION_GOLD, PAYMENT_DISCOUNT_PERCENT, artifactPaymentAmount, artifactRarityLabel } from '../gameplay/artifacts.js';
 import { biomeForLevel } from '../gameplay/biomes.js';
 
 // String literal (not imported from authored.js) to avoid a static cycle:
@@ -83,6 +83,7 @@ export function showArtifactFoundOverlay(artifact) {
       <div class="artifact-found-kicker">Artifact found</div>
       <div class="artifact-found-icon" aria-hidden="true">${escapeHtml(artifact.icon)}</div>
       <h2 id="artifact-found-title">${escapeHtml(artifact.name)}</h2>
+      <p class="artifact-rarity">${escapeHtml(artifactRarityLabel(artifact))}</p>
       <p class="artifact-found-desc">${escapeHtml(artifact.desc)}</p>
       <button class="menu-btn-primary" data-act="close-artifact">Continue</button>
     </div>
@@ -91,21 +92,24 @@ export function showArtifactFoundOverlay(artifact) {
     ?.addEventListener('click', menuClick(() => hideOverlay()));
 }
 
-export function showArtifactChoiceOverlay(artifacts, onChoose) {
+export function showArtifactChoiceOverlay(artifacts, onChoose, options = {}) {
   if (!artifacts?.length) return;
+  const kicker = options.kicker ?? "Joker's Choice";
+  const title = options.title ?? 'Choose an artifact';
   const optionsHtml = artifacts.map(artifact => `
     <button class="artifact-choice" data-artifact-id="${escapeAttr(artifact.id)}">
-      <span class="artifact-choice-icon" aria-hidden="true">${escapeHtml(artifact.icon)}</span>
-      <span class="artifact-choice-body">
-        <strong>${escapeHtml(artifact.name)}</strong>
-        <span>${escapeHtml(artifact.desc)}</span>
-      </span>
+        <span class="artifact-choice-icon" aria-hidden="true">${escapeHtml(artifact.icon)}</span>
+        <span class="artifact-choice-body">
+          <strong>${escapeHtml(artifact.name)}</strong>
+          <span class="artifact-rarity">${escapeHtml(artifactRarityLabel(artifact))}</span>
+          <span>${escapeHtml(artifact.desc)}</span>
+        </span>
     </button>
   `).join('');
   showOverlay(`
     <div class="artifact-choice-modal" role="dialog" aria-labelledby="artifact-choice-title">
-      <div class="artifact-found-kicker">Joker's Choice</div>
-      <h2 id="artifact-choice-title">Choose an artifact</h2>
+      <div class="artifact-found-kicker">${escapeHtml(kicker)}</div>
+      <h2 id="artifact-choice-title">${escapeHtml(title)}</h2>
       <div class="artifact-choice-list">${optionsHtml}</div>
     </div>
   `);
@@ -117,20 +121,148 @@ export function showArtifactChoiceOverlay(artifacts, onChoose) {
   });
 }
 
+export function showPaidJokerOverlay({ price = 0, canAfford = false, choiceCount = 0 } = {}, onPay, onLeave) {
+  const rewardText = choiceCount > 1
+    ? `Choose 1 of ${choiceCount} artifacts`
+    : 'Random artifact';
+  showOverlay(`
+    <div class="artifact-found" role="dialog" aria-labelledby="paid-joker-title">
+      <div class="artifact-found-kicker">Wandering Joker</div>
+      <div class="artifact-found-icon" aria-hidden="true">🃏</div>
+      <h2 id="paid-joker-title">Joker Deal</h2>
+      <p class="artifact-found-desc">${escapeHtml(rewardText)}</p>
+      <p class="payment-due">Price: 💰 ${price}</p>
+      <button class="menu-btn-primary" data-act="pay-joker" ${canAfford ? '' : 'disabled'}>Pay</button>
+      <button class="menu-btn-secondary" data-act="leave-joker">Leave</button>
+    </div>
+  `);
+  overlayContent.querySelector('[data-act="pay-joker"]')
+    ?.addEventListener('click', menuClick(() => onPay?.()));
+  overlayContent.querySelector('[data-act="leave-joker"]')
+    ?.addEventListener('click', menuClick(() => {
+      onLeave?.();
+      hideOverlay();
+    }));
+}
+
+export function showBankOverlay({ offer, pawnItems = [] } = {}, onTakeLoan, onSellItem, onLeave) {
+  const loanHtml = offer?.available
+    ? `
+      <p>Loan: 💰 ${offer.payout}</p>
+      <p>Repay: 💰 ${offer.debt} at end of Level ${offer.dueLevel}</p>
+      <button class="menu-btn-primary" data-act="take-loan">Take Loan</button>
+    `
+    : '<p>Loan: already taken.</p>';
+  const pawnHtml = pawnItems.length
+    ? pawnItems.map(item => `
+        <button class="menu-btn-secondary" data-sell-item="${escapeAttr(item.key)}">
+          Sell ${escapeHtml(item.name)} x${item.count} for ${item.price}g
+        </button>
+      `).join('')
+    : '<p>No items to pawn.</p>';
+  showOverlay(`
+    <div class="contract-offer" role="dialog" aria-labelledby="contract-offer-title">
+      <div class="artifact-found-kicker">Bank office</div>
+      <h2 id="contract-offer-title">Loan & Pawn</h2>
+      ${loanHtml}
+      <p class="contract-offer-fineprint">Loans skip the upcoming checkpoint and come due on the one after.</p>
+      <h3>Pawn Shop</h3>
+      ${pawnHtml}
+      <button class="menu-btn-secondary" data-act="leave-bank">Leave</button>
+    </div>
+  `);
+  overlayContent.querySelector('[data-act="take-loan"]')
+    ?.addEventListener('click', menuClick(() => {
+      onTakeLoan?.();
+    }));
+  overlayContent.querySelectorAll('[data-sell-item]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      onSellItem?.(btn.dataset.sellItem);
+    }));
+  });
+  overlayContent.querySelector('[data-act="leave-bank"]')
+    ?.addEventListener('click', menuClick(() => {
+      hideOverlay();
+      onLeave?.();
+    }));
+}
+
+export function showContractBoardOverlay({ choices = [], activeContract = null } = {}, onChoose, onLeave) {
+  const activeProgress = activeContract
+    ? `${activeContract.clearedLevels ?? 0}/${activeContract.requiredClears ?? 2} clears`
+    : '';
+  const availableGold = getGold() + getStashGold();
+  const bodyHtml = activeContract
+    ? `
+      <p><strong>${escapeHtml(activeContract.icon)} ${escapeHtml(activeContract.name)}</strong></p>
+      <p>${escapeHtml(activeContract.desc)}</p>
+      <p>Progress: ${escapeHtml(activeProgress)}</p>
+      <p>Buy-in paid: 💰 ${activeContract.cost ?? 0}</p>
+      <p>Reward on success: 💰 ${activeContract.payout}</p>
+      <p class="contract-offer-fineprint">Only one contract can be active at a time.</p>
+    `
+    : `
+      <p class="contract-offer-fineprint">Pay a buy-in now. It pays after two successful clears.</p>
+      <div class="contract-choice-list">
+        ${choices.map(choice => {
+          const canAfford = availableGold >= (choice.cost ?? 0);
+          return `
+          <button class="contract-choice" data-contract-id="${escapeAttr(choice.id)}" ${canAfford ? '' : 'disabled'}>
+            <span class="contract-choice-icon" aria-hidden="true">${escapeHtml(choice.icon)}</span>
+            <span class="contract-choice-body">
+              <strong>${escapeHtml(choice.name)} · pay ${choice.cost ?? 0}g · win ${choice.payout}g</strong>
+              <span>${escapeHtml(choice.desc)}</span>
+              ${canAfford ? '' : '<span>Not enough gold.</span>'}
+            </span>
+          </button>
+        `;
+        }).join('')}
+      </div>
+    `;
+  showOverlay(`
+    <div class="contract-offer" role="dialog" aria-labelledby="contract-board-title">
+      <div class="artifact-found-kicker">Contract board</div>
+      <h2 id="contract-board-title">${activeContract ? 'Active Contract' : 'Pick a Contract'}</h2>
+      ${bodyHtml}
+      <button class="menu-btn-secondary" data-act="leave-contract">Leave</button>
+    </div>
+  `);
+  overlayContent.querySelectorAll('[data-contract-id]').forEach(btn => {
+    btn.addEventListener('click', menuClick(() => {
+      const contract = choices.find(choice => choice.id === btn.dataset.contractId);
+      if (contract) onChoose?.(contract);
+      hideOverlay();
+    }));
+  });
+  overlayContent.querySelector('[data-act="leave-contract"]')
+    ?.addEventListener('click', menuClick(() => {
+      hideOverlay();
+      onLeave?.();
+    }));
+}
+
 export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {}) {
   const dividend = effects?.dividend ?? null;
+  const danger = effects?.danger ?? null;
+  const cleanTools = effects?.cleanTools ?? null;
   const bounty = effects?.bounty ?? null;
   const heal = effects?.heal ?? null;
+  const contract = effects?.contract ?? null;
   const basePaymentDue = paymentAmountForLevel(level, biomeForLevel(level).economy);
-  const paymentDue = artifactPaymentAmount(basePaymentDue);
+  const debtDue = basePaymentDue > 0 ? getPaymentDebt(level) : 0;
+  const rawPaymentDue = basePaymentDue + debtDue;
+  const paymentDue = artifactPaymentAmount(rawPaymentDue);
   const afterPayment = stashGold + gold - paymentDue;
   const debtCushionApplies = paymentDue > 0 &&
     afterPayment < 0 &&
     -afterPayment <= DEBT_CUSHION_GOLD &&
     hasArtifact('debt_cushion') &&
     !getDebtCushionUsed();
-  const paymentDiscountHtml = basePaymentDue > paymentDue && hasArtifact('payment_discount')
-    ? `<span class="payment-discount">-${PAYMENT_DISCOUNT_PERCENT}% from ${basePaymentDue}g</span>`
+  const paymentDiscountHtml = rawPaymentDue > paymentDue && hasArtifact('payment_discount')
+    ? `<span class="payment-discount">-${PAYMENT_DISCOUNT_PERCENT}% from ${rawPaymentDue}g</span>`
+    : '';
+  const debtHtml = debtDue > 0
+    ? `<p class="payment-due">Company debt: 💰 ${debtDue}</p>`
     : '';
   const afterPaymentHtml = debtCushionApplies
     ? `<p>After payment: 💰 0</p>
@@ -139,12 +271,19 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {
   const paymentHtml = paymentDue > 0
     ? `
       <p class="payment-due">Payment due now: 💰 ${paymentDue}</p>
+      ${debtHtml}
       ${paymentDiscountHtml}
       ${afterPaymentHtml}
     `
     : '';
   const dividendHtml = dividend
     ? `<p class="artifact-result artifact-result-positive">💵 Exit Dividend: +${dividend.amount}g</p>`
+    : '';
+  const dangerHtml = danger
+    ? `<p class="artifact-result artifact-result-positive">⚠️ Danger Dividend: +${danger.amount}g</p>`
+    : '';
+  const cleanToolsHtml = cleanTools
+    ? `<p class="artifact-result artifact-result-positive">🧽 Clean Tools: +${cleanTools.amount}g</p>`
     : '';
   const bountyHtml = bounty
     ? `
@@ -156,6 +295,20 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {
   const healHtml = heal
     ? `<p class="artifact-result artifact-result-positive">💗 Safety Dividend: +${heal.amount} HP</p>`
     : '';
+  let contractHtml = '';
+  if (contract?.status === 'progress') {
+    contractHtml = `
+      <p class="artifact-result artifact-result-positive">
+        📋 Contract progress: ${escapeHtml(contract.contract.name)} ${contract.clearedLevels}/${contract.requiredClears}
+      </p>
+    `;
+  } else if (contract) {
+    contractHtml = `
+      <p class="artifact-result ${contract.success ? 'artifact-result-positive' : 'artifact-result-negative'}">
+        📋 ${contract.success ? 'Contract complete' : 'Contract failed'}: ${escapeHtml(contract.contract.name)}${contract.success ? ` +${contract.payout}g` : ''}
+      </p>
+    `;
+  }
   const isFinal = isFinalRunLevel(level);
   const buttonText = isFinal
     ? (paymentDue > 0 ? 'Pay and Finish' : 'Finish Run')
@@ -167,8 +320,11 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {
     <h2>Escaped!</h2>
     <p>Level ${level} cleared · +💰 ${gold}</p>
     ${dividendHtml}
+    ${dangerHtml}
+    ${cleanToolsHtml}
     ${bountyHtml}
     ${healHtml}
+    ${contractHtml}
     <p>Stash: 💰 ${stashGold + gold}</p>
     ${paymentHtml}
     ${nextHtml}
@@ -394,6 +550,8 @@ export function renderRules(parent) {
     <p>Payments are due on checkpoint levels. If you cannot pay after clearing a checkpoint level, the run ends.</p>
     <p>Gold (💰) is optional, but you will need enough to make payments. Revealed loose gold is collected automatically; step onto chests to claim them.</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
+    <p>🏦 Banks offer loans that come due after the next checkpoint, plus a pawn shop for selling items.</p>
+    <p>📋 Contract boards offer optional two-level goals that pay after two successful clears.</p>
     <p>💧 A <strong>Health Fountain</strong> sometimes appears — step on it to heal to full. Single use.</p>
     <button class="menu-btn-primary" data-act="back">Back</button>
   `);

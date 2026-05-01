@@ -21,9 +21,12 @@ function assertApprox(a, b, epsilon, msg) {
 import {
   resetForNewRun, getSavePayload, applySavePayload,
   getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
-  getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed, getBiomeId,
+  getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed, getBiomeId, getPaymentDebt,
+  getActiveContract, getJoker, getLevelStats,
   setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
-  setHazardPayClaimed, setExit, setGameOver, setBiomeId,
+  setHazardPayClaimed, setExit, setGameOver, setBiomeId, addPaymentDebt, clearPaymentDebt,
+  setActiveContract, setJoker, resetLevelArtifactState,
+  recordLevelGasTriggered, recordLevelItemUsed, recordLevelChestOpened,
 } from '../src/state.js';
 import {
   captureSavedLevelState,
@@ -34,6 +37,7 @@ import {
 } from '../src/gameplay/level.js';
 import {
   COAL_SHAFTS_BIOME_ID,
+  COMPANY_DIG_SITE_BIOME_ID,
   CRYSTAL_VEINS_BIOME_ID,
   ENDLESS_DEEP_BIOME_ID,
   biomeById,
@@ -42,23 +46,48 @@ import {
 } from '../src/gameplay/biomes.js';
 import {
   ARTIFACTS,
+  ARTIFACT_RARITIES,
+  CLEAN_TOOLS_GOLD,
+  CLUTCH_COUPON_PERCENT,
+  CONTRACT_FORM_EXTRA_CHOICES,
+  CONTRACT_REWARD_BONUS_PERCENT,
+  CONTRACT_STAMP_DISCOUNT_PERCENT,
+  DANGER_DIVIDEND_GOLD,
   DEBT_CUSHION_GOLD,
   EXIT_DIVIDEND_GOLD,
   FLAG_BOUNTY_GOLD, MERCHANT_DISCOUNT_PERCENT,
+  PAWN_TICKET_PERCENT,
   PAYMENT_DISCOUNT_PERCENT,
+  SCARRED_GLOVES_GOLD,
+  VOLATILE_RECEIPT_PERCENT,
+  artifactContractBuyIn,
+  artifactContractChoiceCount,
+  artifactContractPayout,
+  artifactChestGoldAmount,
+  artifactPawnPrice,
   artifactById,
   artifactPaymentAmount,
+  artifactRarityLabel,
   canUseDebtCushion,
   grantArtifact,
   isArtifactCadenceLevel,
   merchantArtifactPrice,
+  paidJokerPriceForLevel,
   randomArtifactChoices,
+  settleCleanToolsBonus,
+  settleDangerDividend,
   settleExitDividend,
   settleEndLevelHeal,
   settleFlagBounty,
   settleHazardPay,
   useDebtCushion,
 } from '../src/gameplay/artifacts.js';
+import {
+  acceptContract,
+  CONTRACT_BUY_IN_RATE,
+  randomContractChoices,
+  settleActiveContract,
+} from '../src/gameplay/contracts.js';
 import { showShopOverlay } from '../src/ui/shop.js';
 import { showArtifactFoundOverlay } from '../src/ui/overlay.js';
 
@@ -67,6 +96,18 @@ test('save/load round-trip preserves run-scoped fields', () => {
   setLevel(5);
   damagePlayer(1);
   addGold(20);
+  addPaymentDebt(9, 80);
+  setActiveContract({
+    id: 'clean_exit',
+    icon: '🧼',
+    name: 'Clean Exit',
+    desc: 'Clear without triggering gas.',
+    payout: 123,
+    startStats: { triggeredGas: 0, itemsUsed: 0, chestsOpened: 0 },
+  });
+  recordLevelGasTriggered();
+  recordLevelItemUsed();
+  recordLevelChestOpened();
   moveGoldToStash();
   consumeItem('potion');
   grantArtifact('flag_bounty');
@@ -85,6 +126,11 @@ test('save/load round-trip preserves run-scoped fields', () => {
   assertEq(getHp(), 2);
   assertEq(getStashGold(), 20);
   assertEq(getRunGoldEarned(), 20);
+  assertEq(getPaymentDebt(9), 80);
+  assertEq(getActiveContract().id, 'clean_exit');
+  assertEq(getLevelStats().triggeredGas, 1);
+  assertEq(getLevelStats().itemsUsed, 1);
+  assertEq(getLevelStats().chestsOpened, 1);
   assertEq(getArtifacts().includes('flag_bounty'), true);
   assertEq(getBiomeId(), COAL_SHAFTS_BIOME_ID);
   assertEq(getItems().potion, 0);
@@ -95,7 +141,9 @@ test('biome registry maps current run and future endless levels', () => {
   assertEq(biomeForLevel(15).id, COAL_SHAFTS_BIOME_ID);
   assertEq(biomeForLevel(16).id, CRYSTAL_VEINS_BIOME_ID);
   assertEq(biomeForLevel(30).id, CRYSTAL_VEINS_BIOME_ID);
-  assertEq(biomeForLevel(31).id, ENDLESS_DEEP_BIOME_ID);
+  assertEq(biomeForLevel(31).id, COMPANY_DIG_SITE_BIOME_ID);
+  assertEq(biomeForLevel(45).id, COMPANY_DIG_SITE_BIOME_ID);
+  assertEq(biomeForLevel(46).id, ENDLESS_DEEP_BIOME_ID);
   assertEq(biomeById(COAL_SHAFTS_BIOME_ID).name, 'Coal Shafts');
   assertEq(biomeNameForId('missing-biome', 16), 'Crystal Veins');
 });
@@ -195,6 +243,9 @@ test('resetForNewRun restores defaults', () => {
   assertEq(getMaxHp(), 3);
   assertEq(getHazardPayClaimed(), false);
   assertEq(getBiomeId(), null);
+  assertEq(getPaymentDebt(), 0);
+  assertEq(getActiveContract(), null);
+  assertEq(getLevelStats().triggeredGas, 0);
 });
 
 test('max HP artifact increases current and max HP', () => {
@@ -215,6 +266,17 @@ test('merchant discount artifact reduces prices by five percent', () => {
   assertEq(merchantArtifactPrice(1), 1);
 });
 
+test('Clutch Coupon discounts merchant goods only at 1 HP', () => {
+  resetForNewRun();
+  grantArtifact('clutch_coupon');
+  assertEq(merchantArtifactPrice(100), 100);
+  damagePlayer(2);
+  assertEq(CLUTCH_COUPON_PERCENT, 10);
+  assertEq(merchantArtifactPrice(100), 90);
+  grantArtifact('merchant_discount');
+  assertEq(merchantArtifactPrice(100), 85);
+});
+
 test('baseline conveniences are no longer artifact rewards', () => {
   resetForNewRun();
   assertEq(grantArtifact('gold_magnet'), null);
@@ -224,20 +286,101 @@ test('baseline conveniences are no longer artifact rewards', () => {
 
 test('artifact pool includes the expanded non-baseline rewards', () => {
   const ids = new Set(ARTIFACTS.map(artifact => artifact.id));
-  assertEq(ARTIFACTS.length, 20);
+  assertEq(ARTIFACTS.length, 36);
   for (const id of [
+    'pawn_ticket',
+    'clutch_coupon',
+    'field_rations',
+    'fuse_marks',
+    'contract_stamp',
+    'survey_battery',
+    'clean_tools',
     'wide_pockets',
+    'contract_form',
     'black_market_ledger',
     'branch_lantern',
+    'branch_map',
+    'exit_survey',
     'pocket_pickaxe',
+    'toolbox_order',
+    'scrap_voucher',
     'hazard_pay',
     'miners_map',
     'lucky_receipt',
+    'scarred_gloves',
     'exit_dividend',
+    'settlement_receipt',
+    'danger_dividend',
+    'volatile_receipt',
     'debt_cushion',
     'joker_choice',
   ]) {
     if (!ids.has(id)) throw new Error(`missing artifact ${id}`);
+  }
+});
+
+test('artifact pool assigns valid rarity tiers', () => {
+  const rarityCounts = { common: 0, uncommon: 0, rare: 0 };
+  for (const artifact of ARTIFACTS) {
+    if (!ARTIFACT_RARITIES[artifact.rarity]) throw new Error(`invalid rarity for ${artifact.id}`);
+    rarityCounts[artifact.rarity]++;
+  }
+  if (rarityCounts.common < 14) throw new Error('expected a meaningful common pool');
+  if (rarityCounts.uncommon < 14) throw new Error('expected a meaningful uncommon pool');
+  if (rarityCounts.rare < 4) throw new Error('expected a meaningful rare pool');
+  assertEq(artifactRarityLabel('joker_choice'), 'Rare');
+  assertEq(artifactRarityLabel('flag_bounty'), 'Common');
+});
+
+test('new common and uncommon artifact helpers adjust economy hooks', () => {
+  resetForNewRun();
+  assertEq(artifactPawnPrice(100), 100);
+  assertEq(artifactContractBuyIn(100), 100);
+  assertEq(artifactContractPayout(100), 100);
+  assertEq(artifactContractChoiceCount(3), 3);
+
+  grantArtifact('pawn_ticket');
+  grantArtifact('contract_stamp');
+  grantArtifact('settlement_receipt');
+  grantArtifact('contract_form');
+
+  assertEq(PAWN_TICKET_PERCENT, 15);
+  assertEq(CONTRACT_STAMP_DISCOUNT_PERCENT, 10);
+  assertEq(CONTRACT_REWARD_BONUS_PERCENT, 10);
+  assertEq(CONTRACT_FORM_EXTRA_CHOICES, 1);
+  assertEq(artifactPawnPrice(100), 115);
+  assertEq(artifactContractBuyIn(100), 90);
+  assertEq(artifactContractPayout(100), 110);
+  assertEq(artifactContractChoiceCount(3), 4);
+});
+
+test('conditional chest artifacts pay only after their condition is met', () => {
+  resetForNewRun();
+  grantArtifact('scarred_gloves');
+  assertEq(artifactChestGoldAmount(100), 100);
+  damagePlayer(1);
+  assertEq(SCARRED_GLOVES_GOLD, 20);
+  assertEq(artifactChestGoldAmount(100), 120);
+
+  resetForNewRun();
+  grantArtifact('volatile_receipt');
+  assertEq(artifactChestGoldAmount(100), 100);
+  recordLevelGasTriggered();
+  assertEq(VOLATILE_RECEIPT_PERCENT, 40);
+  assertEq(artifactChestGoldAmount(100), 140);
+});
+
+test('artifact rarity roll can select rare rewards', () => {
+  resetForNewRun();
+  setLevel(1);
+  const orig = Math.random;
+  const rolls = [0.999, 0];
+  Math.random = () => rolls.shift() ?? 0;
+  try {
+    const choice = randomArtifactChoices(1)[0];
+    assertEq(choice.rarity, 'rare');
+  } finally {
+    Math.random = orig;
   }
 });
 
@@ -273,6 +416,24 @@ test('merchant menu shows Counterfeit Coupon discount', () => {
   if (!text.includes('95g')) throw new Error('missing discounted price');
 });
 
+test('merchant menu shows active Clutch Coupon discount', () => {
+  resetForNewRun();
+  grantArtifact('clutch_coupon');
+  damagePlayer(2);
+  addGold(1000);
+  setMerchant({
+    r: 0,
+    c: 0,
+    rerollCount: 0,
+    stock: [{ type: 'potion', basePrice: 100, discountKey: 'full', price: 100, sold: false }],
+  });
+  showShopOverlay();
+  const text = document.getElementById('overlay-content').textContent;
+  if (!text.includes('Clutch Coupon: -10%')) throw new Error('missing clutch coupon note');
+  if (!text.includes('Clutch -10%')) throw new Error('missing clutch coupon chip');
+  if (!text.includes('90g')) throw new Error('missing clutch discounted price');
+});
+
 test('artifact HUD renders tooltip-enabled icons', () => {
   resetForNewRun();
   grantArtifact('flag_bounty');
@@ -293,6 +454,114 @@ test('artifact found overlay shows gained artifact details', () => {
   if (!text.includes('Flag Bounty')) throw new Error('missing artifact name');
   if (!text.includes('correct gas flags pay 2g')) throw new Error('missing artifact description');
   if (!content.querySelector('[data-act="close-artifact"]')) throw new Error('missing continue button');
+});
+
+test('guaranteed Joker offers a free choice of three artifacts', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  addGold(200);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].preview = 'joker';
+  setGrid(g);
+  setJoker({ r: 0, c: 0, used: false, kind: 'guaranteed' });
+
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'joker');
+  const choices = document.getElementById('overlay-content').querySelectorAll('[data-artifact-id]');
+  assertEq(choices.length, 3);
+  choices[0].click();
+  assertEq(getArtifacts().length, 1);
+  assertEq(getGold(), 200);
+  assertEq(getJoker().used, true);
+  assertEq(getGrid()[0][0].preview, null);
+});
+
+test('paid random Joker charges scaled gold for a random artifact', () => {
+  resetForNewRun();
+  setLevel(4);
+  const price = paidJokerPriceForLevel(4);
+  addGold(price);
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].preview = 'joker';
+  setGrid(g);
+  setJoker({ r: 0, c: 0, used: false, kind: 'paid' });
+
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'joker');
+  assertEq(getArtifacts().length, 0);
+  assertEq(getJoker().used, false);
+  const pay = document.querySelector('[data-act="pay-joker"]');
+  if (!pay) throw new Error('expected paid joker button');
+  if (pay.disabled) throw new Error('paid joker should be affordable');
+  pay.click();
+  assertEq(getGold(), 0);
+  assertEq(getArtifacts().length, 1);
+  assertEq(getJoker().used, true);
+  assertEq(getGrid()[0][0].preview, null);
+});
+
+test("Joker's Choice upgrades paid and guaranteed Joker choices", () => {
+  resetForNewRun();
+  grantArtifact('joker_choice');
+  setLevel(4);
+  addGold(paidJokerPriceForLevel(4));
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  let g = makeEmptyGrid(1, 1);
+  g[0][0].preview = 'joker';
+  setGrid(g);
+  setJoker({ r: 0, c: 0, used: false, kind: 'paid' });
+  collectAt(0, 0);
+  document.querySelector('[data-act="pay-joker"]').click();
+  assertEq(document.getElementById('overlay-content').querySelectorAll('[data-artifact-id]').length, 2);
+
+  resetForNewRun();
+  grantArtifact('joker_choice');
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  g = makeEmptyGrid(1, 1);
+  g[0][0].preview = 'joker';
+  setGrid(g);
+  setJoker({ r: 0, c: 0, used: false, kind: 'guaranteed' });
+  collectAt(0, 0);
+  assertEq(document.getElementById('overlay-content').querySelectorAll('[data-artifact-id]').length, 4);
+});
+
+test('paid and guaranteed Jokers render with distinct board styles', () => {
+  resetForNewRun();
+  setRows(1); setCols(2);
+  setPlayerPosition(0, 0);
+  setExit({ r: 0, c: 0 });
+  let g = makeEmptyGrid(1, 2);
+  g[0][1].preview = 'joker';
+  setGrid(g);
+  setRevealed([[true, false]]);
+  setFlagged([[false, false]]);
+  setJoker({ r: 0, c: 1, used: false, kind: 'guaranteed' });
+  renderGrid();
+  let jokerCell = document.querySelector('.cell[data-row="0"][data-col="1"]');
+  if (!jokerCell.classList.contains('joker-guaranteed')) throw new Error('missing guaranteed joker class');
+  assertEq(jokerCell.dataset.jokerKind, 'guaranteed');
+  if (!jokerCell.textContent.includes('🃏')) throw new Error('missing guaranteed joker icon');
+
+  resetForNewRun();
+  setRows(1); setCols(2);
+  setPlayerPosition(0, 0);
+  setExit({ r: 0, c: 0 });
+  g = makeEmptyGrid(1, 2);
+  g[0][1].preview = 'joker';
+  setGrid(g);
+  setRevealed([[true, false]]);
+  setFlagged([[false, false]]);
+  setJoker({ r: 0, c: 1, used: false, kind: 'paid' });
+  renderGrid();
+  jokerCell = document.querySelector('.cell[data-row="0"][data-col="1"]');
+  if (!jokerCell.classList.contains('joker-paid')) throw new Error('missing paid joker class');
+  assertEq(jokerCell.dataset.jokerKind, 'paid');
+  if (!jokerCell.textContent.includes('💸')) throw new Error('missing paid joker icon');
 });
 
 test('Safety Dividend heals one HP after level clear', () => {
@@ -325,6 +594,31 @@ test('Exit Dividend pays only when clearing at full HP', () => {
   grantArtifact('exit_dividend');
   damagePlayer(1);
   assertEq(settleExitDividend(), null);
+});
+
+test('Danger Dividend pays only when clearing at exactly 1 HP', () => {
+  resetForNewRun();
+  grantArtifact('danger_dividend');
+  assertEq(settleDangerDividend(), null);
+  damagePlayer(2);
+  const paid = settleDangerDividend();
+  assertEq(DANGER_DIVIDEND_GOLD, 90);
+  assertEq(paid.amount, DANGER_DIVIDEND_GOLD);
+  assertEq(getGold(), DANGER_DIVIDEND_GOLD);
+});
+
+test('Clean Tools pays only when no items were used this level', () => {
+  resetForNewRun();
+  grantArtifact('clean_tools');
+  const paid = settleCleanToolsBonus();
+  assertEq(CLEAN_TOOLS_GOLD, 35);
+  assertEq(paid.amount, CLEAN_TOOLS_GOLD);
+  assertEq(getGold(), CLEAN_TOOLS_GOLD);
+
+  resetForNewRun();
+  grantArtifact('clean_tools');
+  recordLevelItemUsed();
+  assertEq(settleCleanToolsBonus(), null);
 });
 
 test('Debt Cushion covers one small payment shortfall', () => {
@@ -378,6 +672,7 @@ import {
   isPostPaymentRewardLevel,
   MAX_RUN_LEVEL,
   nextPaymentForLevel,
+  paymentAfterNextForLevel,
   paymentAmountForLevel,
 } from '../src/gameplay/quota.js';
 
@@ -399,9 +694,32 @@ test('payment schedule charges checkpoint deltas', () => {
 
 test('biome payment multiplier raises Crystal Veins checkpoint pressure', () => {
   const crystal = biomeById(CRYSTAL_VEINS_BIOME_ID);
-  assertEq(paymentAmountForLevel(18, crystal.economy), 1104);
-  assertEq(paymentAmountForLevel(21, crystal.economy), 1311);
-  assertEq(nextPaymentForLevel(16, crystal.economy).amount, 1104);
+  assertEq(paymentAmountForLevel(18, crystal.economy), 1200);
+  assertEq(paymentAmountForLevel(21, crystal.economy), 1425);
+  assertEq(nextPaymentForLevel(16, crystal.economy).amount, 1200);
+});
+
+test('Company Dig Site raises payments above Crystal Veins', () => {
+  const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
+  assertEq(paymentAmountForLevel(33, company.economy), 2697);
+  assertEq(paymentAmountForLevel(45, company.economy), 3741);
+  assertEq(nextPaymentForLevel(31, company.economy).amount, 2697);
+});
+
+test('loan debt is scheduled by future payment checkpoint', () => {
+  resetForNewRun();
+  addPaymentDebt(36, 125);
+  addPaymentDebt(36, 20.4);
+  addPaymentDebt(39, 50);
+  assertEq(paymentAfterNextForLevel(31), 36);
+  assertEq(getPaymentDebt(36), 145);
+  assertEq(getPaymentDebt(39), 50);
+  assertEq(getPaymentDebt(), 195);
+  clearPaymentDebt(36);
+  assertEq(getPaymentDebt(36), 0);
+  assertEq(getPaymentDebt(), 50);
+  clearPaymentDebt();
+  assertEq(getPaymentDebt(), 0);
 });
 
 test('Exit Clause reduces payments by ten percent', () => {
@@ -498,7 +816,7 @@ import {
   setGrid, setRows, setCols, setRevealed, setFlagged,
   setBiomeOverrides, setFountain, setPlayerPosition,
 } from '../src/state.js';
-import { collectAt, collectRevealedGold, handleRightClick, revealCell } from '../src/gameplay/interaction.js';
+import { collectAt, collectRevealedGold, detonateGas, handleRightClick, revealCell } from '../src/gameplay/interaction.js';
 import { renderGrid, updateHud } from '../src/ui/render.js';
 
 function makeEmptyGrid(rows, cols) {
@@ -690,10 +1008,265 @@ test('stepping onto a branch merchant opens the shop overlay', () => {
   assertEq(getGrid()[0][0].preview, null);
 });
 
+test('bank loan grants gold and schedules debt after the upcoming checkpoint', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  setLevel(31);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].bank = true;
+  g[0][0].contractPayout = 200;
+  g[0][0].contractDebt = 260;
+  g[0][0].preview = 'bank';
+  setGrid(g);
+
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'bank');
+  const accept = document.querySelector('[data-act="take-loan"]');
+  if (!accept) throw new Error('expected bank loan button');
+  accept.click();
+  assertEq(getGold(), 200);
+  assertEq(getPaymentDebt(36), 260);
+  assertEq(getGrid()[0][0].contractUsed, true);
+  assertEq(getGrid()[0][0].contractPayout, 0);
+  assertEq(getGrid()[0][0].bank, true);
+});
+
+test('bank pawnshop buys items for cheap gold', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].bank = true;
+  setGrid(g);
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'bank');
+  const sellPotion = document.querySelector('[data-sell-item="potion"]');
+  if (!sellPotion) throw new Error('expected potion pawn button');
+  sellPotion.click();
+  assertEq(getGold(), 25);
+  assertEq(getItems().potion, 0);
+});
+
+test('Pawn Ticket improves pawnshop payouts', () => {
+  resetForNewRun();
+  grantArtifact('pawn_ticket');
+  setRows(1); setCols(1);
+  setPlayerPosition(0, 0);
+  const g = makeEmptyGrid(1, 1);
+  g[0][0].bank = true;
+  setGrid(g);
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'bank');
+  const sellPotion = document.querySelector('[data-sell-item="potion"]');
+  if (!sellPotion) throw new Error('expected potion pawn button');
+  sellPotion.click();
+  assertEq(getGold(), 29);
+  assertEq(getItems().potion, 0);
+});
+
+test('contract board offers and accepts a two-clear contract', () => {
+  resetForNewRun();
+  setRows(2); setCols(2);
+  setPlayerPosition(0, 0);
+  addGold(1000);
+  const g = makeEmptyGrid(2, 2);
+  g[0][0].contractBoard = true;
+  g[0][0].preview = 'contract';
+  g[1][1].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged(emptyGrid(2, 2));
+
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'contract');
+  const choice = document.querySelector('[data-contract-id]');
+  if (!choice) throw new Error('expected contract choice button');
+  choice.click();
+
+  if (!getActiveContract()) throw new Error('expected accepted contract');
+  assertEq(getActiveContract().requiredClears, 2);
+  if (getActiveContract().cost <= 0) throw new Error('expected contract buy-in cost');
+  assertEq(getGold(), 1000 - getActiveContract().cost);
+  assertEq(getGrid()[0][0].contractBoardUsed, true);
+  assertEq(getGrid()[0][0].preview, null);
+});
+
+test('Long Form Contract adds a fourth contract board choice', () => {
+  resetForNewRun();
+  grantArtifact('contract_form');
+  setRows(2); setCols(2);
+  setPlayerPosition(0, 0);
+  addGold(1000);
+  const g = makeEmptyGrid(2, 2);
+  g[0][0].contractBoard = true;
+  g[0][0].preview = 'contract';
+  g[1][0].type = 'gold';
+  g[1][0].goldValue = 30;
+  g[1][0].chest = true;
+  g[1][1].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged(emptyGrid(2, 2));
+
+  const result = collectAt(0, 0);
+  assertEq(result.kind, 'contract');
+  const choices = document.querySelectorAll('[data-contract-id]');
+  assertEq(choices.length, 4);
+});
+
+test('contract buy-ins require loose gold and scale with level', () => {
+  resetForNewRun();
+  assertEq(CONTRACT_BUY_IN_RATE, 0.40);
+  setRows(2); setCols(2);
+  const g = makeEmptyGrid(2, 2);
+  g[1][1].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged(emptyGrid(2, 2));
+
+  setLevel(1);
+  const early = randomContractChoices(4).find(choice => choice.id === 'clean_exit');
+  setLevel(20);
+  const late = randomContractChoices(4).find(choice => choice.id === 'clean_exit');
+  if (!early || !late) throw new Error('expected clean exit choices');
+  if (late.payout <= early.payout) throw new Error('expected contract reward to scale up');
+  if (late.cost <= early.cost) throw new Error('expected contract buy-in to scale up');
+
+  const acceptedTooPoor = acceptContract({ ...early, cost: 50 });
+  assertEq(acceptedTooPoor, null);
+  addGold(50);
+  moveGoldToStash();
+  const accepted = acceptContract({ ...early, cost: 50 });
+  if (!accepted) throw new Error('expected affordable contract to be accepted');
+  assertEq(getGold(), 0);
+  assertEq(getStashGold(), 0);
+  assertEq(getActiveContract().cost, 50);
+});
+
+test('clean exit contract pays after two clean clears', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setGrid(makeEmptyGrid(1, 1));
+  setRevealed([[true]]);
+  setFlagged([[false]]);
+
+  acceptContract({
+    id: 'clean_exit',
+    icon: '🧼',
+    name: 'Clean Exit',
+    desc: 'Clear without gas.',
+    payout: 90,
+  });
+  let result = settleActiveContract();
+  assertEq(result.status, 'progress');
+  assertEq(result.clearedLevels, 1);
+  assertEq(getGold(), 0);
+  if (!getActiveContract()) throw new Error('expected clean exit contract to remain active');
+
+  resetLevelArtifactState();
+  result = settleActiveContract();
+  assertEq(result.status, 'complete');
+  assertEq(result.success, true);
+  assertEq(getGold(), 90);
+  assertEq(getActiveContract(), null);
+
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setGrid(makeEmptyGrid(1, 1));
+  setRevealed([[true]]);
+  setFlagged([[false]]);
+  acceptContract({
+    id: 'clean_exit',
+    icon: '🧼',
+    name: 'Clean Exit',
+    desc: 'Clear without gas.',
+    payout: 90,
+  });
+  recordLevelGasTriggered();
+  result = settleActiveContract();
+  assertEq(result.status, 'failed');
+  assertEq(result.success, false);
+  assertEq(getGold(), 0);
+  assertEq(getActiveContract(), null);
+});
+
+test('flag quota contract counts new correct gas flags across two clears', () => {
+  resetForNewRun();
+  setRows(2); setCols(2);
+  const g = makeEmptyGrid(2, 2);
+  g[0][0].type = 'gas';
+  g[1][0].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged([
+    [true, false],
+    [false, false],
+  ]);
+
+  acceptContract({
+    id: 'flag_quota',
+    icon: '🚩',
+    name: 'Flag Quota',
+    desc: 'Add two new correct gas flags.',
+    payout: 75,
+    target: 2,
+  });
+  getFlagged()[1][0] = true;
+  let result = settleActiveContract();
+  assertEq(result.status, 'progress');
+  assertEq(result.success, null);
+  assertEq(getGold(), 0);
+
+  resetLevelArtifactState();
+  const g2 = makeEmptyGrid(2, 2);
+  g2[0][1].type = 'gas';
+  setGrid(g2);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged([
+    [false, true],
+    [false, false],
+  ]);
+  result = settleActiveContract();
+  assertEq(result.status, 'complete');
+  assertEq(result.success, true);
+  assertEq(getGold(), 75);
+});
+
+test('chest audit contract uses chests opened after acceptance', () => {
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setGrid(makeEmptyGrid(1, 1));
+  setRevealed([[true]]);
+  setFlagged([[false]]);
+
+  acceptContract({
+    id: 'chest_quota',
+    icon: '🎁',
+    name: 'Chest Audit',
+    desc: 'Open two chests.',
+    payout: 120,
+    target: 2,
+  });
+  recordLevelChestOpened();
+  let result = settleActiveContract();
+  assertEq(result.status, 'progress');
+  assertEq(result.success, null);
+  assertEq(getGold(), 0);
+
+  resetLevelArtifactState();
+  recordLevelChestOpened();
+  result = settleActiveContract();
+  assertEq(result.status, 'complete');
+  assertEq(result.success, true);
+  assertEq(getGold(), 120);
+});
+
 // -- merchant --
 import {
   priceFromTier, rollDiscountTier, DISCOUNT_TIERS,
-  merchantEffectiveRerollCost, merchantRerollCost, rollMerchantStock,
+  merchantBasePriceForLevel, merchantEffectiveRerollCost, merchantPriceMultiplierForLevel,
+  merchantRerollCost, rollMerchantStock,
 } from '../src/gameplay/merchant.js';
 
 test('priceFromTier free', () => {
@@ -714,10 +1287,20 @@ test('priceFromTier d90 floors to 1 minimum', () => {
 });
 
 test('merchantRerollCost scales as a serious gold sink', () => {
-  assertEq(merchantRerollCost(0), 40);
-  assertEq(merchantRerollCost(1), 80);
-  assertEq(merchantRerollCost(2), 120);
-  assertEq(merchantRerollCost(3), 160);
+  assertEq(merchantRerollCost(0, 1), 40);
+  assertEq(merchantRerollCost(1, 1), 80);
+  assertEq(merchantRerollCost(2, 1), 120);
+  assertEq(merchantRerollCost(3, 1), 160);
+  assertEq(merchantRerollCost(0, 16), 90);
+  assertEq(merchantRerollCost(2, 31), 220);
+});
+
+test('merchant item prices scale with depth', () => {
+  assertEq(merchantPriceMultiplierForLevel(1), 1);
+  assertApprox(merchantPriceMultiplierForLevel(6), 1.1, 0.0001);
+  assertApprox(merchantPriceMultiplierForLevel(16), 1.3, 0.0001);
+  assertEq(merchantBasePriceForLevel('potion', 16), 130);
+  assertEq(merchantBasePriceForLevel('cross', 31), 480);
 });
 
 test('House Dice makes the first merchant reroll free', () => {
@@ -726,6 +1309,7 @@ test('House Dice makes the first merchant reroll free', () => {
   grantArtifact('free_reroll');
   assertEq(merchantEffectiveRerollCost(0), 0);
   assertEq(merchantEffectiveRerollCost(1), 80);
+  assertEq(merchantEffectiveRerollCost(1, 16), 130);
 });
 
 test('Black Market Ledger adds two merchant stock slots', () => {
@@ -816,6 +1400,17 @@ function branchCellDepth(branch, cell) {
   return (cell.c - branch.root.c) * dir.c;
 }
 
+function roomCellsAreIrregular(branch) {
+  const rooms = branch.tags?.branch_room ?? [];
+  if (rooms.length < 6) return false;
+  const minR = Math.min(...rooms.map(cell => cell.r));
+  const maxR = Math.max(...rooms.map(cell => cell.r));
+  const minC = Math.min(...rooms.map(cell => cell.c));
+  const maxC = Math.max(...rooms.map(cell => cell.c));
+  const boundsArea = (maxR - minR + 1) * (maxC - minC + 1);
+  return rooms.length < boundsArea;
+}
+
 test('countAdjacentGas counts gas and detonated neighbors', () => {
   setRows(3); setCols(3);
   const g = makeEmptyGrid(3, 3);
@@ -834,6 +1429,21 @@ test('countAdjacentGas handles grid edges', () => {
   setGrid(g);
   // Corner (0,0) has one gas neighbor
   assertEq(countAdjacentGas(0, 0), 1);
+});
+
+test('Fuse Marks reveals a nearby hidden gas after detonation', () => {
+  resetForNewRun();
+  grantArtifact('fuse_marks');
+  setRows(3); setCols(3);
+  const g = makeEmptyGrid(3, 3);
+  g[1][1].type = 'gas';
+  g[1][2].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(3, 3));
+  setFlagged(emptyGrid(3, 3));
+  detonateGas(1, 1);
+  assertEq(getGrid()[1][1].type, 'detonated');
+  assertEq(getRevealed()[1][2], true);
 });
 
 test('right-clicking a solved number flags all remaining hidden gas cells', () => {
@@ -928,6 +1538,115 @@ test('Crystal Veins budgets and generation add greed/info flavor', () => {
     assertEq(gridCell.crystalClueRadius, 2);
   }
   if (accepted.chests < 2) throw new Error('expected Crystal Veins gold branch to include a bonus chest');
+});
+
+test('Company Dig Site generation adds bank branch and loan offer', () => {
+  const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
+  assertEq(regionalGoldBudgetsForLevel(31, company.economy).spine < regionalGoldBudgetsForLevel(31).spine, true);
+  assertEq(regionalGoldBudgetsForLevel(31, company.economy).feature > regionalGoldBudgetsForLevel(31).feature, true);
+
+  resetForNewRun();
+  setRows(20); setCols(20);
+  let accepted = null;
+  for (let attempt = 0; attempt < 50 && !accepted; attempt++) {
+    const meta = generateRegionalGrid({
+      level: 31,
+      start: { r: 0, c: 0 },
+      exit: { r: 19, c: 19 },
+      features: { merchant: true, fountain: true, joker: true, itemDrop: true, bank: true },
+      biome: company,
+    });
+    const branch = meta.regions.find(region => region.purpose === 'bank');
+    const bank = meta.bankCells?.[0];
+    if (branch && bank && getGrid()[bank.r][bank.c].bank && getGrid()[bank.r][bank.c].contractPayout > 0) {
+      accepted = { meta, branch, bank };
+    }
+  }
+  if (!accepted) throw new Error('expected Company Dig Site generation to place a bank branch');
+  assertEq(accepted.meta.biomeId, COMPANY_DIG_SITE_BIOME_ID);
+  const cell = getGrid()[accepted.bank.r][accepted.bank.c];
+  assertEq(cell.preview, 'bank');
+  if (cell.contractDebt <= cell.contractPayout) throw new Error('expected loan debt to exceed payout');
+});
+
+test('Company Dig Site generation can add a contract board branch', () => {
+  const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
+  resetForNewRun();
+  setRows(20); setCols(20);
+  let accepted = null;
+  for (let attempt = 0; attempt < 50 && !accepted; attempt++) {
+    const meta = generateRegionalGrid({
+      level: 31,
+      start: { r: 0, c: 0 },
+      exit: { r: 19, c: 19 },
+      features: { contract: true },
+      biome: company,
+    });
+    const branch = meta.regions.find(region => region.purpose === 'contract');
+    const contract = meta.contractCells?.[0];
+    if (branch && contract && getGrid()[contract.r][contract.c].contractBoard) {
+      accepted = { meta, branch, contract };
+    }
+  }
+  if (!accepted) throw new Error('expected Company Dig Site generation to place a contract branch');
+  const cell = getGrid()[accepted.contract.r][accepted.contract.c];
+  assertEq(cell.preview, 'contract');
+  assertEq(accepted.meta.activeFeatures.contract, true);
+});
+
+test('biome generation profiles drive distinct spines and room silhouettes', () => {
+  const coal = biomeById(COAL_SHAFTS_BIOME_ID);
+  const crystal = biomeById(CRYSTAL_VEINS_BIOME_ID);
+  const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
+  const deep = biomeById(ENDLESS_DEEP_BIOME_ID);
+  assertEq(coal.generation.layoutProfile, 'coal');
+  assertEq(crystal.generation.layoutProfile, 'crystal');
+  assertEq(company.generation.layoutProfile, 'company');
+  assertEq(deep.generation.layoutProfile, 'deep');
+
+  resetForNewRun();
+  setRows(20); setCols(20);
+  let crystalMeta = null;
+  for (let attempt = 0; attempt < 30 && !crystalMeta; attempt++) {
+    const meta = generateRegionalGrid({
+      level: 16,
+      start: { r: 0, c: 0 },
+      exit: { r: 19, c: 19 },
+      features: { joker: true, itemDrop: true },
+      biome: crystal,
+    });
+    const geode = meta.regions.find(region => region.roomShape === 'geode');
+    if (geode && roomCellsAreIrregular(geode)) crystalMeta = meta;
+  }
+  if (!crystalMeta) throw new Error('expected Crystal Veins to carve an irregular geode branch');
+  assertEq(crystalMeta.layoutProfile, 'crystal');
+  if (!crystalMeta.layoutVariant.startsWith('crystal-')) {
+    throw new Error(`expected crystal layout variant, got ${crystalMeta.layoutVariant}`);
+  }
+  if ((crystalMeta.voidCells?.length ?? 0) <= 0) {
+    throw new Error('expected Crystal Veins to mark hidden perimeter void cells');
+  }
+
+  resetForNewRun();
+  setRows(20); setCols(20);
+  let companyMeta = null;
+  for (let attempt = 0; attempt < 30 && !companyMeta; attempt++) {
+    const meta = generateRegionalGrid({
+      level: 31,
+      start: { r: 0, c: 0 },
+      exit: { r: 19, c: 19 },
+      features: { merchant: true, bank: true, contract: true },
+      biome: company,
+    });
+    const office = meta.regions.find(region => region.roomShape === 'office');
+    if (meta.spineWidth >= 3 && office && (office.tags?.branch_office_alcove?.length ?? 0) > 0) companyMeta = meta;
+  }
+  if (!companyMeta) throw new Error('expected Company Dig Site to carve a wider office layout');
+  assertEq(companyMeta.layoutProfile, 'company');
+  if (!companyMeta.layoutVariant.startsWith('company-')) {
+    throw new Error(`expected company layout variant, got ${companyMeta.layoutVariant}`);
+  }
+  if (companyMeta.spineWidth < 3) throw new Error('expected Company Dig Site to use wider worksite spine corridors');
 });
 
 test('flag bounty artifact pays correct flags and charges wrong flags', () => {

@@ -2,6 +2,7 @@ import {
   getGameOver, getBusy, getHp, getRows, getCols, getGrid, getRevealed,
   getItemCount, getActiveItem, setActiveItem, getPlayerRow, getPlayerCol,
   consumeItem, healPlayer, getMaxHp,
+  recordLevelItemUsed,
 } from '../state.js';
 import { itemButtons } from '../ui/dom.js';
 import {
@@ -78,6 +79,7 @@ function useItemPotion() {
   if (getHp() >= getMaxHp()) return;
   if (getItemCount('potion') <= 0) return;
   consumeItem('potion');
+  recordLevelItemUsed();
   healPlayer(1);
   playSfx('drink');
   updateHud();
@@ -165,6 +167,7 @@ function useItemScanner() {
   if (getItemCount('scanner') <= 0) return;
   if (!scannerHasTarget()) return;
   consumeItem('scanner');
+  recordLevelItemUsed();
 
   const pr = getPlayerRow();
   const pc = getPlayerCol();
@@ -221,6 +224,7 @@ function useItemRow() {
   if (getItemCount('row') <= 0) return;
   if (!rowHasTarget()) return;
   consumeItem('row');
+  recordLevelItemUsed();
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   revealAlongRay(pr, pc, 0, -1);
@@ -233,6 +237,7 @@ function useItemColumn() {
   if (getItemCount('column') <= 0) return;
   if (!columnHasTarget()) return;
   consumeItem('column');
+  recordLevelItemUsed();
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   revealAlongRay(pr, pc, -1, 0);
@@ -245,6 +250,7 @@ function useItemCross() {
   if (getItemCount('cross') <= 0) return;
   if (!crossHasTarget()) return;
   consumeItem('cross');
+  recordLevelItemUsed();
   const pr = getPlayerRow();
   const pc = getPlayerCol();
   revealAlongRay(pr, pc, -1, -1);

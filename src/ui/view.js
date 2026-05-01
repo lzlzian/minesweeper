@@ -145,7 +145,9 @@ export function renderMinimap() {
       const y = offsetY + r * pxPerCell;
       const cell = getGrid()[r][c];
 
-      if (!getRevealed()[r][c]) {
+      if (cell.void) {
+        ctx.fillStyle = themeColor('--minimap-bg', '#111');
+      } else if (!getRevealed()[r][c]) {
         ctx.fillStyle = themeColor('--minimap-hidden', '#222');
       } else if (cell.type === 'wall') {
         ctx.fillStyle = themeColor('--minimap-wall', '#333');

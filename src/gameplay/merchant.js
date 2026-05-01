@@ -1,6 +1,6 @@
 import {
   getMerchant, setMerchant, getGold, getStashGold, hasArtifact, spendGold,
-  addItem,
+  addItem, getLevel,
 } from '../state.js';
 import { playSfx } from '../audio.js';
 import { showShopOverlay } from '../ui/shop.js';
@@ -15,6 +15,8 @@ import { merchantArtifactPrice } from './artifacts.js';
 export const MERCHANT_PRICES = { potion: 100, pickaxe: 150, scanner: 200, row: 250, column: 250, cross: 300 };
 export const MERCHANT_REROLL_BASE_COST = 40;
 export const MERCHANT_REROLL_STEP_COST = 40;
+export const MERCHANT_REROLL_LEVEL_STEP_COST = 10;
+export const MERCHANT_PRICE_LEVEL_STEP_PERCENT = 10;
 export const BLACK_MARKET_EXTRA_SLOTS = 2;
 
 // Discount distribution: weights sum to 100.
@@ -44,16 +46,37 @@ export function priceFromTier(basePrice, tier) {
   return Math.max(1, Math.round(basePrice * tier.mult));
 }
 
-export function merchantRerollCost(rerollCount) {
-  return MERCHANT_REROLL_BASE_COST + MERCHANT_REROLL_STEP_COST * rerollCount;
+function levelBand(level, span) {
+  return Math.max(0, Math.floor((Math.max(1, Math.floor(level ?? 1)) - 1) / span));
 }
 
-export function merchantEffectiveRerollCost(rerollCount) {
+function roundToFive(amount) {
+  return Math.max(0, Math.round(amount / 5) * 5);
+}
+
+export function merchantPriceMultiplierForLevel(level = getLevel()) {
+  return 1 + levelBand(level, 5) * (MERCHANT_PRICE_LEVEL_STEP_PERCENT / 100);
+}
+
+export function merchantBasePriceForLevel(itemType, level = getLevel()) {
+  const basePrice = MERCHANT_PRICES[itemType] ?? 0;
+  if (basePrice <= 0) return 0;
+  return Math.max(1, roundToFive(basePrice * merchantPriceMultiplierForLevel(level)));
+}
+
+export function merchantRerollCost(rerollCount, level = getLevel()) {
+  const count = Math.max(0, Math.floor(rerollCount ?? 0));
+  return MERCHANT_REROLL_BASE_COST +
+    MERCHANT_REROLL_STEP_COST * count +
+    MERCHANT_REROLL_LEVEL_STEP_COST * levelBand(level, 3);
+}
+
+export function merchantEffectiveRerollCost(rerollCount, level = getLevel()) {
   if (hasArtifact('free_reroll') && rerollCount === 0) return 0;
-  return merchantRerollCost(rerollCount);
+  return merchantRerollCost(rerollCount, level);
 }
 
-export function rollMerchantStock() {
+export function rollMerchantStock(level = getLevel()) {
   const itemTypes = ['potion', 'scanner', 'pickaxe', 'row', 'column', 'cross'];
   const stock = [];
   const slotCount = hasArtifact('black_market_ledger')
@@ -61,7 +84,7 @@ export function rollMerchantStock() {
     : 10;
   for (let i = 0; i < slotCount; i++) {
     const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-    const basePrice = MERCHANT_PRICES[type];
+    const basePrice = merchantBasePriceForLevel(type, level);
     const tier = rollDiscountTier();
     const price = priceFromTier(basePrice, tier);
     stock.push({ type, basePrice, discountKey: tier.key, price, sold: false });

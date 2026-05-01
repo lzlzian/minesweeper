@@ -34,6 +34,13 @@ const state = {
   artifacts: [],
   hazardPayClaimed: false,
   debtCushionUsed: false,
+  paymentDebts: {},
+  activeContract: null,
+  levelStats: {
+    triggeredGas: 0,
+    itemsUsed: 0,
+    chestsOpened: 0,
+  },
   rulesetId: null,
   biomeId: null,
   biomeOverrides: null,
@@ -72,6 +79,13 @@ export function getArtifacts() { return state.artifacts; }
 export function hasArtifact(id) { return state.artifacts.includes(id); }
 export function getHazardPayClaimed() { return state.hazardPayClaimed; }
 export function getDebtCushionUsed() { return state.debtCushionUsed; }
+export function getPaymentDebt(level = null) {
+  if (level != null) return state.paymentDebts[String(level)] ?? 0;
+  return Object.values(state.paymentDebts).reduce((sum, amount) => sum + amount, 0);
+}
+export function getPaymentDebts() { return { ...state.paymentDebts }; }
+export function getActiveContract() { return state.activeContract; }
+export function getLevelStats() { return { ...state.levelStats }; }
 export function getRulesetId() { return state.rulesetId; }
 export function getBiomeId() { return state.biomeId; }
 export function getBiomeOverrides() { return state.biomeOverrides; }
@@ -83,6 +97,18 @@ export function addGold(amount) {
   state.gold += amount;
   state.runGoldEarned += amount;
 }
+
+export function addPaymentDebt(dueLevel, amount) {
+  const level = Math.floor(Number(dueLevel));
+  const debt = Math.max(0, Math.round(amount ?? 0));
+  if (!Number.isFinite(level) || level < 1 || debt <= 0) return;
+  const key = String(level);
+  state.paymentDebts[key] = (state.paymentDebts[key] ?? 0) + debt;
+}
+
+export function recordLevelGasTriggered() { state.levelStats.triggeredGas++; }
+export function recordLevelItemUsed() { state.levelStats.itemsUsed++; }
+export function recordLevelChestOpened() { state.levelStats.chestsOpened++; }
 
 export function spendGold(amount) {
   if (state.gold >= amount) {
@@ -151,6 +177,15 @@ export function setJoker(j) { state.joker = j; }
 export function setStashGold(n) { state.stashGold = n; }
 export function setHazardPayClaimed(v) { state.hazardPayClaimed = v; }
 export function setDebtCushionUsed(v) { state.debtCushionUsed = v; }
+export function clearPaymentDebt(level = null) {
+  if (level == null) {
+    state.paymentDebts = {};
+    return;
+  }
+  delete state.paymentDebts[String(level)];
+}
+export function setActiveContract(contract) { state.activeContract = contract; }
+export function clearActiveContract() { state.activeContract = null; }
 export function setLevel(n) { state.level = n; }
 export function incrementLevel() { state.level++; }
 export function setRows(n) { state.rows = n; }
@@ -178,6 +213,9 @@ export function resetForNewRun() {
   state.artifacts = [];
   state.hazardPayClaimed = false;
   state.debtCushionUsed = false;
+  state.paymentDebts = {};
+  state.activeContract = null;
+  state.levelStats = { triggeredGas: 0, itemsUsed: 0, chestsOpened: 0 };
   state.rulesetId = null;
   state.biomeId = null;
   state.biomeOverrides = null;
@@ -185,7 +223,10 @@ export function resetForNewRun() {
 }
 
 export function resetLevelGold() { state.gold = 0; }
-export function resetLevelArtifactState() { state.hazardPayClaimed = false; }
+export function resetLevelArtifactState() {
+  state.hazardPayClaimed = false;
+  state.levelStats = { triggeredGas: 0, itemsUsed: 0, chestsOpened: 0 };
+}
 export function fullHeal() { state.hp = state.maxHp; }
 
 // ----- Save/load -----
@@ -199,6 +240,9 @@ export function getSavePayload(extra = {}) {
     artifacts: [...state.artifacts],
     hazardPayClaimed: state.hazardPayClaimed,
     debtCushionUsed: state.debtCushionUsed,
+    paymentDebts: { ...state.paymentDebts },
+    activeContract: state.activeContract ? structuredClone(state.activeContract) : null,
+    levelStats: { ...state.levelStats },
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
     rulesetId: state.rulesetId,
@@ -218,6 +262,16 @@ export function applySavePayload(save) {
   state.artifacts = [...(save.artifacts ?? [])];
   state.hazardPayClaimed = !!save.hazardPayClaimed;
   state.debtCushionUsed = !!save.debtCushionUsed;
+  state.paymentDebts = { ...(save.paymentDebts ?? {}) };
+  if (save.paymentDebt) {
+    state.paymentDebts[String(save.level ?? 1)] = Math.max(0, Math.round(save.paymentDebt));
+  }
+  state.activeContract = save.activeContract ? structuredClone(save.activeContract) : null;
+  state.levelStats = {
+    triggeredGas: save.levelStats?.triggeredGas ?? 0,
+    itemsUsed: save.levelStats?.itemsUsed ?? 0,
+    chestsOpened: save.levelStats?.chestsOpened ?? 0,
+  };
   state.items = { ...(save.items ?? {}) };
   state.items.potion = state.items.potion ?? 0;
   state.items.scanner = state.items.scanner ?? 0;

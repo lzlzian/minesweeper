@@ -57,6 +57,10 @@ export function nextPaymentForLevel(level, economy = {}) {
   };
 }
 
+export function paymentAfterNextForLevel(level) {
+  return nextPaymentLevel(nextPaymentLevel(level) + 1);
+}
+
 export function isPostPaymentRewardLevel(level) {
   return level > 1 && paymentAmountForLevel(level - 1) > 0;
 }

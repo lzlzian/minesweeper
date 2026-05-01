@@ -25,6 +25,14 @@ function makeCell(type = 'empty') {
     crystalGoldValue: 0,
     crystalClueCount: 0,
     crystalClueRadius: 0,
+    bank: false,
+    contractPayout: 0,
+    contractDebt: 0,
+    contractUsed: false,
+    contractBoard: false,
+    contractBoardUsed: false,
+    contractChoices: null,
+    void: false,
   };
 }
 
@@ -69,6 +77,8 @@ function resolveRegionalFeatures(features, requestedItemDrops, generation = {}) 
   const requests = [
     { purpose: 'joker', enabled: !!features.joker },
     { purpose: 'merchant', enabled: !!features.merchant },
+    { purpose: 'bank', enabled: !!features.bank },
+    { purpose: 'contract', enabled: !!features.contract },
     { purpose: 'fountain', enabled: !!features.fountain },
     { purpose: 'item', enabled: requestedItemDrops > 0 },
   ];
@@ -87,6 +97,8 @@ function resolveRegionalFeatures(features, requestedItemDrops, generation = {}) 
     features: {
       ...features,
       merchant: selected.has('merchant'),
+      bank: selected.has('bank'),
+      contract: selected.has('contract'),
       fountain: selected.has('fountain'),
       joker: selected.has('joker'),
       itemDrop: selected.has('item'),
@@ -123,6 +135,7 @@ function markRegionCell(meta, region, r, c, genTag = null) {
 
   const cell = getGrid()[r][c];
   cell.type = 'empty';
+  cell.void = false;
   cell.goldValue = 0;
   cell.item = null;
   cell.chest = false;
@@ -132,6 +145,13 @@ function markRegionCell(meta, region, r, c, genTag = null) {
   cell.crystalGoldValue = 0;
   cell.crystalClueCount = 0;
   cell.crystalClueRadius = 0;
+  cell.bank = false;
+  cell.contractPayout = 0;
+  cell.contractDebt = 0;
+  cell.contractUsed = false;
+  cell.contractBoard = false;
+  cell.contractBoardUsed = false;
+  cell.contractChoices = null;
 
   if (!previous) {
     meta.regionByCell.set(key, region.id);
@@ -188,9 +208,11 @@ function placeGasAt(meta, r, c, { allowRegion = false } = {}) {
   if (!allowRegion && meta.regionByCell.has(cellKey(r, c))) return false;
   if (isProtectedRegionalCell(meta, r, c) && !(allowRegion && meta.spineCells.has(cellKey(r, c)))) return false;
   const cell = getGrid()[r][c];
+  if (cell.void) return false;
   if (cell.type === 'gas') return true;
   if (cell.type !== 'wall' && cell.type !== 'empty') return false;
   cell.type = 'gas';
+  cell.void = false;
   cell.goldValue = 0;
   cell.item = null;
   cell.chest = false;
@@ -200,6 +222,13 @@ function placeGasAt(meta, r, c, { allowRegion = false } = {}) {
   cell.crystalGoldValue = 0;
   cell.crystalClueCount = 0;
   cell.crystalClueRadius = 0;
+  cell.bank = false;
+  cell.contractPayout = 0;
+  cell.contractDebt = 0;
+  cell.contractUsed = false;
+  cell.contractBoard = false;
+  cell.contractBoardUsed = false;
+  cell.contractChoices = null;
   return true;
 }
 
@@ -274,7 +303,17 @@ function carveCanonicalWideLine(meta, region, tx, from, to, width, genTag = null
   }
 }
 
-function chooseSpineWaypoints(rows, cols, { avoidDense = false } = {}) {
+function weightedPick(items) {
+  const total = items.reduce((sum, item) => sum + (item.weight ?? 1), 0);
+  let roll = Math.random() * total;
+  for (const item of items) {
+    roll -= item.weight ?? 1;
+    if (roll <= 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+function chooseSpineWaypoints(rows, cols, { avoidDense = false, profile = 'coal' } = {}) {
   const cNear = randInt(2, Math.max(2, Math.floor(cols * 0.35)));
   const cMid = randInt(Math.max(3, Math.floor(cols * 0.38)), Math.min(cols - 4, Math.floor(cols * 0.62)));
   const cFar = randInt(Math.min(cols - 3, Math.ceil(cols * 0.65)), cols - 3);
@@ -282,36 +321,130 @@ function chooseSpineWaypoints(rows, cols, { avoidDense = false } = {}) {
   const rMid = randInt(Math.max(3, Math.floor(rows * 0.38)), Math.min(rows - 4, Math.floor(rows * 0.62)));
   const rFar = randInt(Math.min(rows - 3, Math.ceil(rows * 0.65)), rows - 3);
 
-  const templates = [
+  const coalTemplates = [
     {
-      name: 'upper-hook',
+      name: 'coal-upper-hook',
+      weight: 1.2,
       points: [{ r: 1, c: 1 }, { r: 1, c: cFar }, { r: rNear, c: cFar }, { r: rNear, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
     },
     {
-      name: 'left-hook',
+      name: 'coal-left-hook',
+      weight: 1.2,
       points: [{ r: 1, c: 1 }, { r: rFar, c: 1 }, { r: rFar, c: cNear }, { r: rows - 2, c: cNear }, { r: rows - 2, c: cols - 2 }],
     },
     {
-      name: 'zigzag',
+      name: 'coal-zigzag',
+      dense: true,
       points: [{ r: 1, c: 1 }, { r: rNear, c: 1 }, { r: rNear, c: cFar }, { r: rMid, c: cFar }, { r: rMid, c: cNear }, { r: rFar, c: cNear }, { r: rFar, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
     },
     {
-      name: 'corner-loop',
+      name: 'coal-corner-loop',
+      weight: 0.9,
       points: [{ r: 1, c: 1 }, { r: 1, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
     },
     {
-      name: 'low-loop',
+      name: 'coal-low-loop',
+      weight: 0.9,
       points: [{ r: 1, c: 1 }, { r: rows - 2, c: 1 }, { r: rows - 2, c: cols - 2 }],
     },
     {
-      name: 'offset-dogleg',
+      name: 'coal-offset-dogleg',
       points: [{ r: 1, c: 1 }, { r: rNear, c: 1 }, { r: rNear, c: cMid }, { r: rFar, c: cMid }, { r: rFar, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
     },
   ];
+
+  const crystalTemplates = [
+    {
+      name: 'crystal-chevron',
+      points: [{ r: 1, c: 1 }, { r: rNear, c: cNear }, { r: rNear, c: cFar }, { r: rMid, c: cMid }, { r: rFar, c: cFar }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'crystal-facet-run',
+      weight: 1.15,
+      points: [{ r: 1, c: 1 }, { r: 1, c: cNear }, { r: rMid, c: cNear }, { r: rMid, c: cFar }, { r: rFar, c: cFar }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'crystal-rift',
+      dense: true,
+      points: [{ r: 1, c: 1 }, { r: rNear, c: cMid }, { r: 2, c: cFar }, { r: rFar, c: cFar }, { r: rMid, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
+    },
+  ];
+
+  const companyTemplates = [
+    {
+      name: 'company-mainline',
+      weight: 1.25,
+      points: [{ r: 1, c: 1 }, { r: 1, c: cMid }, { r: rMid, c: cMid }, { r: rMid, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'company-service-loop',
+      points: [{ r: 1, c: 1 }, { r: rFar, c: 1 }, { r: rFar, c: cMid }, { r: rNear, c: cMid }, { r: rNear, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'company-perimeter',
+      weight: 0.9,
+      points: [{ r: 1, c: 1 }, { r: 1, c: cols - 2 }, { r: rMid, c: cols - 2 }, { r: rMid, c: cNear }, { r: rows - 2, c: cNear }, { r: rows - 2, c: cols - 2 }],
+    },
+  ];
+
+  const deepTemplates = [
+    {
+      name: 'deep-snake',
+      dense: true,
+      points: [{ r: 1, c: 1 }, { r: rNear, c: 1 }, { r: rNear, c: cFar }, { r: rMid, c: cFar }, { r: rMid, c: cNear }, { r: rFar, c: cNear }, { r: rFar, c: cols - 2 }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'deep-corner-drift',
+      points: [{ r: 1, c: 1 }, { r: rNear, c: cNear }, { r: 1, c: cFar }, { r: rFar, c: cFar }, { r: rFar, c: cMid }, { r: rows - 2, c: cols - 2 }],
+    },
+    {
+      name: 'deep-broken-hook',
+      points: [{ r: 1, c: 1 }, { r: rFar, c: 1 }, { r: rFar, c: cNear }, { r: rNear, c: cNear }, { r: rNear, c: cFar }, { r: rows - 2, c: cols - 2 }],
+    },
+  ];
+
+  const pools = {
+    coal: coalTemplates,
+    crystal: crystalTemplates,
+    company: companyTemplates,
+    deep: [...coalTemplates, ...crystalTemplates, ...companyTemplates, ...deepTemplates],
+  };
+  const templates = pools[profile] ?? coalTemplates;
   const pool = avoidDense
-    ? templates.filter(template => template.name !== 'zigzag')
+    ? templates.filter(template => !template.dense)
     : templates;
-  return pool[Math.floor(Math.random() * pool.length)];
+  return weightedPick(pool.length ? pool : templates);
+}
+
+function branchRoomIncludes(plan, roomStep, w, widthLeft, widthRight) {
+  const shape = plan.roomShape ?? 'rect';
+  const roomWidth = widthLeft + widthRight + 1;
+  if (plan.roomDepth <= 2 || roomWidth <= 3) return true;
+
+  const leftEdge = w === -widthLeft;
+  const rightEdge = w === widthRight;
+  const sideEdge = leftEdge || rightEdge;
+  const backRow = roomStep === plan.roomDepth;
+  const nearBack = roomStep >= plan.roomDepth - 1;
+
+  if (shape === 'geode') {
+    if (backRow && sideEdge) return false;
+    if (roomWidth >= 5 && nearBack && sideEdge) return false;
+    return true;
+  }
+
+  if (shape === 'fractured') {
+    if (roomWidth >= 5 && roomStep > 1 && roomStep < plan.roomDepth && sideEdge && roomStep % 2 === 0) return false;
+    if (roomWidth >= 6 && backRow && (leftEdge || rightEdge)) return false;
+    return true;
+  }
+
+  if (shape === 'cavern') {
+    if (roomWidth >= 5 && ((roomStep === 1 && leftEdge) || (backRow && rightEdge))) return false;
+    return true;
+  }
+
+  return true;
 }
 
 function buildBranchCandidate(meta, root, dir, plan) {
@@ -323,6 +456,21 @@ function buildBranchCandidate(meta, root, dir, plan) {
     if (cellKeys.has(key)) return;
     cellKeys.add(key);
     cells.push({ r, c, tag });
+  };
+  const canAddOptional = (r, c) => {
+    if (r < 0 || r >= getRows() || c < 0 || c >= getCols()) return false;
+    const key = cellKey(r, c);
+    if (cellKeys.has(key) || meta.regionByCell.has(key)) return false;
+    for (const [dr, dc] of DIRS_8) {
+      const regionId = meta.regionByCell.get(cellKey(r + dr, c + dc));
+      if (!regionId) continue;
+      const region = regionById(meta, regionId);
+      if (region?.kind === 'spine' || region?.kind === 'branch') return false;
+    }
+    return true;
+  };
+  const addOptional = (r, c, tag) => {
+    if (canAddOptional(r, c)) add(r, c, tag);
   };
 
   const foyerDepth = Math.min(plan.corridorLen, plan.entryFoyerDepth ?? 3);
@@ -344,7 +492,9 @@ function buildBranchCandidate(meta, root, dir, plan) {
   const widthLeft = Math.floor((plan.roomWidth - 1) / 2);
   const widthRight = plan.roomWidth - 1 - widthLeft;
   for (let d = plan.corridorLen + 1; d <= plan.corridorLen + plan.roomDepth; d++) {
+    const roomStep = d - plan.corridorLen;
     for (let w = -widthLeft; w <= widthRight; w++) {
+      if (!branchRoomIncludes(plan, roomStep, w, widthLeft, widthRight)) continue;
       add(
         root.r + dir.r * d + perp.r * w,
         root.c + dir.c * d + perp.c * w,
@@ -352,9 +502,6 @@ function buildBranchCandidate(meta, root, dir, plan) {
       );
     }
   }
-
-  if (cells.length === 0) return null;
-  const entrance = cells[0];
   const featureCell = {
     r: root.r + dir.r * (plan.corridorLen + plan.roomDepth),
     c: root.c + dir.c * (plan.corridorLen + plan.roomDepth),
@@ -363,6 +510,28 @@ function buildBranchCandidate(meta, root, dir, plan) {
     r: featureCell.r + perp.r * widthLeft,
     c: featureCell.c + perp.c * widthLeft,
   };
+  add(featureCell.r, featureCell.c, 'branch_feature_anchor');
+  add(rewardCell.r, rewardCell.c, 'branch_reward_anchor');
+
+  const shape = plan.roomShape ?? 'rect';
+  const midDepth = plan.corridorLen + Math.max(2, Math.floor(plan.roomDepth * 0.55));
+  const backDepth = plan.corridorLen + Math.max(2, plan.roomDepth - 1);
+  if (shape === 'office') {
+    addOptional(root.r + dir.r * midDepth + perp.r * (widthRight + 1), root.c + dir.c * midDepth + perp.c * (widthRight + 1), 'branch_office_alcove');
+    addOptional(root.r + dir.r * midDepth + perp.r * (-widthLeft - 1), root.c + dir.c * midDepth + perp.c * (-widthLeft - 1), 'branch_office_alcove');
+    addOptional(root.r + dir.r * backDepth + perp.r * (widthRight + 1), root.c + dir.c * backDepth + perp.c * (widthRight + 1), 'branch_office_alcove');
+  } else if (shape === 'geode') {
+    addOptional(root.r + dir.r * midDepth + perp.r * (widthRight + 1), root.c + dir.c * midDepth + perp.c * (widthRight + 1), 'branch_geode_point');
+    addOptional(root.r + dir.r * backDepth, root.c + dir.c * backDepth, 'branch_geode_point');
+  } else if (shape === 'fractured') {
+    addOptional(root.r + dir.r * midDepth + perp.r * (widthRight + 1), root.c + dir.c * midDepth + perp.c * (widthRight + 1), 'branch_fracture');
+    addOptional(root.r + dir.r * (midDepth + 1) + perp.r * (-widthLeft - 1), root.c + dir.c * (midDepth + 1) + perp.c * (-widthLeft - 1), 'branch_fracture');
+  } else if (shape === 'cavern') {
+    addOptional(root.r + dir.r * midDepth + perp.r * (-widthLeft - 1), root.c + dir.c * midDepth + perp.c * (-widthLeft - 1), 'branch_cavern_pocket');
+  }
+
+  if (cells.length === 0) return null;
+  const entrance = cells[0];
 
   for (const cell of cells) {
     if (cell.r < 0 || cell.r >= getRows() || cell.c < 0 || cell.c >= getCols()) return null;
@@ -425,7 +594,12 @@ function estimatedBranchCells(plan) {
   const foyerDepth = Math.min(plan.corridorLen, plan.entryFoyerDepth ?? 3);
   const corridorCells = plan.corridorLen +
     (foyerHalfWidth > 0 ? Math.max(0, foyerDepth - 1) * 2 : 0);
-  return corridorCells + plan.roomDepth * plan.roomWidth;
+  const baseRoom = plan.roomDepth * plan.roomWidth;
+  const shape = plan.roomShape ?? 'rect';
+  const shapeAdjustment = shape === 'office'
+    ? 3
+    : (shape === 'geode' || shape === 'fractured' ? -2 : 0);
+  return corridorCells + Math.max(1, baseRoom + shapeAdjustment);
 }
 
 function branchDimensionPlans(plan) {
@@ -565,6 +739,7 @@ function setBranchWallIfReachable(branch, cell) {
   const gridCell = getGrid()[cell.r][cell.c];
   if (gridCell.type !== 'empty') return false;
   gridCell.type = 'wall';
+  gridCell.void = false;
   gridCell.goldValue = 0;
   gridCell.item = null;
   gridCell.chest = false;
@@ -574,8 +749,16 @@ function setBranchWallIfReachable(branch, cell) {
   gridCell.crystalGoldValue = 0;
   gridCell.crystalClueCount = 0;
   gridCell.crystalClueRadius = 0;
+  gridCell.bank = false;
+  gridCell.contractPayout = 0;
+  gridCell.contractDebt = 0;
+  gridCell.contractUsed = false;
+  gridCell.contractBoard = false;
+  gridCell.contractBoardUsed = false;
+  gridCell.contractChoices = null;
   if (!branchIsReachable(branch)) {
     gridCell.type = 'empty';
+    gridCell.void = false;
     return false;
   }
   if (!branch.wallCells) branch.wallCells = [];
@@ -588,6 +771,7 @@ function placeSpineGasIfReachable(meta, r, c) {
   if (spineIsReachable(meta)) return true;
   const cell = getGrid()[r][c];
   cell.type = 'empty';
+  cell.void = false;
   cell.adjacent = 0;
   return false;
 }
@@ -631,8 +815,10 @@ function addBranch(meta, plan) {
 
   if (!best) return null;
   const { candidate, root } = best;
+  const roomShape = candidate.plan.roomShape ?? 'rect';
   const region = createRegion(meta, plan.id, 'branch', {
     purpose: plan.purpose,
+    roomShape,
     targetRiskGates: plan.riskGates,
     featureCell: candidate.featureCell,
     root,
@@ -640,6 +826,7 @@ function addBranch(meta, plan) {
       corridorLen: candidate.plan.corridorLen,
       roomDepth: candidate.plan.roomDepth,
       roomWidth: candidate.plan.roomWidth,
+      roomShape,
     },
   });
   region.entrance = { r: candidate.entrance.r, c: candidate.entrance.c };
@@ -843,6 +1030,7 @@ function placeBranchGasIfReachable(meta, branch, cell) {
   if (!branchIsReachable(branch)) {
     const gridCell = getGrid()[cell.r][cell.c];
     gridCell.type = 'empty';
+    gridCell.void = false;
     gridCell.adjacent = 0;
     return false;
   }
@@ -899,6 +1087,7 @@ function placeGoldOnCell(r, c, amount, { chest = false, preview = false } = {}) 
   const cell = getGrid()[r][c];
   if (cell.type === 'gas' || cell.type === 'wall') return false;
   cell.type = 'gold';
+  cell.void = false;
   cell.goldValue = amount;
   cell.chest = chest;
   cell.preview = preview ? 'chest' : null;
@@ -908,6 +1097,13 @@ function placeGoldOnCell(r, c, amount, { chest = false, preview = false } = {}) 
   cell.crystalGoldValue = 0;
   cell.crystalClueCount = 0;
   cell.crystalClueRadius = 0;
+  cell.bank = false;
+  cell.contractPayout = 0;
+  cell.contractDebt = 0;
+  cell.contractUsed = false;
+  cell.contractBoard = false;
+  cell.contractBoardUsed = false;
+  cell.contractChoices = null;
   return true;
 }
 
@@ -1031,11 +1227,19 @@ function placeCrystalAt(meta, cell) {
   const gridCell = getGrid()[cell.r][cell.c];
   if (gridCell.type !== 'empty') return false;
   if (gridCell.item || gridCell.preview) return false;
+  gridCell.void = false;
   gridCell.crystal = true;
   gridCell.crystalUsed = false;
   gridCell.crystalGoldValue = meta.biome?.economy?.crystalGold ?? 0;
   gridCell.crystalClueCount = meta.biome?.generation?.crystalClueCount ?? 1;
   gridCell.crystalClueRadius = meta.biome?.generation?.crystalClueRadius ?? 1;
+  gridCell.bank = false;
+  gridCell.contractPayout = 0;
+  gridCell.contractDebt = 0;
+  gridCell.contractUsed = false;
+  gridCell.contractBoard = false;
+  gridCell.contractBoardUsed = false;
+  gridCell.contractChoices = null;
   if (Math.random() < (meta.biome?.generation?.crystalPreviewChance ?? 0)) {
     gridCell.preview = 'crystal';
   }
@@ -1074,6 +1278,82 @@ function placeBiomeCrystals(meta) {
   return placed;
 }
 
+function companyContractOffer(meta) {
+  const economy = {
+    ...(meta.biome?.generation ?? {}),
+    ...(meta.biome?.economy ?? {}),
+  };
+  const budgets = regionalGoldBudgetsForLevel(meta.level, economy);
+  const payout = Math.max(125, Math.round(budgets.feature * (economy.contractPayoutMultiplier ?? 1.5)));
+  const debt = Math.max(payout + 40, Math.round(payout * (economy.contractDebtMultiplier ?? 1.3)));
+  return { payout, debt };
+}
+
+function placeBankAt(meta, cell) {
+  const gridCell = getGrid()[cell.r][cell.c];
+  if (gridCell.type === 'gas' || gridCell.type === 'wall') return false;
+  const offer = companyContractOffer(meta);
+  gridCell.type = 'empty';
+  gridCell.void = false;
+  gridCell.goldValue = 0;
+  gridCell.item = null;
+  gridCell.chest = false;
+  gridCell.crystal = false;
+  gridCell.crystalUsed = false;
+  gridCell.crystalGoldValue = 0;
+  gridCell.crystalClueCount = 0;
+  gridCell.crystalClueRadius = 0;
+  gridCell.bank = true;
+  gridCell.contractPayout = offer.payout;
+  gridCell.contractDebt = offer.debt;
+  gridCell.contractUsed = false;
+  gridCell.contractBoard = false;
+  gridCell.contractBoardUsed = false;
+  gridCell.contractChoices = null;
+  gridCell.preview = 'bank';
+  if (!meta.bankCells) meta.bankCells = [];
+  meta.bankCells.push({ r: cell.r, c: cell.c, payout: offer.payout, debt: offer.debt });
+  return true;
+}
+
+function placeBiomeBanks(meta) {
+  const branch = meta.regions.find(region => region.purpose === 'bank');
+  if (!branch?.featureCell) return 0;
+  return placeBankAt(meta, branch.featureCell) ? 1 : 0;
+}
+
+function placeContractBoardAt(meta, cell) {
+  const gridCell = getGrid()[cell.r][cell.c];
+  if (gridCell.type === 'gas' || gridCell.type === 'wall') return false;
+  gridCell.type = 'empty';
+  gridCell.void = false;
+  gridCell.goldValue = 0;
+  gridCell.item = null;
+  gridCell.chest = false;
+  gridCell.crystal = false;
+  gridCell.crystalUsed = false;
+  gridCell.crystalGoldValue = 0;
+  gridCell.crystalClueCount = 0;
+  gridCell.crystalClueRadius = 0;
+  gridCell.bank = false;
+  gridCell.contractPayout = 0;
+  gridCell.contractDebt = 0;
+  gridCell.contractUsed = false;
+  gridCell.contractBoard = true;
+  gridCell.contractBoardUsed = false;
+  gridCell.contractChoices = null;
+  gridCell.preview = 'contract';
+  if (!meta.contractCells) meta.contractCells = [];
+  meta.contractCells.push({ r: cell.r, c: cell.c });
+  return true;
+}
+
+function placeBiomeContractBoards(meta) {
+  const branch = meta.regions.find(region => region.purpose === 'contract');
+  if (!branch?.featureCell) return 0;
+  return placeContractBoardAt(meta, branch.featureCell) ? 1 : 0;
+}
+
 function placeRegionalItemDrops(meta) {
   const dropCount = meta.requestedItemDrops ?? 0;
   if (dropCount <= 0) return;
@@ -1095,11 +1375,131 @@ function placeRegionalItemDrops(meta) {
     if (cell.type === 'gas' || cell.type === 'wall') continue;
     if (cell.crystal) continue;
     if (cell.item) continue;
+    cell.void = false;
     cell.item = randomItemType();
     cell.preview = 'item';
     placed++;
     if (placed >= dropCount) break;
   }
+}
+
+function layoutProfileForBiome(biome) {
+  return biome?.generation?.layoutProfile ?? 'coal';
+}
+
+function branchRoomShapeForPurpose(meta, purpose) {
+  const profile = meta.biome?.generation?.branchRoomProfile ?? layoutProfileForBiome(meta.biome);
+  if (profile === 'geode') {
+    if (purpose === 'gold' || purpose === 'joker' || purpose === 'item') return 'geode';
+    return 'cavern';
+  }
+  if (profile === 'office') return 'office';
+  if (profile === 'fractured') {
+    if (purpose === 'merchant' || purpose === 'bank' || purpose === 'contract') return 'office';
+    return Math.random() < 0.5 ? 'fractured' : 'geode';
+  }
+  if (profile === 'cavern') return purpose === 'gold' ? 'cavern' : 'rect';
+  return 'rect';
+}
+
+function spineWidthForProfile(rows, profile) {
+  if (profile === 'company') return rows <= 12 ? 2 : 3;
+  if (profile === 'crystal') return rows <= 12 ? 2 : (Math.random() < 0.55 ? 3 : 2);
+  if (profile === 'deep') return rows <= 12 ? 2 : (Math.random() < 0.45 ? 3 : 2);
+  return rows <= 12 ? 2 : (Math.random() < 0.35 ? 3 : 2);
+}
+
+function spineBendRadiusForProfile(rows, profile) {
+  if (profile === 'company' && rows >= 16) return 2;
+  if (profile === 'deep' && rows >= 18 && Math.random() < 0.35) return 2;
+  return 1;
+}
+
+function carveCanonicalProfileRoom(meta, region, tx, r0, c0, r1, c1, profile, genTag) {
+  carveCanonicalRect(meta, region, tx, r0, c0, r1, c1, genTag);
+
+  const midR = Math.floor((r0 + r1) / 2);
+  const midC = Math.floor((c0 + c1) / 2);
+  const outR = r0 <= 1 ? 1 : -1;
+  const outC = c0 <= 1 ? 1 : -1;
+  const edgeR = outR > 0 ? r1 + 1 : r0 - 1;
+  const edgeC = outC > 0 ? c1 + 1 : c0 - 1;
+
+  if (profile === 'crystal') {
+    carveCanonicalCell(meta, region, tx, edgeR, midC, `${genTag}_facet`);
+    carveCanonicalCell(meta, region, tx, midR, edgeC, `${genTag}_facet`);
+  } else if (profile === 'company') {
+    carveCanonicalRect(meta, region, tx, Math.min(r0, edgeR), c0, Math.max(r1, edgeR), c1, `${genTag}_bay`);
+    carveCanonicalCell(meta, region, tx, midR, edgeC, `${genTag}_bay`);
+  } else if (profile === 'deep') {
+    carveCanonicalCell(meta, region, tx, edgeR, midC, `${genTag}_fracture`);
+    carveCanonicalCell(meta, region, tx, edgeR, edgeC, `${genTag}_fracture`);
+  } else if (profile === 'coal') {
+    carveCanonicalCell(meta, region, tx, edgeR, midC, `${genTag}_pocket`);
+  }
+}
+
+function touchesRegionalCell(meta, r, c, radius = 1) {
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
+      if (meta.regionByCell.has(cellKey(r + dr, c + dc))) return true;
+    }
+  }
+  return false;
+}
+
+function shouldVoidWallCell(profile, r, c, rows, cols) {
+  const top = r;
+  const left = c;
+  const bottom = rows - 1 - r;
+  const right = cols - 1 - c;
+  const edge = Math.min(top, left, bottom, right);
+  const corner = Math.min(
+    top + left,
+    top + right,
+    bottom + left,
+    bottom + right,
+  );
+
+  if (profile === 'industrial' || profile === 'company') {
+    const inCornerCutout = (top <= 1 && left <= 3) ||
+      (top <= 2 && right <= 1) ||
+      (bottom <= 1 && right <= 4) ||
+      (bottom <= 2 && left <= 1);
+    return inCornerCutout || (edge === 0 && (r + c) % 7 === 0);
+  }
+
+  if (profile === 'faceted' || profile === 'crystal') {
+    return corner <= 5 || (edge <= 1 && (r * 2 + c) % 4 === 0);
+  }
+
+  if (profile === 'deep') {
+    return corner <= 7 || (edge <= 2 && (r + c * 2) % 3 === 0);
+  }
+
+  return corner <= 4 || (edge === 0 && (r + c) % 5 === 0);
+}
+
+function applyBiomeWallMask(meta) {
+  const profile = meta.biome?.generation?.wallMaskProfile ?? meta.layoutProfile ?? 'coal';
+  const rows = getRows();
+  const cols = getCols();
+  const voidCells = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = getGrid()[r][c];
+      if (cell.type !== 'wall') continue;
+      if (meta.regionByCell.has(cellKey(r, c))) continue;
+      if (touchesRegionalCell(meta, r, c, 1)) continue;
+      if (!shouldVoidWallCell(profile, r, c, rows, cols)) continue;
+      cell.void = true;
+      voidCells.push({ r, c });
+    }
+  }
+
+  meta.wallMaskProfile = profile;
+  meta.voidCells = voidCells;
 }
 
 function branchSizeBudget(rows, branchCount) {
@@ -1126,25 +1526,33 @@ function buildRegionalLayout(meta, features = {}) {
   const tx = makeCornerTransform(meta.start);
   const rows = getRows();
   const cols = getCols();
+  const layoutProfile = layoutProfileForBiome(meta.biome);
+  meta.layoutProfile = layoutProfile;
   const spine = createRegion(meta, 'spine_0', 'spine');
   const compact = rows <= 12;
   const plannedBranchCount = 1 +
     (features.merchant ? 1 : 0) +
+    (features.bank ? 1 : 0) +
+    (features.contract ? 1 : 0) +
     (features.fountain ? 1 : 0) +
     (features.itemDrop ? 1 : 0) +
     (features.joker ? 1 : 0);
   const route = chooseSpineWaypoints(rows, cols, {
     avoidDense: compact && plannedBranchCount >= 3,
+    profile: layoutProfile,
   });
   meta.layoutVariant = route.name;
 
-  carveCanonicalRect(meta, spine, tx, 0, 0, 2, 2, 'start_room');
-  carveCanonicalRect(meta, spine, tx, rows - 3, cols - 3, rows - 1, cols - 1, 'exit_room');
+  carveCanonicalProfileRoom(meta, spine, tx, 0, 0, 2, 2, layoutProfile, 'start_room');
+  carveCanonicalProfileRoom(meta, spine, tx, rows - 3, cols - 3, rows - 1, cols - 1, layoutProfile, 'exit_room');
 
-  const spineWidth = rows <= 12 ? 2 : (Math.random() < 0.35 ? 3 : 2);
+  const spineWidth = spineWidthForProfile(rows, layoutProfile);
+  const bendRadius = spineBendRadiusForProfile(rows, layoutProfile);
+  meta.spineWidth = spineWidth;
+  meta.spineBendRadius = bendRadius;
   for (let i = 1; i < route.points.length; i++) {
     carveCanonicalWideLine(meta, spine, tx, route.points[i - 1], route.points[i], spineWidth, 'spine_path');
-    carveCanonicalRect(meta, spine, tx, route.points[i].r - 1, route.points[i].c - 1, route.points[i].r + 1, route.points[i].c + 1, 'spine_bend');
+    carveCanonicalRect(meta, spine, tx, route.points[i].r - bendRadius, route.points[i].c - bendRadius, route.points[i].r + bendRadius, route.points[i].c + bendRadius, 'spine_bend');
   }
 
   const branchMax = branchSizeBudget(rows, plannedBranchCount);
@@ -1186,6 +1594,32 @@ function buildRegionalLayout(meta, features = {}) {
       riskGates: meta.level <= 4 ? 0 : 1,
     });
   }
+  if (features.bank) {
+    branchPlans.push({
+      id: 'bank_branch_0',
+      purpose: 'bank',
+      corridorLen: Math.min(compact ? 2 : randInt(2, 3), branchMax.corridorLen),
+      roomDepth: Math.min(compact ? 2 : 3, branchMax.roomDepth),
+      roomWidth: Math.min(compact ? 2 : 4, branchMax.roomWidth),
+      maxCorridorLen: branchMax.corridorLen,
+      maxRoomDepth: branchMax.roomDepth,
+      maxRoomWidth: branchMax.roomWidth,
+      riskGates: meta.level <= 4 ? 0 : 1,
+    });
+  }
+  if (features.contract) {
+    branchPlans.push({
+      id: 'contract_branch_0',
+      purpose: 'contract',
+      corridorLen: Math.min(compact ? 2 : randInt(2, 3), branchMax.corridorLen),
+      roomDepth: Math.min(compact ? 2 : 3, branchMax.roomDepth),
+      roomWidth: Math.min(compact ? 2 : 4, branchMax.roomWidth),
+      maxCorridorLen: branchMax.corridorLen,
+      maxRoomDepth: branchMax.roomDepth,
+      maxRoomWidth: branchMax.roomWidth,
+      riskGates: meta.level <= 4 ? 0 : 1,
+    });
+  }
   if (features.fountain) {
     branchPlans.push({
       id: 'fountain_branch_0',
@@ -1214,6 +1648,7 @@ function buildRegionalLayout(meta, features = {}) {
   }
 
   for (const plan of branchPlans) {
+    plan.roomShape = branchRoomShapeForPurpose(meta, plan.purpose);
     const branch = addBranch(meta, plan);
     if (!branch) meta.failedBranchPlans.push(plan.purpose);
   }
@@ -1369,6 +1804,8 @@ export function generateRegionalGrid({ level = 1, start, exit, features = {}, bi
     requestedItemDrops: plan.requestedItemDrops,
     activeFeatures: {
       merchant: !!regionalFeatures.merchant,
+      bank: !!regionalFeatures.bank,
+      contract: !!regionalFeatures.contract,
       fountain: !!regionalFeatures.fountain,
       joker: !!regionalFeatures.joker,
       itemDrop: !!regionalFeatures.itemDrop,
@@ -1382,7 +1819,10 @@ export function generateRegionalGrid({ level = 1, start, exit, features = {}, bi
   recomputeAllAdjacency();
   placeRegionalRewards(meta, level);
   placeBiomeCrystals(meta);
+  placeBiomeBanks(meta);
+  placeBiomeContractBoards(meta);
   placeRegionalItemDrops(meta);
+  applyBiomeWallMask(meta);
   meta.metrics = regionalMetrics(meta);
   return meta;
 }
@@ -1407,8 +1847,23 @@ export function cleanMerchantCell(r, c) {
   const cell = getGrid()[r][c];
   const hadGas = cell.type === 'gas';
   cell.type = 'empty';
+  cell.void = false;
   cell.goldValue = 0;
   cell.item = null;
+  cell.chest = false;
+  cell.preview = null;
+  cell.crystal = false;
+  cell.crystalUsed = false;
+  cell.crystalGoldValue = 0;
+  cell.crystalClueCount = 0;
+  cell.crystalClueRadius = 0;
+  cell.bank = false;
+  cell.contractPayout = 0;
+  cell.contractDebt = 0;
+  cell.contractUsed = false;
+  cell.contractBoard = false;
+  cell.contractBoardUsed = false;
+  cell.contractChoices = null;
   // Recompute the merchant cell's own adjacency (was 0 if it was gas/wall).
   cell.adjacent = countAdjacentGas(r, c);
   // If gas was removed, neighbors' adjacency counts also need recomputation.
@@ -1441,6 +1896,7 @@ export function carvePath(fromR, fromC, toR, toC) {
     const cell = getGrid()[r][c];
     if (cell.type === 'wall' || cell.type === 'gas') {
       cell.type = 'empty';
+      cell.void = false;
       cell.goldValue = 0;
       cell.item = null;
       cell.chest = false;
@@ -1450,6 +1906,13 @@ export function carvePath(fromR, fromC, toR, toC) {
       cell.crystalGoldValue = 0;
       cell.crystalClueCount = 0;
       cell.crystalClueRadius = 0;
+      cell.bank = false;
+      cell.contractPayout = 0;
+      cell.contractDebt = 0;
+      cell.contractUsed = false;
+      cell.contractBoard = false;
+      cell.contractBoardUsed = false;
+      cell.contractChoices = null;
     }
   }
   // Recompute adjacency for the whole grid (cheap at 12x12)

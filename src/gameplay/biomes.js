@@ -4,6 +4,7 @@
 
 export const COAL_SHAFTS_BIOME_ID = 'coal_shafts';
 export const CRYSTAL_VEINS_BIOME_ID = 'crystal_veins';
+export const COMPANY_DIG_SITE_BIOME_ID = 'company_dig_site';
 export const ENDLESS_DEEP_BIOME_ID = 'endless_deep';
 
 export const BIOMES = [
@@ -18,6 +19,9 @@ export const BIOMES = [
       className: 'biome-coal-shafts',
     },
     generation: {
+      layoutProfile: 'coal',
+      branchRoomProfile: 'cavern',
+      wallMaskProfile: 'rough',
       gasMultiplier: 1,
       spineGasMultiplier: 1,
       branchGasMultiplier: 1,
@@ -30,6 +34,8 @@ export const BIOMES = [
       fountainChance: 0.50,
       jokerChance: 0.33,
       itemDropChance: 0.50,
+      bankChance: 0.20,
+      contractChance: 0.10,
     },
     economy: {
       paymentMultiplier: 1,
@@ -50,6 +56,9 @@ export const BIOMES = [
       className: 'biome-crystal-veins',
     },
     generation: {
+      layoutProfile: 'crystal',
+      branchRoomProfile: 'geode',
+      wallMaskProfile: 'faceted',
       gasMultiplier: 1,
       spineGasMultiplier: 1,
       branchGasMultiplier: 1.30,
@@ -65,9 +74,11 @@ export const BIOMES = [
       fountainChance: 0.35,
       jokerChance: 0.40,
       itemDropChance: 0.60,
+      bankChance: 0.25,
+      contractChance: 0.25,
     },
     economy: {
-      paymentMultiplier: 1.15,
+      paymentMultiplier: 1.25,
       spineGoldMultiplier: 0.85,
       optionalGoldMultiplier: 1.25,
       featureGoldMultiplier: 1.15,
@@ -78,16 +89,58 @@ export const BIOMES = [
     },
   },
   {
+    id: COMPANY_DIG_SITE_BIOME_ID,
+    name: 'Company Dig Site',
+    shortName: 'Company',
+    levelStart: 31,
+    levelEnd: 45,
+    tagline: 'Company property, company prices.',
+    theme: {
+      className: 'biome-company-dig-site',
+    },
+    generation: {
+      layoutProfile: 'company',
+      branchRoomProfile: 'office',
+      wallMaskProfile: 'industrial',
+      gasMultiplier: 1.05,
+      spineGasMultiplier: 1.05,
+      branchGasMultiplier: 1.15,
+      goldMultiplier: 1,
+      branchCapacityBonus: 1,
+      crystalCells: 0,
+    },
+    features: {
+      merchantChance: 0.55,
+      fountainChance: 0.25,
+      jokerChance: 0.35,
+      itemDropChance: 0.45,
+      bankChance: 0.80,
+      contractChance: 0.75,
+    },
+    economy: {
+      paymentMultiplier: 1.45,
+      spineGoldMultiplier: 0.75,
+      optionalGoldMultiplier: 1.15,
+      featureGoldMultiplier: 1.25,
+      chestGoldMultiplier: 1.10,
+      contractPayoutMultiplier: 1.35,
+      contractDebtMultiplier: 1.35,
+    },
+  },
+  {
     id: ENDLESS_DEEP_BIOME_ID,
     name: 'Endless Deep',
     shortName: 'Deep',
-    levelStart: 31,
+    levelStart: 46,
     levelEnd: Infinity,
     tagline: 'Past the charted mine.',
     theme: {
       className: 'biome-endless-deep',
     },
     generation: {
+      layoutProfile: 'deep',
+      branchRoomProfile: 'fractured',
+      wallMaskProfile: 'deep',
       gasMultiplier: 1,
       spineGasMultiplier: 1,
       branchGasMultiplier: 1,
@@ -100,9 +153,11 @@ export const BIOMES = [
       fountainChance: 0.50,
       jokerChance: 0.33,
       itemDropChance: 0.50,
+      bankChance: 0.25,
+      contractChance: 0.25,
     },
     economy: {
-      paymentMultiplier: 1,
+      paymentMultiplier: 1.70,
       spineGoldMultiplier: 1,
       optionalGoldMultiplier: 1,
       featureGoldMultiplier: 1,

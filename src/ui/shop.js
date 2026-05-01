@@ -6,11 +6,11 @@ import { overlayContent } from './dom.js';
 import { showOverlay } from './overlay.js';
 import { attachTooltip, hideTooltip } from './tooltip.js';
 import {
-  getMerchant, getGold, getStashGold, hasArtifact, setActiveItem,
+  getMerchant, getGold, getStashGold, getHp, hasArtifact, setActiveItem,
 } from '../state.js';
 import { playSfx } from '../audio.js';
 import { updateItemBar } from './render.js';
-import { MERCHANT_DISCOUNT_PERCENT, merchantArtifactPrice } from '../gameplay/artifacts.js';
+import { CLUTCH_COUPON_PERCENT, MERCHANT_DISCOUNT_PERCENT, merchantArtifactPrice } from '../gameplay/artifacts.js';
 
 let hooks = {
   onBuy: () => {},
@@ -43,6 +43,7 @@ export function showShopOverlay(playWelcome = false) {
 
   const totalGold = getGold() + getStashGold();
   const hasCoupon = hasArtifact('merchant_discount');
+  const clutchCouponActive = hasArtifact('clutch_coupon') && getHp() <= 1;
 
   const slotsHtml = getMerchant().stock.map((slot, idx) => {
     const price = merchantArtifactPrice(slot.price);
@@ -69,9 +70,10 @@ export function showShopOverlay(playWelcome = false) {
     } else {
       priceHtml = `<div class="shop-slot-price">${price}g</div>`;
     }
-    const couponHtml = artifactDiscounted
-      ? `<div class="shop-coupon-chip">Coupon -${MERCHANT_DISCOUNT_PERCENT}%</div>`
-      : '';
+    const discountChips = [];
+    if (artifactDiscounted && hasCoupon) discountChips.push(`Coupon -${MERCHANT_DISCOUNT_PERCENT}%`);
+    if (artifactDiscounted && clutchCouponActive) discountChips.push(`Clutch -${CLUTCH_COUPON_PERCENT}%`);
+    const couponHtml = discountChips.map(chip => `<div class="shop-coupon-chip">${chip}</div>`).join('');
 
     return `
       <div class="shop-slot ${slot.sold ? 'sold' : ''}">
@@ -96,6 +98,7 @@ export function showShopOverlay(playWelcome = false) {
     <h2>🧙 Merchant</h2>
     <p>💰 Gold: ${getGold()} · Stash: ${getStashGold()}</p>
     ${hasCoupon ? `<p class="shop-coupon-note">🏷️ Counterfeit Coupon: -${MERCHANT_DISCOUNT_PERCENT}% after slot discounts</p>` : ''}
+    ${clutchCouponActive ? `<p class="shop-coupon-note">🧷 Clutch Coupon: -${CLUTCH_COUPON_PERCENT}% at 1 HP</p>` : ''}
     ${freeRerollNote}
     <div class="shop-slots">${slotsHtml}</div>
     <div class="shop-actions">

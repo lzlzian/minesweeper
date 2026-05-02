@@ -6,6 +6,7 @@ export const board = document.getElementById('board');
 export const gridContainer = document.getElementById('grid-container');
 export const goldDisplay = document.getElementById('gold-display');
 export const quotaDisplay = document.getElementById('quota-display');
+export const contractDisplay = document.getElementById('contract-display');
 export const biomeDisplay = document.getElementById('biome-display');
 export const artifactDisplay = document.getElementById('artifact-display');
 export const hpDisplay = document.getElementById('hp-display');

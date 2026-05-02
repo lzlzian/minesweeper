@@ -1,7 +1,7 @@
 import { resumeAudioCtx, setMusicOn as setAudioMusicOn, setSfxOn as setSfxOnAudio } from './audio.js';
 import { settings } from './settings.js';
-import { pauseBtn } from './ui/dom.js';
-import { renderStartMenu, renderPauseMenu } from './ui/overlay.js';
+import { contractDisplay, pauseBtn } from './ui/dom.js';
+import { renderStartMenu, renderPauseMenu, showOpenContractsOverlay } from './ui/overlay.js';
 import { initShop } from './ui/shop.js';
 import { initPointer } from './ui/pointer.js';
 import { devTeleportToLevel, saveRun } from './gameplay/level.js';
@@ -45,6 +45,7 @@ initPointer({
 });
 
 pauseBtn.addEventListener('click', renderPauseMenu);
+contractDisplay?.addEventListener('click', () => showOpenContractsOverlay());
 
 function cheatLevelParam() {
   try {

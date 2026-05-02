@@ -248,6 +248,22 @@ function clonePlain(value) {
   return value == null ? null : structuredClone(value);
 }
 
+function serializableGenMeta(meta = getState().genMeta) {
+  if (!meta) return null;
+  return {
+    layoutProfile: meta.layoutProfile,
+    layoutVariant: meta.layoutVariant,
+    regions: (meta.regions ?? []).map(region => ({
+      id: region.id,
+      kind: region.kind,
+      purpose: region.purpose,
+      cells: (region.cells ?? []).map(cell => ({ r: cell.r, c: cell.c })),
+      entrance: region.entrance ? { r: region.entrance.r, c: region.entrance.c } : null,
+      featureCell: region.featureCell ? { r: region.featureCell.r, c: region.featureCell.c } : null,
+    })),
+  };
+}
+
 function captureGeneratedCandidate({ genMeta, solveRes, regionalCheck, min, max, reason }) {
   const rewardRevealed = regionalCheck?.issues?.some(issue => issue.includes('reward revealed'));
   if (rewardRevealed) return null;
@@ -323,6 +339,7 @@ export function captureSavedLevelState() {
     merchant: clonePlain(getMerchant()),
     fountain: clonePlain(getFountain()),
     joker: clonePlain(getJoker()),
+    genMeta: serializableGenMeta(),
     startCornerIdx: getStartCornerIdx(),
     biomeId: getBiomeId(),
     biomeOverrides: clonePlain(getBiomeOverrides()),
@@ -349,7 +366,7 @@ export function restoreSavedLevelState(levelState) {
   setMerchant(clonePlain(levelState.merchant));
   setFountain(clonePlain(levelState.fountain));
   setJoker(clonePlain(levelState.joker));
-  setGenMeta(null);
+  setGenMeta(clonePlain(levelState.genMeta));
   setStartCornerIdx(levelState.startCornerIdx ?? 0);
   setBiomeId(levelState.biomeId ?? getBiomeId() ?? biomeForLevel(getLevel()).id);
   setBiomeOverrides(clonePlain(levelState.biomeOverrides));

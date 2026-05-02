@@ -6,7 +6,7 @@ import {
   startGame, resumeGame, nextLevel,
   saveRun, loadRun,
 } from '../gameplay/level.js';
-import { getDebtCushionUsed, getGold, getPaymentDebt, getRulesetId, getStashGold, hasArtifact } from '../state.js';
+import { getDebtCushionUsed, getGold, getOpenContracts, getPaymentDebt, getRulesetId, getStashGold, hasArtifact } from '../state.js';
 import { getLeaderboard, recordRun } from '../gameplay/leaderboard.js';
 import { isFinalRunLevel, paymentAmountForLevel } from '../gameplay/quota.js';
 import { DEBT_CUSHION_GOLD, PAYMENT_DISCOUNT_PERCENT, artifactPaymentAmount, artifactRarityLabel } from '../gameplay/artifacts.js';
@@ -187,22 +187,45 @@ export function showBankOverlay({ offer, pawnItems = [] } = {}, onTakeLoan, onSe
     }));
 }
 
-export function showContractBoardOverlay({ choices = [], activeContract = null } = {}, onChoose, onLeave) {
-  const activeProgress = activeContract
-    ? `${activeContract.clearedLevels ?? 0}/${activeContract.requiredClears ?? 2} clears`
-    : '';
+function contractExpiryText(contract) {
+  const remaining = Math.max(0, contract?.levelsRemaining ?? contract?.expiresAfter ?? 0);
+  return `${remaining} clear${remaining === 1 ? '' : 's'} left`;
+}
+
+function contractRiskText(contract) {
+  const risks = [];
+  if (contract?.failOnTriggeredGas) risks.push('gas fails');
+  if (contract?.failOnItemsUsed) risks.push('items fail');
+  if (contract?.failOnWrongFlags) risks.push('wrong flags fail');
+  if (!risks.length) risks.push('expires if unfinished');
+  return risks.join(' · ');
+}
+
+function openContractsHtml(contracts = []) {
+  if (!contracts.length) {
+    return '<p class="contract-offer-fineprint">No open contracts.</p>';
+  }
+  return `
+    <div class="open-contract-list">
+      ${contracts.map(contract => `
+        <div class="open-contract-row">
+          <span class="contract-choice-icon" aria-hidden="true">${escapeHtml(contract.icon)}</span>
+          <span class="contract-choice-body">
+            <strong>${escapeHtml(contract.name)} · ${contractExpiryText(contract)} · win ${contract.payout}g</strong>
+            <span>${escapeHtml(contract.desc)}</span>
+            <span>Buy-in paid: ${contract.cost ?? 0}g · ${escapeHtml(contractRiskText(contract))}</span>
+          </span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+export function showContractBoardOverlay({ choices = [], openContracts = [] } = {}, onChoose, onLeave) {
   const availableGold = getGold() + getStashGold();
-  const bodyHtml = activeContract
+  const choicesHtml = choices.length
     ? `
-      <p><strong>${escapeHtml(activeContract.icon)} ${escapeHtml(activeContract.name)}</strong></p>
-      <p>${escapeHtml(activeContract.desc)}</p>
-      <p>Progress: ${escapeHtml(activeProgress)}</p>
-      <p>Buy-in paid: 💰 ${activeContract.cost ?? 0}</p>
-      <p>Reward on success: 💰 ${activeContract.payout}</p>
-      <p class="contract-offer-fineprint">Only one contract can be active at a time.</p>
-    `
-    : `
-      <p class="contract-offer-fineprint">Pay a buy-in now. It pays after two successful clears.</p>
+      <p class="contract-offer-fineprint">Pay the buy-in now. Open contracts stay live until completed, failed, or expired.</p>
       <div class="contract-choice-list">
         ${choices.map(choice => {
           const canAfford = availableGold >= (choice.cost ?? 0);
@@ -212,18 +235,21 @@ export function showContractBoardOverlay({ choices = [], activeContract = null }
             <span class="contract-choice-body">
               <strong>${escapeHtml(choice.name)} · pay ${choice.cost ?? 0}g · win ${choice.payout}g</strong>
               <span>${escapeHtml(choice.desc)}</span>
+              <span>${contractExpiryText(choice)} · ${escapeHtml(contractRiskText(choice))}</span>
               ${canAfford ? '' : '<span>Not enough gold.</span>'}
             </span>
           </button>
         `;
         }).join('')}
-      </div>
-    `;
+      </div>`
+    : '<p class="contract-offer-fineprint">This board has already been filed.</p>';
   showOverlay(`
     <div class="contract-offer" role="dialog" aria-labelledby="contract-board-title">
       <div class="artifact-found-kicker">Contract board</div>
-      <h2 id="contract-board-title">${activeContract ? 'Active Contract' : 'Pick a Contract'}</h2>
-      ${bodyHtml}
+      <h2 id="contract-board-title">Pick a Contract</h2>
+      ${choicesHtml}
+      <h3>Open Contracts</h3>
+      ${openContractsHtml(openContracts)}
       <button class="menu-btn-secondary" data-act="leave-contract">Leave</button>
     </div>
   `);
@@ -241,13 +267,30 @@ export function showContractBoardOverlay({ choices = [], activeContract = null }
     }));
 }
 
+export function showOpenContractsOverlay(contracts = getOpenContracts(), onLeave) {
+  showOverlay(`
+    <div class="contract-offer" role="dialog" aria-labelledby="open-contracts-title">
+      <div class="artifact-found-kicker">Open paperwork</div>
+      <h2 id="open-contracts-title">Open Contracts</h2>
+      ${openContractsHtml(contracts)}
+      <p class="contract-offer-fineprint">Contracts are scored only when you clear a level.</p>
+      <button class="menu-btn-primary" data-act="close-contracts">Close</button>
+    </div>
+  `);
+  overlayContent.querySelector('[data-act="close-contracts"]')
+    ?.addEventListener('click', menuClick(() => {
+      hideOverlay();
+      onLeave?.();
+    }));
+}
+
 export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {}) {
   const dividend = effects?.dividend ?? null;
   const danger = effects?.danger ?? null;
   const cleanTools = effects?.cleanTools ?? null;
   const bounty = effects?.bounty ?? null;
   const heal = effects?.heal ?? null;
-  const contract = effects?.contract ?? null;
+  const contracts = effects?.contracts ?? (effects?.contract ? [effects.contract] : []);
   const basePaymentDue = paymentAmountForLevel(level, biomeForLevel(level).economy);
   const debtDue = basePaymentDue > 0 ? getPaymentDebt(level) : 0;
   const rawPaymentDue = basePaymentDue + debtDue;
@@ -295,20 +338,21 @@ export function showEscapedOverlay(level, gold, stashGold, nextSize, effects = {
   const healHtml = heal
     ? `<p class="artifact-result artifact-result-positive">💗 Safety Dividend: +${heal.amount} HP</p>`
     : '';
-  let contractHtml = '';
-  if (contract?.status === 'progress') {
-    contractHtml = `
-      <p class="artifact-result artifact-result-positive">
-        📋 Contract progress: ${escapeHtml(contract.contract.name)} ${contract.clearedLevels}/${contract.requiredClears}
-      </p>
-    `;
-  } else if (contract) {
-    contractHtml = `
+  const contractHtml = contracts.map(contract => {
+    if (contract.status === 'progress') {
+      return `
+        <p class="artifact-result artifact-result-positive">
+          📋 Contract open: ${escapeHtml(contract.contract.name)} · ${contract.levelsRemaining} clear${contract.levelsRemaining === 1 ? '' : 's'} left
+        </p>
+      `;
+    }
+    const failedLabel = contract.reason === 'expired' ? 'Contract expired' : 'Contract failed';
+    return `
       <p class="artifact-result ${contract.success ? 'artifact-result-positive' : 'artifact-result-negative'}">
-        📋 ${contract.success ? 'Contract complete' : 'Contract failed'}: ${escapeHtml(contract.contract.name)}${contract.success ? ` +${contract.payout}g` : ''}
+        📋 ${contract.success ? 'Contract complete' : failedLabel}: ${escapeHtml(contract.contract.name)}${contract.success ? ` +${contract.payout}g` : ''}
       </p>
     `;
-  }
+  }).join('');
   const isFinal = isFinalRunLevel(level);
   const buttonText = isFinal
     ? (paymentDue > 0 ? 'Pay and Finish' : 'Finish Run')
@@ -551,7 +595,7 @@ export function renderRules(parent) {
     <p>Gold (💰) is optional, but you will need enough to make payments. Revealed loose gold is collected automatically; step onto chests to claim them.</p>
     <p>A 🧙 merchant sometimes appears — spend gold for items at varying discounts.</p>
     <p>🏦 Banks offer loans that come due after the next checkpoint, plus a pawn shop for selling items.</p>
-    <p>📋 Contract boards offer optional two-level goals that pay after two successful clears.</p>
+    <p>📋 Contract boards sell optional open contracts. Buy-ins are paid up front; contracts resolve when you clear a level, and unfinished contracts can expire.</p>
     <p>💧 A <strong>Health Fountain</strong> sometimes appears — step on it to heal to full. Single use.</p>
     <button class="menu-btn-primary" data-act="back">Back</button>
   `);

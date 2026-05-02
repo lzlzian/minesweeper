@@ -22,10 +22,10 @@ import {
   resetForNewRun, getSavePayload, applySavePayload,
   getLevel, getHp, getItems, getStashGold, getRunGoldEarned, getRulesetId,
   getDebtCushionUsed, getMaxHp, getArtifacts, getGold, getHazardPayClaimed, getBiomeId, getPaymentDebt,
-  getActiveContract, getJoker, getLevelStats,
+  getActiveContract, getOpenContracts, getJoker, getLevelStats,
   setLevel, damagePlayer, addGold, moveGoldToStash, consumeItem, setMerchant,
   setHazardPayClaimed, setExit, setGameOver, setBiomeId, addPaymentDebt, clearPaymentDebt,
-  setActiveContract, setJoker, resetLevelArtifactState,
+  setActiveContract, setJoker, setGenMeta, resetLevelArtifactState,
   recordLevelGasTriggered, recordLevelItemUsed, recordLevelChestOpened,
 } from '../src/state.js';
 import {
@@ -86,6 +86,7 @@ import {
 import {
   acceptContract,
   CONTRACT_BUY_IN_RATE,
+  CONTRACT_EXPIRES_AFTER,
   randomContractChoices,
   settleActiveContract,
 } from '../src/gameplay/contracts.js';
@@ -1078,7 +1079,7 @@ test('Pawn Ticket improves pawnshop payouts', () => {
   assertEq(getItems().potion, 0);
 });
 
-test('contract board offers and accepts a two-clear contract', () => {
+test('contract board offers and accepts an open expiring contract', () => {
   resetForNewRun();
   setRows(2); setCols(2);
   setPlayerPosition(0, 0);
@@ -1098,7 +1099,8 @@ test('contract board offers and accepts a two-clear contract', () => {
   choice.click();
 
   if (!getActiveContract()) throw new Error('expected accepted contract');
-  assertEq(getActiveContract().requiredClears, 2);
+  assertEq(getOpenContracts().length, 1);
+  assertEq(getActiveContract().levelsRemaining, CONTRACT_EXPIRES_AFTER);
   if (getActiveContract().cost <= 0) throw new Error('expected contract buy-in cost');
   assertEq(getGold(), 1000 - getActiveContract().cost);
   assertEq(getGrid()[0][0].contractBoardUsed, true);
@@ -1128,7 +1130,7 @@ test('Long Form Contract adds a fourth contract board choice', () => {
   assertEq(choices.length, 4);
 });
 
-test('contract buy-ins require loose gold and scale with level', () => {
+test('contract buy-ins require available gold and scale with level', () => {
   resetForNewRun();
   assertEq(CONTRACT_BUY_IN_RATE, 0.40);
   setRows(2); setCols(2);
@@ -1139,9 +1141,9 @@ test('contract buy-ins require loose gold and scale with level', () => {
   setFlagged(emptyGrid(2, 2));
 
   setLevel(1);
-  const early = randomContractChoices(4).find(choice => choice.id === 'clean_exit');
+  const early = randomContractChoices(10).find(choice => choice.id === 'clean_exit');
   setLevel(20);
-  const late = randomContractChoices(4).find(choice => choice.id === 'clean_exit');
+  const late = randomContractChoices(10).find(choice => choice.id === 'clean_exit');
   if (!early || !late) throw new Error('expected clean exit choices');
   if (late.payout <= early.payout) throw new Error('expected contract reward to scale up');
   if (late.cost <= early.cost) throw new Error('expected contract buy-in to scale up');
@@ -1157,7 +1159,35 @@ test('contract buy-ins require loose gold and scale with level', () => {
   assertEq(getActiveContract().cost, 50);
 });
 
-test('clean exit contract pays after two clean clears', () => {
+test('multiple open contracts can be carried at once', () => {
+  resetForNewRun();
+  addGold(200);
+  const first = acceptContract({
+    id: 'clean_exit',
+    goal: 'clean_clear',
+    icon: '🧼',
+    name: 'Safety Record',
+    desc: 'Clear without gas.',
+    payout: 90,
+    cost: 20,
+    failOnTriggeredGas: true,
+  });
+  const second = acceptContract({
+    id: 'tool_embargo',
+    goal: 'tool_embargo',
+    icon: '🧰',
+    name: 'Tool Embargo',
+    desc: 'Clear without items.',
+    payout: 80,
+    cost: 25,
+    failOnItemsUsed: true,
+  });
+  if (!first || !second) throw new Error('expected both contracts to be accepted');
+  assertEq(getOpenContracts().length, 2);
+  assertEq(getGold(), 155);
+});
+
+test('clean exit contract resolves after one clean level or fails on gas', () => {
   resetForNewRun();
   setRows(1); setCols(1);
   setGrid(makeEmptyGrid(1, 1));
@@ -1170,15 +1200,9 @@ test('clean exit contract pays after two clean clears', () => {
     name: 'Clean Exit',
     desc: 'Clear without gas.',
     payout: 90,
+    failOnTriggeredGas: true,
   });
   let result = settleActiveContract();
-  assertEq(result.status, 'progress');
-  assertEq(result.clearedLevels, 1);
-  assertEq(getGold(), 0);
-  if (!getActiveContract()) throw new Error('expected clean exit contract to remain active');
-
-  resetLevelArtifactState();
-  result = settleActiveContract();
   assertEq(result.status, 'complete');
   assertEq(result.success, true);
   assertEq(getGold(), 90);
@@ -1195,6 +1219,7 @@ test('clean exit contract pays after two clean clears', () => {
     name: 'Clean Exit',
     desc: 'Clear without gas.',
     payout: 90,
+    failOnTriggeredGas: true,
   });
   recordLevelGasTriggered();
   result = settleActiveContract();
@@ -1204,7 +1229,7 @@ test('clean exit contract pays after two clean clears', () => {
   assertEq(getActiveContract(), null);
 });
 
-test('flag quota contract counts new correct gas flags across two clears', () => {
+test('precision quota contract scores end-level correct and wrong flags', () => {
   resetForNewRun();
   setRows(2); setCols(2);
   const g = makeEmptyGrid(2, 2);
@@ -1218,35 +1243,83 @@ test('flag quota contract counts new correct gas flags across two clears', () =>
   ]);
 
   acceptContract({
-    id: 'flag_quota',
+    id: 'precision_quota',
+    goal: 'flag_precision',
     icon: '🚩',
-    name: 'Flag Quota',
-    desc: 'Add two new correct gas flags.',
+    name: 'Precision Quota',
+    desc: 'Add one new correct gas flag.',
     payout: 75,
-    target: 2,
+    target: 1,
+    maxWrongFlags: 1,
+    failOnWrongFlags: true,
   });
   getFlagged()[1][0] = true;
   let result = settleActiveContract();
-  assertEq(result.status, 'progress');
-  assertEq(result.success, null);
-  assertEq(getGold(), 0);
-
-  resetLevelArtifactState();
-  const g2 = makeEmptyGrid(2, 2);
-  g2[0][1].type = 'gas';
-  setGrid(g2);
-  setRevealed(emptyGrid(2, 2));
-  setFlagged([
-    [false, true],
-    [false, false],
-  ]);
-  result = settleActiveContract();
   assertEq(result.status, 'complete');
   assertEq(result.success, true);
   assertEq(getGold(), 75);
+
+  resetForNewRun();
+  setRows(2); setCols(2);
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged(emptyGrid(2, 2));
+  acceptContract({
+    id: 'precision_quota',
+    goal: 'flag_precision',
+    icon: '🚩',
+    name: 'Precision Quota',
+    desc: 'Wrong flags fail.',
+    payout: 75,
+    target: 1,
+    maxWrongFlags: 0,
+    failOnWrongFlags: true,
+  });
+  getFlagged()[0][0] = true;
+  getFlagged()[0][1] = true;
+  result = settleActiveContract();
+  assertEq(result.status, 'failed');
+  assertEq(result.reason, 'wrong_flags');
+  assertEq(getGold(), 0);
 });
 
-test('chest audit contract uses chests opened after acceptance', () => {
+test('branch audit contract counts flags inside branch regions only', () => {
+  resetForNewRun();
+  setRows(2); setCols(2);
+  const g = makeEmptyGrid(2, 2);
+  g[0][0].type = 'gas';
+  g[1][1].type = 'gas';
+  setGrid(g);
+  setRevealed(emptyGrid(2, 2));
+  setFlagged(emptyGrid(2, 2));
+  setGenMeta({
+    regions: [
+      { id: 'spine', kind: 'spine', cells: [{ r: 0, c: 0 }] },
+      { id: 'branch', kind: 'branch', cells: [{ r: 1, c: 1 }] },
+    ],
+  });
+  acceptContract({
+    id: 'branch_audit',
+    goal: 'branch_flags',
+    icon: '📋',
+    name: 'Branch Audit',
+    desc: 'Flag branch gas.',
+    payout: 120,
+    target: 1,
+  });
+  getFlagged()[0][0] = true;
+  let result = settleActiveContract();
+  assertEq(result.status, 'progress');
+  assertEq(getOpenContracts().length, 1);
+  resetLevelArtifactState();
+  setFlagged(emptyGrid(2, 2));
+  getFlagged()[1][1] = true;
+  result = settleActiveContract();
+  assertEq(result.status, 'complete');
+  assertEq(getGold(), 120);
+});
+
+test('chest audit contract uses chests opened after acceptance and can expire', () => {
   resetForNewRun();
   setRows(1); setCols(1);
   setGrid(makeEmptyGrid(1, 1));
@@ -1260,6 +1333,7 @@ test('chest audit contract uses chests opened after acceptance', () => {
     desc: 'Open two chests.',
     payout: 120,
     target: 2,
+    expiresAfter: 2,
   });
   recordLevelChestOpened();
   let result = settleActiveContract();
@@ -1269,10 +1343,31 @@ test('chest audit contract uses chests opened after acceptance', () => {
 
   resetLevelArtifactState();
   recordLevelChestOpened();
+  recordLevelChestOpened();
   result = settleActiveContract();
   assertEq(result.status, 'complete');
   assertEq(result.success, true);
   assertEq(getGold(), 120);
+
+  resetForNewRun();
+  setRows(1); setCols(1);
+  setGrid(makeEmptyGrid(1, 1));
+  setRevealed([[true]]);
+  setFlagged([[false]]);
+  acceptContract({
+    id: 'chest_quota',
+    goal: 'chests',
+    icon: '🎁',
+    name: 'Chest Audit',
+    desc: 'Open chests.',
+    payout: 120,
+    target: 1,
+    expiresAfter: 1,
+  });
+  result = settleActiveContract();
+  assertEq(result.status, 'failed');
+  assertEq(result.reason, 'expired');
+  assertEq(getOpenContracts().length, 0);
 });
 
 // -- merchant --
@@ -1556,7 +1651,9 @@ test('Crystal Veins budgets and generation add greed/info flavor', () => {
 test('Company Dig Site generation adds bank branch and loan offer', () => {
   const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
   assertEq(regionalGoldBudgetsForLevel(31, company.economy).spine < regionalGoldBudgetsForLevel(31).spine, true);
-  assertEq(regionalGoldBudgetsForLevel(31, company.economy).feature > regionalGoldBudgetsForLevel(31).feature, true);
+  assertEq(regionalGoldBudgetsForLevel(31, company.economy).optional < regionalGoldBudgetsForLevel(31).optional, true);
+  assertEq(company.features.contractChance, 1);
+  assertEq(company.economy.contractRewardMultiplier, 1.35);
 
   resetForNewRun();
   setRows(20); setCols(20);

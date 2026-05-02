@@ -366,6 +366,18 @@ body[data-biome="endless_deep"] {
   line-height: 1;
 }
 
+#hud .contract-display {
+  background: var(--cell-contract);
+  border-color: var(--quota-border);
+  color: var(--quota-text);
+  cursor: pointer;
+}
+
+#hud .contract-display:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
 #artifact-display {
   display: inline-flex;
   align-items: center;
@@ -1317,6 +1329,24 @@ body[data-biome="endless_deep"] .cell.wall::before {
   margin: 0.9rem 0;
 }
 
+.open-contract-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+  text-align: left;
+}
+
+.open-contract-row {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.7rem;
+  border: 1px solid var(--hud-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
 #overlay-content .contract-choice {
   display: grid;
   grid-template-columns: 2.5rem 1fr;
@@ -1433,7 +1463,8 @@ body[data-biome="endless_deep"] .cell.wall::before {
   background: #1f2d52;
 }
 
-body:not(.in-run) #pause-btn {
+body:not(.in-run) #pause-btn,
+body:not(.in-run) #contract-display {
   display: none;
 }
 

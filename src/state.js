@@ -36,6 +36,7 @@ const state = {
   debtCushionUsed: false,
   paymentDebts: {},
   activeContract: null,
+  openContracts: [],
   levelStats: {
     triggeredGas: 0,
     itemsUsed: 0,
@@ -84,7 +85,8 @@ export function getPaymentDebt(level = null) {
   return Object.values(state.paymentDebts).reduce((sum, amount) => sum + amount, 0);
 }
 export function getPaymentDebts() { return { ...state.paymentDebts }; }
-export function getActiveContract() { return state.activeContract; }
+export function getActiveContract() { return state.openContracts[0] ?? state.activeContract; }
+export function getOpenContracts() { return state.openContracts; }
 export function getLevelStats() { return { ...state.levelStats }; }
 export function getRulesetId() { return state.rulesetId; }
 export function getBiomeId() { return state.biomeId; }
@@ -184,8 +186,18 @@ export function clearPaymentDebt(level = null) {
   }
   delete state.paymentDebts[String(level)];
 }
-export function setActiveContract(contract) { state.activeContract = contract; }
-export function clearActiveContract() { state.activeContract = null; }
+export function setActiveContract(contract) {
+  state.activeContract = contract;
+  state.openContracts = contract ? [contract] : [];
+}
+export function clearActiveContract() {
+  state.activeContract = null;
+  state.openContracts = [];
+}
+export function setOpenContracts(contracts) {
+  state.openContracts = Array.isArray(contracts) ? contracts : [];
+  state.activeContract = state.openContracts[0] ?? null;
+}
 export function setLevel(n) { state.level = n; }
 export function incrementLevel() { state.level++; }
 export function setRows(n) { state.rows = n; }
@@ -215,6 +227,7 @@ export function resetForNewRun() {
   state.debtCushionUsed = false;
   state.paymentDebts = {};
   state.activeContract = null;
+  state.openContracts = [];
   state.levelStats = { triggeredGas: 0, itemsUsed: 0, chestsOpened: 0 };
   state.rulesetId = null;
   state.biomeId = null;
@@ -241,7 +254,8 @@ export function getSavePayload(extra = {}) {
     hazardPayClaimed: state.hazardPayClaimed,
     debtCushionUsed: state.debtCushionUsed,
     paymentDebts: { ...state.paymentDebts },
-    activeContract: state.activeContract ? structuredClone(state.activeContract) : null,
+    activeContract: state.openContracts[0] ? structuredClone(state.openContracts[0]) : null,
+    openContracts: structuredClone(state.openContracts),
     levelStats: { ...state.levelStats },
     items: { ...state.items },
     levelsSinceMerchant: state.levelsSinceMerchant,
@@ -266,7 +280,8 @@ export function applySavePayload(save) {
   if (save.paymentDebt) {
     state.paymentDebts[String(save.level ?? 1)] = Math.max(0, Math.round(save.paymentDebt));
   }
-  state.activeContract = save.activeContract ? structuredClone(save.activeContract) : null;
+  state.openContracts = structuredClone(save.openContracts ?? (save.activeContract ? [save.activeContract] : []));
+  state.activeContract = state.openContracts[0] ?? null;
   state.levelStats = {
     triggeredGas: save.levelStats?.triggeredGas ?? 0,
     itemsUsed: save.levelStats?.itemsUsed ?? 0,

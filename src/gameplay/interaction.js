@@ -4,7 +4,7 @@ import {
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGameOver, getBusy, getHp, getGold, getStashGold, getLevel,
   getActiveItem, getRulesetId, getRunGoldEarned, getMaxHp, getItemCount, hasArtifact,
-  getActiveContract,
+  getOpenContracts,
   setPlayerPosition, setRevealed, setFlagged, setGameOver, setBusy,
   setFountain, setJoker, setActiveItem,
   addGold, addItem, addPaymentDebt, consumeItem, damagePlayer, fullHeal, spendGold,
@@ -33,7 +33,7 @@ import {
 } from './artifacts.js';
 import { recordRun } from './leaderboard.js';
 import { clearSavedRun } from './runSave.js';
-import { acceptContract, randomContractChoices, settleActiveContract } from './contracts.js';
+import { acceptContract, randomContractChoices, settleOpenContracts } from './contracts.js';
 import { playSfx } from '../audio.js';
 import { findPath } from '../board/layout.js';
 import { countAdjacentGas } from '../board/generation.js';
@@ -323,21 +323,20 @@ function openContractBoardAt(r, c) {
   if (r !== getPlayerRow() || c !== getPlayerCol()) return false;
   cell.preview = null;
 
-  const activeContract = getActiveContract();
-  if (!activeContract && !cell.contractChoices?.length && !cell.contractBoardUsed) {
+  if (!cell.contractChoices?.length && !cell.contractBoardUsed) {
     cell.contractChoices = randomContractChoices(artifactContractChoiceCount(3));
   }
 
   playSfx('pen_scratch');
   showContractBoardOverlay({
     choices: cell.contractChoices ?? [],
-    activeContract,
+    openContracts: getOpenContracts(),
   }, contract => {
     const accepted = acceptContract(contract);
     if (!accepted) return;
     cell.contractBoardUsed = true;
     cell.contractChoices = [];
-    spawnPickupFloat(r, c, `📋 -${accepted.cost}g · 0/${accepted.requiredClears}`, 'float-info');
+    spawnPickupFloat(r, c, `📋 -${accepted.cost}g · ${accepted.levelsRemaining} clears`, 'float-info');
     playSfx('stamp');
     updateHud();
     renderGrid();
@@ -654,13 +653,16 @@ function settleClearArtifacts() {
   const danger = settleDangerDividend();
   const cleanTools = settleCleanToolsBonus();
   const bounty = settleFlagBounty();
-  const contract = settleActiveContract();
+  const contracts = settleOpenContracts();
   const heal = settleEndLevelHeal();
-  if (contract?.status === 'complete') {
+  const completedContract = contracts.some(contract => contract.status === 'complete');
+  const failedContract = contracts.some(contract => contract.status === 'failed');
+  const progressedContract = contracts.some(contract => contract.status === 'progress');
+  if (completedContract) {
     playSfx('cash_register');
-  } else if (contract?.status === 'failed') {
+  } else if (failedContract) {
     playSfx('paper_tear');
-  } else if (contract?.status === 'progress') {
+  } else if (progressedContract) {
     playSfx('pen_scratch');
   } else if (dividend?.amount || danger?.amount || cleanTools?.amount || (bounty?.net ?? 0) > 0) {
     playSfx('cash_register');
@@ -669,8 +671,8 @@ function settleClearArtifacts() {
   } else if (heal?.amount) {
     playSfx('drink');
   }
-  if (dividend?.amount || danger?.amount || cleanTools?.amount || bounty?.net || contract?.payout || heal?.amount) updateHud();
-  return { dividend, danger, cleanTools, bounty, contract, heal };
+  if (dividend?.amount || danger?.amount || cleanTools?.amount || bounty?.net || contracts.some(contract => contract.payout) || heal?.amount) updateHud();
+  return { dividend, danger, cleanTools, bounty, contracts, contract: contracts[0] ?? null, heal };
 }
 
 // Among the 8 neighbors of (tr, tc), find the revealed non-wall cell

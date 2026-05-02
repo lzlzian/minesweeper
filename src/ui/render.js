@@ -4,11 +4,11 @@ import {
   getPlayerRow, getPlayerCol, getExit, getFountain, getMerchant, getJoker,
   getGold, getStashGold, getHp, getLevel, getItems, getActiveItem,
   getItemCount, getGameOver, getMaxHp, getArtifacts, getBiomeId, getPaymentDebt,
-  getActiveContract,
+  getOpenContracts,
 } from '../state.js';
 import {
   gridContainer, goldDisplay, hpDisplay, levelDisplay,
-  quotaDisplay, biomeDisplay, artifactDisplay, playerSprite, itemButtons, itemCounts, board,
+  quotaDisplay, contractDisplay, biomeDisplay, artifactDisplay, playerSprite, itemButtons, itemCounts, board,
 } from './dom.js';
 import { applyPan, renderMinimap } from './view.js';
 import { attachTooltip } from './tooltip.js';
@@ -220,11 +220,22 @@ export function updateHud() {
     ? ` (-${PAYMENT_DISCOUNT_PERCENT}% from ${rawPayment}g)`
     : '';
   const debtLabel = debt > 0 ? ` (+${debt} debt)` : '';
-  const activeContract = getActiveContract();
-  const contractLabel = activeContract
-    ? ` · 📋 ${activeContract.name} ${(activeContract.clearedLevels ?? 0)}/${activeContract.requiredClears ?? 2}: +${activeContract.payout}g`
+  const openContracts = getOpenContracts();
+  const contractLabel = openContracts.length
+    ? ` · 📋 ${openContracts.length} open`
     : '';
   quotaDisplay.textContent = `Payment due end of Level ${payment.level}: ${paymentAmount}g${debtLabel}${paymentDiscount}${contractLabel}`;
+  if (contractDisplay) {
+    const riskGold = openContracts.reduce((sum, contract) => sum + (contract.cost ?? 0), 0);
+    const rewardGold = openContracts.reduce((sum, contract) => sum + (contract.payout ?? 0), 0);
+    contractDisplay.textContent = openContracts.length
+      ? `📋 ${openContracts.length} · +${rewardGold}g`
+      : '📋 0';
+    contractDisplay.disabled = openContracts.length === 0;
+    contractDisplay.setAttribute('aria-label', openContracts.length
+      ? `${openContracts.length} open contracts, ${rewardGold} gold possible, ${riskGold} gold buy-in at risk`
+      : 'No open contracts');
+  }
   if (biomeDisplay) biomeDisplay.textContent = biomeNameForId(getBiomeId(), getLevel());
   hpDisplay.textContent = '❤️'.repeat(Math.max(0, getHp())) + '🖤'.repeat(Math.max(0, getMaxHp() - getHp()));
   levelDisplay.textContent = `Level ${getLevel()}`;

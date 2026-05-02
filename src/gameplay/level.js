@@ -386,6 +386,14 @@ function activeBiomeForCurrentState() {
   return biomeById(getBiomeId()) ?? setActiveBiomeForLevel();
 }
 
+export function bankSpawnChanceForLevel(level = getLevel(), biome = biomeForLevel(level)) {
+  const features = biome?.features ?? {};
+  const backgroundChance = features.bankChance ?? 0;
+  const paymentChance = features.bankPaymentChance ?? Math.max(backgroundChance, 0.65);
+  const pressurePayment = paymentAmountForLevel(level, biome?.economy ?? {}) > 0;
+  return pressurePayment ? paymentChance : backgroundChance;
+}
+
 export function saveRun() {
   if (getRulesetId() === AUTHORED_RULESET_ID || getGameOver()) return;
   const levelState = captureSavedLevelState();
@@ -437,7 +445,7 @@ export async function initLevel() {
   const spawnJoker = guaranteedJoker || randomJoker;
   const jokerKind = guaranteedJoker ? 'guaranteed' : (randomJoker ? 'paid' : null);
   const spawnItemDrop = Math.random() < (biomeFeatures.itemDropChance ?? 0.50);
-  const spawnBank = Math.random() < (biomeFeatures.bankChance ?? 0);
+  const spawnBank = Math.random() < bankSpawnChanceForLevel(getLevel(), activeBiome);
   const spawnContract = Math.random() < (biomeFeatures.contractChance ?? 0);
 
   const maxAttempts = 500;

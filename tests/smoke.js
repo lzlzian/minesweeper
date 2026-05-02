@@ -29,6 +29,7 @@ import {
   recordLevelGasTriggered, recordLevelItemUsed, recordLevelChestOpened,
 } from '../src/state.js';
 import {
+  bankSpawnChanceForLevel,
   captureSavedLevelState,
   clearSave,
   loadRun,
@@ -146,6 +147,18 @@ test('biome registry maps current run and future endless levels', () => {
   assertEq(biomeForLevel(46).id, ENDLESS_DEEP_BIOME_ID);
   assertEq(biomeById(COAL_SHAFTS_BIOME_ID).name, 'Coal Shafts');
   assertEq(biomeNameForId('missing-biome', 16), 'Crystal Veins');
+});
+
+test('bank spawn chance concentrates on payment pressure levels', () => {
+  const coal = biomeById(COAL_SHAFTS_BIOME_ID);
+  const crystal = biomeById(CRYSTAL_VEINS_BIOME_ID);
+  const company = biomeById(COMPANY_DIG_SITE_BIOME_ID);
+  assertEq(bankSpawnChanceForLevel(2, coal), 0.05);
+  assertEq(bankSpawnChanceForLevel(3, coal), 0.60);
+  assertEq(bankSpawnChanceForLevel(17, crystal), 0.08);
+  assertEq(bankSpawnChanceForLevel(18, crystal), 0.70);
+  assertEq(bankSpawnChanceForLevel(32, company), 0.12);
+  assertEq(bankSpawnChanceForLevel(33, company), 0.90);
 });
 
 test('run save includes the active generated level snapshot', () => {

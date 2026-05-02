@@ -34,7 +34,8 @@ export const BIOMES = [
       fountainChance: 0.50,
       jokerChance: 0.33,
       itemDropChance: 0.50,
-      bankChance: 0.20,
+      bankChance: 0.05,
+      bankPaymentChance: 0.60,
       contractChance: 0.10,
     },
     economy: {
@@ -74,7 +75,8 @@ export const BIOMES = [
       fountainChance: 0.35,
       jokerChance: 0.40,
       itemDropChance: 0.60,
-      bankChance: 0.25,
+      bankChance: 0.08,
+      bankPaymentChance: 0.70,
       contractChance: 0.25,
     },
     economy: {
@@ -114,7 +116,8 @@ export const BIOMES = [
       fountainChance: 0.25,
       jokerChance: 0.35,
       itemDropChance: 0.45,
-      bankChance: 0.80,
+      bankChance: 0.12,
+      bankPaymentChance: 0.90,
       contractChance: 0.75,
     },
     economy: {
@@ -153,7 +156,8 @@ export const BIOMES = [
       fountainChance: 0.50,
       jokerChance: 0.33,
       itemDropChance: 0.50,
-      bankChance: 0.25,
+      bankChance: 0.08,
+      bankPaymentChance: 0.75,
       contractChance: 0.25,
     },
     economy: {

@@ -26,6 +26,14 @@ const sfxPaths = {
   pickaxe: 'assets/sounds/pickaxe.mp3',
   pickup: 'assets/sounds/pickup.mp3',
   click: 'assets/sounds/click.mp3',
+  artifact_choice: 'assets/sounds/artifact_choice.mp3',
+  card_flip: 'assets/sounds/card_flip.mp3',
+  cash_register: 'assets/sounds/cash_register.mp3',
+  crystal: 'assets/sounds/crystal.mp3',
+  paper_tear: 'assets/sounds/paper_tear.mp3',
+  pen_scratch: 'assets/sounds/pen_scratch.mp3',
+  reward_unlock: 'assets/sounds/reward_unlock.mp3',
+  stamp: 'assets/sounds/stamp.mp3',
 };
 
 for (const [name, path] of Object.entries(sfxPaths)) {

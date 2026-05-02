@@ -151,7 +151,7 @@ function activateCrystalCell(r, c) {
   const clueLabel = clues.length === 1 ? '1 clue' : `${clues.length} clues`;
   const goldLabel = gold > 0 ? ` +${gold}g` : '';
   spawnPickupFloat(r, c, `💎 ${clueLabel}${goldLabel}`, 'float-info');
-  playSfx('pickup');
+  playSfx('crystal');
   if (gold > 0) updateHud();
   return { clues, gold };
 }
@@ -160,7 +160,7 @@ function grantJokerArtifact(r, c, artifactId) {
   const artifact = grantArtifact(artifactId);
   if (!artifact) return false;
   spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
-  playSfx('pickup');
+  playSfx('reward_unlock');
   showArtifactFoundOverlay(artifact);
   updateHud();
   autosaveIfActiveRun();
@@ -170,7 +170,7 @@ function grantJokerArtifact(r, c, artifactId) {
 function payOutEmptyJoker(r, c) {
   addGold(75);
   spawnPickupFloat(r, c, 'Joker pays +75', 'float-info');
-  playSfx('gold');
+  playSfx('cash_register');
   updateHud();
   autosaveIfActiveRun();
 }
@@ -184,6 +184,7 @@ function completeJokerEncounter(r, c) {
 function offerJokerChoices(r, c, count, options = {}) {
   const choices = randomArtifactChoices(count);
   if (choices.length >= 2) {
+    playSfx('artifact_choice');
     showArtifactChoiceOverlay(choices, artifact => {
       grantJokerArtifact(r, c, artifact.id);
     }, options);
@@ -198,7 +199,7 @@ function grantRandomJokerArtifact(r, c) {
   const artifact = grantRandomArtifact();
   if (artifact) {
     spawnPickupFloat(r, c, artifactLabel(artifact.id), 'float-info');
-    playSfx('pickup');
+    playSfx('reward_unlock');
     showArtifactFoundOverlay(artifact);
     updateHud();
     autosaveIfActiveRun();
@@ -214,6 +215,7 @@ function openJokerAt(r, c) {
   if (joker.kind === 'paid') {
     const price = paidJokerPriceForLevel(getLevel());
     const choiceCount = hasArtifact('joker_choice') ? 2 : 0;
+    playSfx('card_flip');
     showPaidJokerOverlay({
       price,
       canAfford: getGold() + getStashGold() >= price,
@@ -223,7 +225,7 @@ function openJokerAt(r, c) {
       spendGold(price);
       completeJokerEncounter(r, c);
       spawnPickupFloat(r, c, `Joker -${price}g`, 'float-info');
-      playSfx('gold');
+      playSfx('cash_register');
       updateHud();
       renderGrid();
       if (choiceCount > 1) {
@@ -292,7 +294,7 @@ function openBankAt(r, c) {
       addGold(payout);
       addPaymentDebt(dueLevel, debt);
       spawnPickupFloat(r, c, `🏦 +${payout}g / L${dueLevel} +${debt}`, 'float-info');
-      playSfx('gold');
+      playSfx('cash_register');
       updateHud();
       renderGrid();
       autosaveIfActiveRun();
@@ -303,7 +305,7 @@ function openBankAt(r, c) {
       consumeItem(itemKey);
       addGold(price);
       spawnPickupFloat(r, c, `Pawn +${price}g`, 'float-info');
-      playSfx('gold');
+      playSfx('cash_register');
       updateHud();
       renderGrid();
       autosaveIfActiveRun();
@@ -326,6 +328,7 @@ function openContractBoardAt(r, c) {
     cell.contractChoices = randomContractChoices(artifactContractChoiceCount(3));
   }
 
+  playSfx('pen_scratch');
   showContractBoardOverlay({
     choices: cell.contractChoices ?? [],
     activeContract,
@@ -335,7 +338,7 @@ function openContractBoardAt(r, c) {
     cell.contractBoardUsed = true;
     cell.contractChoices = [];
     spawnPickupFloat(r, c, `📋 -${accepted.cost}g · 0/${accepted.requiredClears}`, 'float-info');
-    playSfx('pickup');
+    playSfx('stamp');
     updateHud();
     renderGrid();
     autosaveIfActiveRun();
@@ -653,6 +656,19 @@ function settleClearArtifacts() {
   const bounty = settleFlagBounty();
   const contract = settleActiveContract();
   const heal = settleEndLevelHeal();
+  if (contract?.status === 'complete') {
+    playSfx('cash_register');
+  } else if (contract?.status === 'failed') {
+    playSfx('paper_tear');
+  } else if (contract?.status === 'progress') {
+    playSfx('pen_scratch');
+  } else if (dividend?.amount || danger?.amount || cleanTools?.amount || (bounty?.net ?? 0) > 0) {
+    playSfx('cash_register');
+  } else if ((bounty?.net ?? 0) < 0) {
+    playSfx('payment');
+  } else if (heal?.amount) {
+    playSfx('drink');
+  }
   if (dividend?.amount || danger?.amount || cleanTools?.amount || bounty?.net || contract?.payout || heal?.amount) updateHud();
   return { dividend, danger, cleanTools, bounty, contract, heal };
 }
